@@ -1070,7 +1070,11 @@ export class GameEngine {
         // void unused
         void speed;
         this.burst(a.x + dir * 14, a.y + 28, "oklch(0.78 0.22 40)", 20);
-        Sfx.play("whoosh", 0.7);
+        this.burst(a.x + dir * 14, a.y + 28, "oklch(0.96 0.16 80)", 12);
+        this.shockwaves.push({ x: a.x + dir * 14, y: a.y + 28, r: 6, rMax: 70, life: 0.28, maxLife: 0.28, color: "oklch(0.92 0.20 60)" });
+        this.shake = Math.max(this.shake, 8);
+        this.impactFlash = Math.max(this.impactFlash, 0.3);
+        Sfx.play("whoosh", 0.9); Sfx.play("boom", 0.45); Sfx.play("heavy", 0.4);
         return true;
       }
       case "nightcrawler": {
