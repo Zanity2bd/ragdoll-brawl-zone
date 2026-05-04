@@ -444,8 +444,10 @@ export class GameEngine {
 
     if (!locked && intent.jump && f.onGround) { f.vy = -JUMP_V; f.onGround = false; }
     if (!f.meleeKind) {
-      if (intent.fire && f.fireCd <= 0 && !f.teleporting) this.fire(f);
-      if (intent.teleport && f.teleCd <= 0 && !f.teleporting && this.teleTargeting === null) {
+      const canFire = f.skin.id === "heatwave";
+      const canTele = f.skin.id === "nightcrawler";
+      if (canFire && intent.fire && f.fireCd <= 0 && !f.teleporting) this.fire(f);
+      if (canTele && intent.teleport && f.teleCd <= 0 && !f.teleporting && this.teleTargeting === null) {
         f.teleporting = true; f.teleCd = TELE_CD;
         this.teleTargeting = f.id;
         this.slowmoT = 5; this.slowmoMode = "tele";
