@@ -1521,24 +1521,38 @@ export class GameEngine {
         if (!lo.hit) {
           lo.hit = true;
           tgt.hp = Math.max(0, tgt.hp - LIGHTNING_DMG);
-          tgt.hitFlash = 0.3;
-          tgt.vx += Math.sign(lo.vx || 1) * 220;
-          tgt.vy = -180; tgt.onGround = false;
-          this.shake = Math.max(this.shake, 14);
-          this.impactFlash = Math.max(this.impactFlash, 0.7);
-          this.burst(lo.x, lo.y, "oklch(0.95 0.18 95)", 22);
-          this.shockwaves.push({ x: lo.x, y: lo.y, r: 6, rMax: 110, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.18 95)" });
-          Sfx.play("punch", 0.7);
-          if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
-        } else {
-          // Latched: tick chip damage
-          lo.tickAcc += dt;
-          if (lo.tickAcc >= 0.25) {
-            lo.tickAcc = 0;
-            tgt.hp = Math.max(0, tgt.hp - LIGHTNING_TICK_DMG);
-            tgt.hitFlash = 0.18;
-            if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
+          tgt.hitFlash = 0.45;
+          tgt.vx += Math.sign(lo.vx || 1) * 320;
+          tgt.vy = -260; tgt.onGround = false;
+          if (tgt.ragdollImmuneT <= 0) {
+            tgt.ragdollT = 0.5;
+            tgt.ragdollEnergy = 1;
+            tgt.ragdollAV = Math.sign(lo.vx || 1) * 5;
           }
+          this.shake = Math.max(this.shake, 22);
+          this.impactFlash = Math.max(this.impactFlash, 0.85);
+          this.hitstopT = Math.max(this.hitstopT, 0.07);
+          // Multi-ring electric explosion
+          this.shockwaves.push({ x: lo.x, y: lo.y, r: 6, rMax: 160, life: 0.45, maxLife: 0.45, color: "oklch(0.98 0.18 95)" });
+          this.shockwaves.push({ x: lo.x, y: lo.y, r: 14, rMax: 220, life: 0.6, maxLife: 0.6, color: "oklch(0.85 0.22 260)" });
+          this.burst(lo.x, lo.y, "oklch(0.98 0.18 95)", 36);
+          this.burst(lo.x, lo.y, "oklch(0.78 0.22 260)", 22);
+          // Crackling arc particles outward
+          for (let i = 0; i < 18; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const sp = 220 + Math.random() * 240;
+            this.particles.push({
+              x: lo.x, y: lo.y,
+              vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
+              life: 0.5, maxLife: 0.5,
+              color: Math.random() < 0.5 ? "oklch(0.98 0.18 95)" : "oklch(0.85 0.22 260)",
+              size: 2 + Math.random() * 2.5,
+            });
+          }
+          Sfx.play("boom", 0.7); Sfx.play("blip", 0.8);
+          // Lightning consumed in the explosion
+          lo.life = 0;
+          if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
         }
       }
     }
