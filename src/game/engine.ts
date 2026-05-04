@@ -281,17 +281,8 @@ export class GameEngine {
       if (this.introT <= 0) this.phase = "fight";
     }
 
-    const ambientRate = this.lowPower ? 0.1 : 0.4;
+    // Ambient floor bubbles removed — kept the screen too busy.
     const maxParticles = this.lowPower ? 120 : 400;
-    if (Math.random() < ambientRate && this.particles.length < maxParticles) {
-      this.particles.push({
-        x: Math.random() * W, y: H,
-        vx: (Math.random() - 0.5) * 10, vy: -20 - Math.random() * 30,
-        life: 4, maxLife: 4,
-        color: Math.random() > 0.5 ? "oklch(0.75 0.22 215)" : "oklch(0.65 0.30 345)",
-        size: 1 + Math.random() * 1.5,
-      });
-    }
 
     if (this.phase === "fight") {
       this.updateFighter(this.p1, sdt);

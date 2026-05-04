@@ -8,8 +8,14 @@ export type SfxName =
 class SfxEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private sfxGain: GainNode | null = null;
+  private musicGain: GainNode | null = null;
   private noise: AudioBuffer | null = null;
+  private musicNodes: AudioNode[] = [];
+  private musicPlaying = false;
   muted = false;
+  sfxVolume = 0.8;
+  musicVolume = 0.35;
 
   unlock() {
     if (this.ctx) return;
@@ -18,9 +24,12 @@ class SfxEngine {
         || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new Ctx();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.5;
+      this.master.gain.value = this.muted ? 0 : 1;
       this.master.connect(this.ctx.destination);
-      // Build noise buffer
+      this.sfxGain = this.ctx.createGain(); this.sfxGain.gain.value = this.sfxVolume;
+      this.sfxGain.connect(this.master);
+      this.musicGain = this.ctx.createGain(); this.musicGain.gain.value = this.musicVolume;
+      this.musicGain.connect(this.master);
       const len = this.ctx.sampleRate * 0.6;
       const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const data = buf.getChannelData(0);
@@ -29,14 +38,51 @@ class SfxEngine {
     } catch { /* no audio */ }
   }
 
-  setMuted(m: boolean) { this.muted = m; }
+  setMuted(m: boolean) {
+    this.muted = m;
+    if (this.master) this.master.gain.value = m ? 0 : 1;
+  }
+  setSfxVolume(v: number) {
+    this.sfxVolume = Math.max(0, Math.min(1, v));
+    if (this.sfxGain) this.sfxGain.gain.value = this.sfxVolume;
+  }
+  setMusicVolume(v: number) {
+    this.musicVolume = Math.max(0, Math.min(1, v));
+    if (this.musicGain) this.musicGain.gain.value = this.musicVolume;
+  }
+
+  startMusic() {
+    if (!this.ctx || !this.musicGain || this.musicPlaying) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    // Dark ambient pad: two detuned saws + slow LFO filter
+    const freqs = [55, 82.5, 110]; // A1, E2, A2
+    for (const f of freqs) {
+      const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = f;
+      const o2 = ctx.createOscillator(); o2.type = "sawtooth"; o2.frequency.value = f * 1.005;
+      const filt = ctx.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = 320; filt.Q.value = 4;
+      const g = ctx.createGain(); g.gain.value = 0.06;
+      const lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 0.07 + Math.random() * 0.05;
+      const lfoG = ctx.createGain(); lfoG.gain.value = 180;
+      lfo.connect(lfoG); lfoG.connect(filt.frequency);
+      o.connect(filt); o2.connect(filt); filt.connect(g); g.connect(this.musicGain);
+      o.start(t); o2.start(t); lfo.start(t);
+      this.musicNodes.push(o, o2, filt, g, lfo, lfoG);
+    }
+    this.musicPlaying = true;
+  }
+  stopMusic() {
+    for (const n of this.musicNodes) { try { (n as OscillatorNode).stop?.(); } catch { /* */ } try { n.disconnect(); } catch { /* */ } }
+    this.musicNodes = [];
+    this.musicPlaying = false;
+  }
 
   play(name: SfxName, vol = 1) {
-    if (this.muted || !this.ctx || !this.master) return;
+    if (this.muted || !this.ctx || !this.sfxGain) return;
     const ctx = this.ctx;
     const out = ctx.createGain();
     out.gain.value = 0.0001;
-    out.connect(this.master);
+    out.connect(this.sfxGain);
     const t = ctx.currentTime;
     const env = (peak: number, attack: number, decay: number) => {
       out.gain.cancelScheduledValues(t);
@@ -60,7 +106,7 @@ class SfxEngine {
           const n = ctx.createBufferSource(); n.buffer = this.noise;
           const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 1800;
           const g = ctx.createGain(); g.gain.value = 0.4 * vol;
-          n.connect(f); f.connect(g); g.connect(this.master);
+          n.connect(f); f.connect(g); g.connect(this.sfxGain);
           n.start(t); n.stop(t + 0.04);
           setTimeout(() => { n.disconnect(); f.disconnect(); g.disconnect(); }, 80);
         }
@@ -131,7 +177,7 @@ class SfxEngine {
         o.frequency.setValueAtTime(260, t);
         o.frequency.exponentialRampToValueAtTime(120, t + 0.06);
         const g = ctx.createGain(); g.gain.value = 0.0001;
-        o.connect(g); g.connect(this.master);
+        o.connect(g); g.connect(this.sfxGain);
         g.gain.setValueAtTime(0.0001, t);
         g.gain.exponentialRampToValueAtTime(0.45 * vol, t + 0.003);
         g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);

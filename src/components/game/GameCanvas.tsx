@@ -34,6 +34,9 @@ export function GameCanvas() {
   const [p1Skin, setP1Skin] = useState<SkinId>("spiderman");
   const [p2Skin, setP2Skin] = useState<SkinId>("homelander");
   const [muted, setMuted] = useState(false);
+  const [sfxVol, setSfxVol] = useState(0.8);
+  const [musicVol, setMusicVol] = useState(0.35);
+  const [audioOpen, setAudioOpen] = useState(false);
   const [needsLandscape, setNeedsLandscape] = useState(false);
 
   useEffect(() => {
@@ -51,6 +54,12 @@ export function GameCanvas() {
   }, []);
 
   useEffect(() => { Sfx.setMuted(muted); }, [muted]);
+  useEffect(() => { Sfx.setSfxVolume(sfxVol); }, [sfxVol]);
+  useEffect(() => { Sfx.setMusicVolume(musicVol); }, [musicVol]);
+  useEffect(() => {
+    if (screen === "fight") Sfx.startMusic();
+    else Sfx.stopMusic();
+  }, [screen]);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -146,13 +155,21 @@ export function GameCanvas() {
       {screen === "fight" && snap && (
         <HUD
           snap={snap}
-          muted={muted}
-          onToggleMute={() => setMuted(m => !m)}
           onRematch={() => engine?.reset()}
           onChange={() => setScreen("map")}
+          onOpenAudio={() => setAudioOpen(o => !o)}
+          muted={muted}
         />
       )}
-      {screen === "fight" && isTouch && engine && <TouchControls engine={engine} />}
+      <AudioPanel
+        open={audioOpen && screen === "fight"}
+        muted={muted}
+        onToggleMute={() => setMuted(m => !m)}
+        sfxVol={sfxVol} musicVol={musicVol}
+        onSfx={setSfxVol} onMusic={setMusicVol}
+        onClose={() => setAudioOpen(false)}
+      />
+      {screen === "fight" && isTouch && engine && snap && <TouchControls engine={engine} snap={snap} />}
 
       {screen === "splash" && (
         <Splash onPlay={() => { Sfx.unlock(); setScreen("map"); }} />
@@ -182,7 +199,7 @@ function RotatePrompt() {
   );
 }
 
-function HUD({ snap, onRematch, onChange, muted, onToggleMute }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onToggleMute: () => void }) {
+function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onOpenAudio: () => void }) {
   return (
     <>
       <div className="pointer-events-none absolute top-0 left-0 right-0 p-2 sm:p-4 flex gap-2 sm:gap-4 items-start">
@@ -190,9 +207,9 @@ function HUD({ snap, onRematch, onChange, muted, onToggleMute }: { snap: GameSna
         <HpBar p={snap.p2} side="right" />
       </div>
       <button
-        onClick={onToggleMute}
-        aria-label={muted ? "Unmute" : "Mute"}
-        className="absolute top-2 right-2 sm:top-3 sm:right-3 w-9 h-9 rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-20"
+        onClick={onOpenAudio}
+        aria-label="Audio settings"
+        className="absolute top-2 right-2 sm:top-3 sm:right-3 w-9 h-9 rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-30"
       >
         {muted ? "🔇" : "🔊"}
       </button>
@@ -310,77 +327,173 @@ function CdPill({ label, cd, max, color }: { label: string; cd: number; max: num
   );
 }
 
-function TouchControls({ engine }: { engine: GameEngine }) {
-  const hold = (p: PlayerId, action: "left" | "right", on: boolean) =>
-    engine.setIntent(p, { [action]: on });
+function TouchControls({ engine, snap }: { engine: GameEngine; snap: GameSnapshot }) {
   return (
     <div
-      className="absolute inset-x-0 bottom-0 px-3 flex justify-between pointer-events-none"
+      className="absolute inset-x-0 bottom-0 pointer-events-none"
       style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
     >
-      <Pad
-        onLeft={(d) => hold("p1", "left", d)}
-        onRight={(d) => hold("p1", "right", d)}
-        onJump={() => engine.pressJump("p1")}
-        onFire={() => engine.pressFire("p1")}
-        onPunch={() => engine.pressMelee("p1")}
-        onTele={() => engine.pressTeleport("p1")}
-        color="oklch(0.85 0.18 210)"
-      />
-      <Pad
-        onLeft={(d) => hold("p2", "left", d)}
-        onRight={(d) => hold("p2", "right", d)}
-        onJump={() => engine.pressJump("p2")}
-        onFire={() => engine.pressFire("p2")}
-        onPunch={() => engine.pressMelee("p2")}
-        onTele={() => engine.pressTeleport("p2")}
-        color="oklch(0.72 0.28 340)"
-        mirror
+      <div className="flex justify-between items-end px-4">
+        <PlayerControls
+          side="left"
+          color="oklch(0.85 0.18 210)"
+          p={snap.p1}
+          onMove={(x) => {
+            engine.setIntent("p1", { left: x < -0.25, right: x > 0.25 });
+          }}
+          onJump={() => engine.pressJump("p1")}
+          onFire={() => engine.pressFire("p1")}
+          onPunch={() => engine.pressMelee("p1")}
+          onTele={() => engine.pressTeleport("p1")}
+        />
+        <PlayerControls
+          side="right"
+          color="oklch(0.72 0.28 340)"
+          p={snap.p2}
+          onMove={(x) => {
+            engine.setIntent("p2", { left: x < -0.25, right: x > 0.25 });
+          }}
+          onJump={() => engine.pressJump("p2")}
+          onFire={() => engine.pressFire("p2")}
+          onPunch={() => engine.pressMelee("p2")}
+          onTele={() => engine.pressTeleport("p2")}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PlayerControls({
+  side, color, p, onMove, onJump, onFire, onPunch, onTele,
+}: {
+  side: "left" | "right";
+  color: string;
+  p: GameSnapshot["p1"];
+  onMove: (x: number) => void;
+  onJump: () => void;
+  onFire: () => void;
+  onPunch: () => void;
+  onTele: () => void;
+}) {
+  return (
+    <div className={`flex items-end gap-3 ${side === "right" ? "flex-row-reverse" : ""}`}>
+      <Joystick color={color} onMove={onMove} onJump={onJump} />
+      <div className="flex flex-col gap-1.5">
+        <PowerButton color={color} cd={p.meleeCd} max={p.meleeCdMax} label={p.meleeName} short="✊" onPress={onPunch} />
+        <PowerButton color={color} cd={p.fireCd} max={p.fireCdMax} label="Fire" short="⚡" onPress={onFire} />
+        <PowerButton color={color} cd={p.teleCd} max={p.teleCdMax} label="Tele" short="✦" onPress={onTele} />
+      </div>
+    </div>
+  );
+}
+
+function Joystick({ color, onMove, onJump }: { color: string; onMove: (x: number) => void; onJump: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const idRef = useRef<number | null>(null);
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const lastUpY = useRef(0);
+
+  const update = (clientX: number, clientY: number) => {
+    const el = ref.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const dx = clientX - cx, dy = clientY - cy;
+    const max = r.width / 2 - 6;
+    const d = Math.hypot(dx, dy) || 1;
+    const cl = Math.min(d, max);
+    const nx = (dx / d) * cl, ny = (dy / d) * cl;
+    setKnob({ x: nx, y: ny });
+    onMove(nx / max);
+    if (ny / max < -0.55 && Date.now() - lastUpY.current > 350) {
+      lastUpY.current = Date.now();
+      onJump();
+    }
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="relative w-[112px] h-[112px] rounded-full border-2 backdrop-blur-md bg-background/30 pointer-events-auto touch-none"
+      style={{ borderColor: color }}
+      onPointerDown={(e) => {
+        (e.target as Element).setPointerCapture(e.pointerId);
+        idRef.current = e.pointerId;
+        update(e.clientX, e.clientY);
+      }}
+      onPointerMove={(e) => { if (idRef.current === e.pointerId) update(e.clientX, e.clientY); }}
+      onPointerUp={(e) => {
+        if (idRef.current !== e.pointerId) return;
+        idRef.current = null;
+        setKnob({ x: 0, y: 0 });
+        onMove(0);
+      }}
+      onPointerCancel={() => { idRef.current = null; setKnob({ x: 0, y: 0 }); onMove(0); }}
+    >
+      <div
+        className="absolute top-1/2 left-1/2 w-12 h-12 -mt-6 -ml-6 rounded-full border-2"
+        style={{
+          borderColor: color,
+          background: `color-mix(in oklab, ${color} 25%, transparent)`,
+          transform: `translate(${knob.x}px, ${knob.y}px)`,
+          transition: idRef.current == null ? "transform 0.15s ease-out" : "none",
+        }}
       />
     </div>
   );
 }
 
-function Pad({
-  onLeft, onRight, onJump, onFire, onPunch, onTele, color, mirror,
-}: {
-  onLeft: (d: boolean) => void;
-  onRight: (d: boolean) => void;
-  onJump: () => void;
-  onFire: () => void;
-  onPunch: () => void;
-  onTele: () => void;
-  color: string;
-  mirror?: boolean;
-}) {
-  const btn = "w-[56px] h-[56px] rounded-full border-2 font-mono text-[10px] flex items-center justify-center backdrop-blur-sm bg-background/40 active:bg-foreground/30 pointer-events-auto select-none touch-manipulation";
-  const style = { borderColor: color, color };
+function PowerButton({ color, cd, max, label, short, onPress }: { color: string; cd: number; max: number; label: string; short: string; onPress: () => void }) {
+  const ready = cd <= 0;
+  const pct = ready ? 100 : (1 - cd / max) * 100;
   return (
-    <div className={`flex gap-3 ${mirror ? "flex-row-reverse" : ""}`}>
-      <div className="flex gap-2">
-        <button className={btn} style={style}
-          onTouchStart={(e) => { e.preventDefault(); onLeft(true); }}
-          onTouchEnd={(e) => { e.preventDefault(); onLeft(false); }}
-        >◀</button>
-        <button className={btn} style={style}
-          onTouchStart={(e) => { e.preventDefault(); onRight(true); }}
-          onTouchEnd={(e) => { e.preventDefault(); onRight(false); }}
-        >▶</button>
-        <button className={btn} style={style}
-          onTouchStart={(e) => { e.preventDefault(); onJump(); }}
-        >▲</button>
+    <button
+      onPointerDown={(e) => { e.preventDefault(); if (ready) onPress(); }}
+      className="relative w-[58px] h-[58px] rounded-full border-2 backdrop-blur-md bg-background/30 pointer-events-auto touch-none flex flex-col items-center justify-center font-mono leading-none active:scale-95 transition-transform"
+      style={{
+        borderColor: ready ? color : "oklch(0.4 0.05 250)",
+        color: ready ? color : "oklch(0.55 0.03 250)",
+        opacity: ready ? 1 : 0.65,
+      }}
+      aria-label={label}
+    >
+      <div
+        className="absolute inset-0 rounded-full overflow-hidden pointer-events-none"
+        style={{ clipPath: "circle(50%)" }}
+      >
+        <div className="absolute inset-x-0 bottom-0" style={{ height: `${pct}%`, background: `color-mix(in oklab, ${color} 22%, transparent)` }} />
       </div>
-      <div className="flex gap-2">
-        <button className={btn} style={style}
-          onTouchStart={(e) => { e.preventDefault(); onPunch(); }}
-        >PUNCH</button>
-        <button className={btn} style={style}
-          onTouchStart={(e) => { e.preventDefault(); onFire(); }}
-        >FIRE</button>
-        <button className={btn} style={style}
-          onTouchStart={(e) => { e.preventDefault(); onTele(); }}
-        >TELE</button>
+      <span className="relative text-lg">{short}</span>
+      <span className="relative text-[8px] tracking-widest uppercase mt-0.5 truncate max-w-[52px]">{label}</span>
+    </button>
+  );
+}
+
+function AudioPanel({
+  open, muted, onToggleMute, sfxVol, musicVol, onSfx, onMusic, onClose,
+}: {
+  open: boolean; muted: boolean; onToggleMute: () => void;
+  sfxVol: number; musicVol: number;
+  onSfx: (v: number) => void; onMusic: (v: number) => void;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="absolute top-14 right-2 sm:top-14 sm:right-3 z-30 w-60 rounded-lg border border-foreground/20 bg-background/85 backdrop-blur-md p-3 shadow-xl">
+      <div className="flex items-center justify-between mb-3">
+        <div className="font-mono text-xs uppercase tracking-widest text-foreground/80">Audio</div>
+        <button onClick={onClose} className="text-foreground/50 hover:text-foreground text-xs">✕</button>
       </div>
+      <button
+        onClick={onToggleMute}
+        className="w-full mb-3 px-2 py-1.5 rounded border border-foreground/15 hover:bg-foreground/10 font-mono text-[10px] uppercase tracking-widest text-foreground/80"
+      >
+        {muted ? "🔇 Muted" : "🔊 Sound on"}
+      </button>
+      <label className="block font-mono text-[10px] uppercase tracking-widest text-foreground/60 mb-1">SFX · {Math.round(sfxVol * 100)}</label>
+      <input type="range" min={0} max={100} value={Math.round(sfxVol * 100)} onChange={(e) => onSfx(Number(e.target.value) / 100)} className="w-full mb-3 accent-foreground" />
+      <label className="block font-mono text-[10px] uppercase tracking-widest text-foreground/60 mb-1">Music · {Math.round(musicVol * 100)}</label>
+      <input type="range" min={0} max={100} value={Math.round(musicVol * 100)} onChange={(e) => onMusic(Number(e.target.value) / 100)} className="w-full accent-foreground" />
     </div>
   );
 }
+
