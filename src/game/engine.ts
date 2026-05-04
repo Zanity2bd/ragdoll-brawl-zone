@@ -4847,18 +4847,34 @@ export class GameEngine {
         ctx.restore();
       }
 
-      // Drive frame index off walkPhase. Smooth via fractional blending: draw
-      // the next frame on top with alpha = fractional part for a softer cycle.
-      const moving = Math.abs(f.vx) > 18;
-      const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
-      const fIdx = moving ? cycleF * WALK_FRAME_COUNT : 0;
-      const f0 = Math.floor(fIdx) % WALK_FRAME_COUNT;
-      const f1 = (f0 + 1) % WALK_FRAME_COUNT;
-      const frac = fIdx - Math.floor(fIdx);
       const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
       const tint = f.hitFlash > 0 ? "oklch(0.95 0.20 30)" : skin.body;
       void tint;
-      // Match procedural FIGHTER_H exactly so attacks don't visually shrink.
+
+      // ---- Punch one-shot (frames 10..13) ----
+      if (f.punchT > 0) {
+        const pt = f.punchT;
+        let pIdx = 0;
+        if (pt < PUNCH_F11) pIdx = 0;
+        else if (pt < PUNCH_F11 + PUNCH_F12) pIdx = 1;
+        else if (pt < PUNCH_F11 + PUNCH_F12 + PUNCH_F13) pIdx = 2;
+        else pIdx = 3;
+        drawWalkFrame(ctx, skin, PUNCH_FRAME_START + pIdx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+        return;
+      }
+      // ---- Recovery (frame 14) ----
+      if (f.recoverT > 0) {
+        drawWalkFrame(ctx, skin, RECOVERY_FRAME, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+        return;
+      }
+
+      // Drive walk loop frame index off walkPhase. Loop is frames 0..9 only.
+      const moving = Math.abs(f.vx) > 18;
+      const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
+      const fIdx = moving ? cycleF * WALK_LOOP_FRAMES : 0;
+      const f0 = Math.floor(fIdx) % WALK_LOOP_FRAMES;
+      const f1 = (f0 + 1) % WALK_LOOP_FRAMES;
+      const frac = fIdx - Math.floor(fIdx);
       drawWalkFrame(ctx, skin, f0, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
       if (moving && frac > 0.01) {
         ctx.save();
@@ -4867,8 +4883,8 @@ export class GameEngine {
         ctx.restore();
       }
 
-      // If not attacking/kicking, sprite is the whole body — done.
-      if (f.attackAnim <= 0 && f.kickT <= 0 && f.meleeKind == null) {
+      // If not attacking via a special, sprite is the whole body — done.
+      if (f.attackAnim <= 0 && f.meleeKind == null) {
         return;
       }
       // Otherwise fall through so the procedural attack pose renders the
