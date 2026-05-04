@@ -1695,6 +1695,7 @@ export class GameEngine {
     this.onSnapshot?.(this.buildSnapshot());
   }
   private snapPlayer(f: Fighter): PlayerState {
+    const pw = getPowerSpec(f.skin.id);
     return {
       id: f.id, name: f.name,
       hp: f.hp, maxHp: 100,
@@ -1706,6 +1707,14 @@ export class GameEngine {
       frenzyCd: f.frenzyCd, frenzyCdMax: FRENZY_CD,
       hasFrenzy: f.skin.id === "hulk",
       frenzyActive: f.frenzy !== null,
+      hasPower1: !!pw.power1,
+      hasPower2: !!pw.power2,
+      power1Name: pw.power1?.name ?? "",
+      power2Name: pw.power2?.name ?? "",
+      power1Cd: f.power1Cd, power1CdMax: pw.power1?.cd ?? 1,
+      power2Cd: f.power2Cd, power2CdMax: pw.power2?.cd ?? 1,
+      frozen: f.freezeT > 0,
+      freezeRemaining: f.freezeT,
     };
   }
 
