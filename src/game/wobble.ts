@@ -214,9 +214,9 @@ export function stepWobble(
 export function applyWobble(p: Pose, s: WobbleState, lowPower: boolean, grounded: boolean): Pose {
   const bx = s.bx, by = s.by;
   const upper = 1.0;
-  const lower = grounded ? 0.25 : 0.55;
-  // Feet take essentially nothing on the ground (anti-slide)
-  const footMul = grounded ? 0 : 0.5;
+  const lower = grounded ? 0.32 : 0.55;
+  // Feet take a hair of body offset on the ground for live secondary motion (still anti-slide)
+  const footMul = grounded ? 0.08 : 0.5;
   const armScale = lowPower ? 0.6 : 1.0;
   const legScale = lowPower ? 0.3 : (grounded ? 0.35 : 0.6);
   const L = s.limb;

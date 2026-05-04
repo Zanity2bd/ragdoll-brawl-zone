@@ -30,19 +30,24 @@ function legPose(
   amp: number,
 ): { joints: [number, number, number, number, number, number]; foot: [number, number] } {
   const c = ((cyc % 1) + 1) % 1;
-  // Smooth sinusoidal stride (no hard stance/swing seam)
   const phase = c * Math.PI * 2;
-  // Foot moves on an ellipse: forward+back continuously, lifts only on swing half
   const forward = Math.cos(phase); // -1..1
-  const liftCurve = Math.max(0, Math.sin(phase)); // 0..1, only positive half
-  const footX = hipX + stride * forward + facing * 1.5;
-  const footY = H - lift * liftCurve;
+  // Sharpen lift at speed (shorter ground contact, snappier swing)
+  const liftBase = Math.max(0, Math.sin(phase)); // 0..1
+  const liftCurve = Math.pow(liftBase, 1 - 0.4 * amp);
+  // Heel-toe roll: toe-leads on landing, heel-pushes on take-off
+  const rollX = facing * Math.sin(phase) * 1.6 * amp;
+  const footX = hipX + stride * forward + facing * 1.5 + rollX;
+  // Tiny vertical pop at push-off so the foot reads as rolling, not sliding
+  const pushPop = Math.max(0, -Math.cos(phase)) * 0.6 * amp;
+  const footY = H - lift * liftCurve + pushPop;
   const lifted = liftCurve;
 
-  // Knee bends more when lifted; bias forward in facing direction.
+  // Knee bends more when lifted; curved forward arc through swing (not linear).
   const baseBend = 5 + amp * 2;
   const swingBend = 12 * lifted;
-  const kneeForward = facing * (3 + 5 * lifted);
+  const kneeArc = 4 * Math.sin(phase) * lifted;
+  const kneeForward = facing * (3 + 5 * lifted + kneeArc);
   const kneeX = (hipX + footX) / 2 + kneeForward;
   const kneeY = (hipY + footY) / 2 + baseBend + swingBend;
 
@@ -62,14 +67,16 @@ export function computeWalkPose(
   H: number,
 ): Pose {
   const speed = Math.abs(vx);
-  const moving = speed > 8;
+  // Lower the moving threshold + smooth-step amp so start/stop blends instead of snapping.
+  const moving = speed > 4;
 
   const breath = Math.sin(phase * 0.9) * 1.0;
   const headOffsetY = breath - 2;
   const shoulderYBase = 28 + breath;
   const hipYBase = 56;
 
-  const lean = moving ? facing * Math.min(0.16, speed / 1700) : 0;
+  // Stronger lean at sprint (was speed/1700, capped 0.16)
+  const lean = moving ? facing * Math.min(0.22, speed / 1300) : 0;
 
   if (!onGround) {
     // Three-phase jump: launch (vy<<0) → apex (|vy|≈0) → fall (vy>0).
@@ -114,28 +121,47 @@ export function computeWalkPose(
     };
   }
 
-  const amp = moving ? Math.min(1, speed / 160) : 0;
+  // Smoothstep amp ramp — eliminates the hard idle/walk snap when vx crosses threshold
+  const ampLin = Math.min(1, speed / 160);
+  const amp = ampLin * ampLin * (3 - 2 * ampLin);
+  // Speed-shaped stride/lift/swing — non-linear so sprint reads as sprint
   const stride = 15 * amp;
-  const lift = 18 * amp;
+  const lift = 16 * amp + 8 * amp * amp;
 
-  // Body bob: dips at heel-strike (twice per gait cycle), but smoother
-  const bob = moving ? (1 - Math.cos(phase * 2)) * 0.9 * amp : 0;
-  const shoulderY = shoulderYBase - bob * 0.6;
-  const hipY = hipYBase + bob * 0.4;
+  // Phase-delayed body bobs: hips lead, shoulders & head lag (~80–140ms).
+  // The spine "follows" the pelvis instead of moving in lockstep.
+  const bobHip = moving ? (1 - Math.cos(phase * 2)) * 0.9 * amp : 0;
+  const bobShoulder = moving ? (1 - Math.cos(phase * 2 - 0.5)) * 0.9 * amp : 0;
+  const bobHead = moving ? (1 - Math.cos(phase * 2 - 0.9)) * 0.9 * amp : 0;
+  // Heel-strike micro-dip biases the dip onto the contact half — gives weight
+  const heelDip = moving ? Math.max(0, -Math.cos(phase * 2)) * 1.0 * amp : 0;
+
+  // Hip sway: pelvis shifts toward the planted foot each step.
+  const hipSwayX = moving ? Math.sin(phase) * 1.6 * amp : 0;
+
+  const shoulderY = shoulderYBase - bobShoulder * 0.6;
+  const hipY = hipYBase + bobHip * 0.4 + heelDip;
 
   // Slight torso roll opposite to swinging leg
   const shoulderRoll = moving ? Math.sin(phase) * 0.04 * amp : 0;
 
-  const hxL = -3, hxR = 3;
+  // Asymmetric leg signature (universal — left strides slightly longer, right lifts higher).
+  // Breaks the perfect-mirror loop without per-character state.
+  const strideL = stride * 1.00;
+  const strideR = stride * 1.04;
+  const liftL = lift * 1.03;
+  const liftR = lift * 1.00;
+  const hxL = -3 + hipSwayX, hxR = 3 + hipSwayX;
   const cycL = phase / (Math.PI * 2);
   const cycR = cycL + 0.5;
 
-  const L = legPose(cycL, hxL, hipY, stride, lift, facing, H, amp);
-  const R = legPose(cycR, hxR, hipY, stride, lift, facing, H, amp);
+  const L = legPose(cycL, hxL, hipY, strideL, liftL, facing, H, amp);
+  const R = legPose(cycR, hxR, hipY, strideR, liftR, facing, H, amp);
 
-  // Arms counter-swing the legs; idle arms have a gentle micro-sway
-  const sxL = -4, sxR = 4;
-  const armSwingMax = moving ? 16 + amp * 6 : 0;
+  // Arms counter-swing the legs; idle arms have a gentle micro-sway.
+  // Shoulder anchor counter-sways the hips for natural balance.
+  const sxL = -4 - hipSwayX * 0.5, sxR = 4 - hipSwayX * 0.5;
+  const armSwingMax = moving ? 14 * amp + 10 * amp * amp : 0;
   const idleSwayL = moving ? 0 : Math.sin(phase * 0.7) * 0.6;
   const idleSwayR = moving ? 0 : Math.sin(phase * 0.7 + Math.PI) * 0.6;
   // Arm L counter-swings R leg, and vice versa
@@ -150,11 +176,13 @@ export function computeWalkPose(
   const handRX = sxR + swingR * armSwingMax + idleSwayR;
   const handRY = shoulderY + 22 + handRBob;
 
-  // Elbows: nudge inward slightly, with a touch of forward bias by facing
-  const elbowLX = (sxL + handLX) / 2 + facing * 1.5 + (handLX < sxL ? -1 : 1);
-  const elbowLY = (shoulderY + handLY) / 2 + 5;
-  const elbowRX = (sxR + handRX) / 2 - facing * 1.5 + (handRX > sxR ? 1 : -1);
-  const elbowRY = (shoulderY + handRY) / 2 + 5;
+  // Asymmetric elbow bend: more bend on back-swing, straighter on forward swing.
+  const backL = Math.max(0, -swingL); // 0..1 when L arm goes back relative to facing
+  const backR = Math.max(0, -swingR);
+  const elbowLX = (sxL + handLX) / 2 + facing * 1.5 + (handLX < sxL ? -1 : 1) - facing * backL * 3 * amp;
+  const elbowLY = (shoulderY + handLY) / 2 + 5 + backL * 4 * amp;
+  const elbowRX = (sxR + handRX) / 2 - facing * 1.5 + (handRX > sxR ? 1 : -1) - facing * backR * 3 * amp;
+  const elbowRY = (shoulderY + handRY) / 2 + 5 + backR * 4 * amp;
 
   if (attacking) {
     const ahx = facing * 28;
@@ -163,7 +191,7 @@ export function computeWalkPose(
     const aey = shoulderY + 2;
     if (facing > 0) {
       return {
-        headOffsetY: headOffsetY - bob * 0.4,
+        headOffsetY: headOffsetY - bobHead * 0.4,
         shoulderY, hipY,
         legL: L.joints, legR: R.joints,
         armL: [sxL, shoulderY, elbowLX, elbowLY, handLX, handLY],
@@ -175,7 +203,7 @@ export function computeWalkPose(
       };
     }
     return {
-      headOffsetY: headOffsetY - bob * 0.4,
+      headOffsetY: headOffsetY - bobHead * 0.4,
       shoulderY, hipY,
       legL: L.joints, legR: R.joints,
       armL: [sxL, shoulderY, aex, aey, ahx, ahy],
@@ -188,7 +216,7 @@ export function computeWalkPose(
   }
 
   return {
-    headOffsetY: headOffsetY - bob * 0.4,
+    headOffsetY: headOffsetY - bobHead * 0.4,
     shoulderY, hipY,
     legL: L.joints, legR: R.joints,
     armL: [sxL, shoulderY, elbowLX, elbowLY, handLX, handLY],

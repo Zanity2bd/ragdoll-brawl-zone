@@ -1,111 +1,105 @@
-# Stickman Render Polish — Refined Pass
+## Goal
+Make the ground walk cycle in `src/game/animation.ts` (and a small tweak in `src/game/wobble.ts`) feel fluid, weighted, and human instead of robotic — without changing physics, hitboxes, or speed.
 
-Refine the previously-planned outline / taper / curvature work in `src/game/engine.ts` so the silhouette stays clean at every character size, limbs read clearly in motion, and there are no flicker / seam artifacts.
+## Scope
+- `src/game/animation.ts` — `legPose()` and the grounded branch of `computeWalkPose()`.
+- `src/game/wobble.ts` — relax the grounded foot/leg damping just enough for live secondary motion.
+- No engine, no skin, no asset, no input changes. Mobile-first: math-only, ~10 extra ops/frame, safe on low-end GPUs.
 
-All changes live in `drawFighterAt` and `drawLimb` in `src/game/engine.ts`. No animation timing, pose math, or asset changes.
+## Changes (priority order — ships in one pass)
 
-## 1. Lighter, size-proportional outline
-
-Current plan called for `outlineW = baseW * 0.55`. That reads as too heavy on the standard fighter. Drop the multipliers a notch and clamp:
-
+### 1. Hip sway (weight transfer)
+Pelvis shifts sideways toward the planted foot each step.
 ```text
-baseW          = thickBody ? 7.0 : 5.5     // slightly thinner than the v1 plan
-outlineW       = clamp(baseW * 0.42, 1.8, 3.4)   // limb rim
-torsoW         = thickBody ? 7   : 5.5
-torsoOutlineW  = clamp(torsoW * 0.38, 1.8, 3.0)
+hipSwayX = sin(phase) * 1.6 * amp     // ~1.6px at full run
+hipX += hipSwayX
+shoulderX (via lean already) opposes it slightly for counter-balance
+```
+Biggest single "feels alive" win.
+
+### 2. Heel–toe foot roll
+Foot pivots through the step instead of staying flat.
+```text
+footAngle = sin(phase) * 0.35 * amp   // toe-up on land, heel-up on push-off
+```
+Pass via a new optional `footAngleL/R` field on `Pose` (renderer already reads `footL/R`; we add angle and let `engine.ts` use it if present, fall back to 0).
+*Implementation note:* if adding to `Pose` interface ripples too far, store as a tiny `(footX + facing*cos(angle), footY - sin(angle))` nudge on the foot point — visually equivalent at this scale, zero schema change. Default to the nudge approach.
+
+### 3. Curved knee path
+Replace linear knee midpoint with a forward sine bump during swing.
+```text
+kneeForward = facing * (3 + 5*lifted + 4*sin(phase)*lifted)
+```
+Eliminates pendulum look on the swinging leg.
+
+### 4. Phase-delayed upper body
+Head + shoulders lag the hip bob by ~80ms so the spine "follows."
+```text
+bobHip       = (1 - cos(phase*2)) * 0.9 * amp
+bobShoulder  = (1 - cos(phase*2 - 0.5)) * 0.9 * amp     // ~80ms lag at walk cadence
+bobHead      = (1 - cos(phase*2 - 0.9)) * 0.9 * amp
 ```
 
-Heavy fighters still get a visibly thicker rim, but the standard stickman no longer looks "inked." The clamp keeps the rim from disappearing on tiny FX scales or ballooning if a future skin pushes `baseW` higher.
-
-## 2. Proportional head outline offset
-
-Head rim was a flat `headR + 0.5`. Tie it to the outline width so head and body share the same visual rim weight:
-
+### 5. Stride blend in/out
+Smooth `amp` instead of binary moving/idle snap. Add `walkAmp` state to the fighter (or derive from a `useRef`-style smoothed value already present — fall back to local lerp inside `computeWalkPose` using a passed-in `prevAmp` if needed).
 ```text
-headRimOffset = outlineW * 0.5
-arc(0, headY, headR + headRimOffset)
+ampTarget = clamp(speed/160, 0, 1)
+amp       = lerp(prevAmp, ampTarget, 1 - exp(-dt*9))     // ~110ms ease
+```
+*If threading `dt` is awkward,* approximate with `amp = ampTarget*0.85 + prevAmp*0.15` per frame — same effect, no signature change.
+
+### 6. Asymmetric per-leg signature + micro jitter
+Per-fighter constants (seeded by fighter id once) so each character walks slightly differently.
+```text
+strideBiasL = 1.00,  strideBiasR = 1.04
+liftBiasL   = 1.03,  liftBiasR   = 1.00
+phaseJitter = sin(phase*0.31) * 0.04 * amp     // ±4% rhythm wobble
+```
+Breaks the perfect-mirror loop.
+
+### 7. Speed-shaped gait
+Already have `amp`; curve more params off it non-linearly so a sprint reads as a sprint.
+```text
+lean        = facing * min(0.22, speed/1300)           // up from /1700
+lift        = 16*amp + 8*amp²                          // higher knees at speed
+armSwingMax = 14*amp + 10*amp²                          // more pump at speed
+contactT    = 0.55 - 0.15*amp                          // shorter ground contact
+```
+Use `liftCurve = max(0, sin(phase))^(1 - 0.4*amp)` to sharpen lift at high speed.
+
+### 8. Asymmetric arm bend
+Elbow bends more on the back-swing than the forward-swing.
+```text
+backSwing   = max(0, -swingHand)        // 0..1 when arm goes back
+elbowYL    += backSwing * 4 * amp
+elbowXL    += -facing * backSwing * 3 * amp
 ```
 
-Order is enforced: **fill the head disc first, then stroke the rim.** Cowls / Homelander hairline / mask plates get the same fill-then-stroke treatment locally — the global outline pass no longer touches the head at all.
+### 9. Loosen grounded wobble (tiny)
+In `src/game/wobble.ts` `applyWobble`, raise the grounded foot offset multiplier from `0` → `0.08` and the grounded leg `lower` from `0.25` → `0.32`. Just enough for the torso jiggle to read while walking; still anti-slide.
 
-## 3. Higher-contrast taper
-
-Bump the taper ratio for a more dynamic, anatomical limb:
-
+### 10. Heel-strike micro-dip
+A 1-pixel hip drop on each foot plant for weight.
 ```text
-upperW = baseW              // shoulder/hip → elbow/knee
-lowerW = baseW * 0.62       // elbow/knee → hand/foot   (was 0.78)
+hipY += max(0, -cos(phase*2)) * 1.0 * amp
 ```
-
-The outline pass mirrors the same split with the same ratio so the dark rim tapers in lockstep — no rim "lip" at the joint. Round line caps + joins keep the elbow transition smooth.
-
-## 4. Limbs overlap the torso (no seams)
-
-Instead of relying on joint caps to plug shoulder / hip gaps, extend each limb's start point a few pixels *inside* the torso along the shoulder→elbow vector:
-
-```text
-overlap = baseW * 0.45
-sx' = sx + (ex - sx)/len * (-overlap)   // step backwards into torso
-sy' = sy + (ey - sy)/len * (-overlap)
-```
-
-Result: limb stroke visibly bites into the torso fill, so even at extreme rotations there is no gap. Joint caps shrink further (`jr = baseW * 0.32`) and the hip cap is removed entirely — the overlap does the work.
-
-## 5. Stable curvature (facing-anchored, velocity-modulated)
-
-The earlier plan keyed the perpendicular flex sign off the limb vector, which flipped sign whenever a limb crossed the body midline → visible jitter. Anchor on facing instead:
-
-```text
-// Per-limb base direction (anatomical default, depends on which limb)
-sideArmL = -1 ; sideArmR = +1
-sideLegL = +1 ; sideLegR = -1     // legs curve slightly inward
-flexDir  = side * facing          // consistent in world space
-
-flexAmt  = 0.35
-         + 0.45 * clamp(|vx|/MOVE_SPEED, 0, 1)   // velocity = secondary
-         + (attackAnim > 0 ? 0.35 : 0)
-         + (flying      ? 0.25 : 0)
-
-elbowNudge = perp(start→hand) * baseW * 0.30 * flexAmt * flexDir
-```
-
-Because `flexDir` only depends on facing (and `facing` is `facingT`-interpolated, not snapping), the curvature can never invert mid-frame. Velocity only modulates *magnitude*.
-
-## 6. Subtle squash & stretch
-
-Layer a tiny scale onto the existing wobble transform (lines ~3499-3507) so movement and impacts feel springier without affecting hitboxes (purely render-side):
-
-```text
-moveStretch  = 1 + clamp(|vx|/MOVE_SPEED, 0, 1) * 0.04   // vertical stretch when running
-moveSquash   = 1 / moveStretch                           // counter-squash horizontally
-hitSquash    = 1 + hitFlash * 0.18                       // brief horizontal squash on hit
-hitStretch   = 1 / hitSquash
-
-scaleX = moveSquash  * hitSquash
-scaleY = moveStretch * hitStretch
-```
-
-Anchored at the feet (already the existing pivot), so characters never "float." Capped tight (≤4% from movement, ≤18% from hits) to stay readable at the 393×583 mobile viewport.
-
-## 7. Final draw order
-
-```text
-1. dark outline pass        — limbs (tapered, overlapped) + torso. NO head.
-2. neon glow pass           — unchanged
-3. main limb stroke         — two segments per limb (upper, lower-tapered)
-4. inner highlight          — also two-segment, mirrors taper
-5. tiny shoulder caps       — limbColor, hidden under outline
-6. torso fill + highlight   — unchanged
-7. head: fill → rim (offset) → radial highlight → eyes/mask
-8. cowl / hat / hair        — fill → local rim
-```
-
-## Performance
-
-~+6 stroke calls per fighter per frame vs current. Negligible at 60Hz on the low-end target (2 fighters). `lowPower` mode still skips glow + highlight; outline + taper stay on (they're the readability win).
+Already partly there via `bob`; this just biases the dip to the contact half of the cycle.
 
 ## Out of scope
+- Jump/airborne pose (separate branch, untouched).
+- Attack overrides (lines 159-200) — they read the new walk pose unchanged.
+- Wobble stiffness profiles, ragdoll, hit reactions.
+- Any renderer changes in `engine.ts` beyond what's already drawn.
 
-- No `animation.ts` changes
-- No cape, weapon, projectile, emblem, or VFX changes
-- No new assets
+## Performance budget
+~12 extra `sin`/`cos` and ~8 multiplies per fighter per frame. At 2 fighters × 60fps = ~2.4k extra ops/sec. Negligible on the 393×583 mobile target.
+
+## Risk / rollback
+All changes are local to two files and purely additive math on existing pose outputs. If a tweak feels off, each numbered item can be reverted independently.
+
+## Acceptance check
+- Idle → walk → run → stop reads as one continuous motion (no snap).
+- Each character has a visibly distinct gait signature.
+- Hips sway side-to-side with planted foot; head bob lags hip bob.
+- Foot visibly rolls through the step at normal speed.
+- No foot-sliding, no clipping, frame rate unchanged on mobile preview.
