@@ -153,7 +153,7 @@ export function GameCanvas() {
   );
 }
 
-function HUD({ snap, onRematch, onChange }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void }) {
+function HUD({ snap, onRematch, onChange, muted, onToggleMute }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onToggleMute: () => void }) {
   return (
     <>
       <div className="pointer-events-none absolute top-0 left-0 right-0 p-2 sm:p-4 flex gap-2 sm:gap-4 items-start">
