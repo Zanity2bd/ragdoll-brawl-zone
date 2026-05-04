@@ -4300,15 +4300,24 @@ export class GameEngine {
     const dy = Math.abs((this.p1.y + FIGHTER_H * 0.5) - (this.p2.y + FIGHTER_H * 0.5));
     const spread = Math.hypot(dx, dy);
     // Map spread → desired zoom (close fight = 2.0x, far fight = 1.35x)
-    const targetZoom = Math.max(1.35, Math.min(2.0, 520 / Math.max(220, spread)));
-    this.camZoom += (targetZoom - this.camZoom) * 0.08;
+    let targetZoom = Math.max(1.35, Math.min(2.0, 520 / Math.max(220, spread)));
+    // KO cinematic: punch in hard on the loser for ~1.4s
+    const koActive = this.phase === "ko" && this.koCinematicT < 1.4;
+    if (koActive) {
+      targetZoom = 2.6;
+    }
+    this.camZoom += (targetZoom - this.camZoom) * (koActive ? 0.18 : 0.08);
     const worldScale = baseScale * this.camZoom;
 
     // Visible world half-extents (in world units)
     const vw = cw / worldScale, vh = ch / worldScale;
     // Target focus = midpoint of fighters (slightly above feet for headroom)
-    const tx = (this.p1.x + this.p2.x) / 2;
-    const ty = (this.p1.y + this.p2.y) / 2 + FIGHTER_H * 0.3 - 40;
+    let tx = (this.p1.x + this.p2.x) / 2;
+    let ty = (this.p1.y + this.p2.y) / 2 + FIGHTER_H * 0.3 - 40;
+    if (koActive && this.koFocus) {
+      tx = this.koFocus.x;
+      ty = this.koFocus.y;
+    }
     // Clamp camera so visible window stays inside the stage (no black edges).
     const minCx = vw / 2, maxCx = W - vw / 2;
     const minCy = vh / 2, maxCy = H - vh / 2;
