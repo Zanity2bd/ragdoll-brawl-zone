@@ -160,6 +160,13 @@ function HUD({ snap, onRematch, onChange, muted, onToggleMute }: { snap: GameSna
         <HpBar p={snap.p1} side="left" />
         <HpBar p={snap.p2} side="right" />
       </div>
+      <button
+        onClick={onToggleMute}
+        aria-label={muted ? "Unmute" : "Mute"}
+        className="absolute top-2 right-2 sm:top-3 sm:right-3 w-9 h-9 rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-20"
+      >
+        {muted ? "🔇" : "🔊"}
+      </button>
 
       {snap.phase === "intro" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
