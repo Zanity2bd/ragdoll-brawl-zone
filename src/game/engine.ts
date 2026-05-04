@@ -5113,6 +5113,11 @@ function getPowerSpec(id: SkinId): PowerSpec {
         power1: { name: "Bamf Cloud", cd: BAMF_CLOUD_CD },
         power2: { name: "Bamf Combo", cd: BAMF_COMBO_CD },
       };
+    case "spiderman":
+      return {
+        power1: { name: "Web Snare", cd: WEB_SNARE_CD },
+        power2: { name: "Web Swing", cd: 0.5 },
+      };
     default:
       return {};
   }
