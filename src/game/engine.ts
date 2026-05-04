@@ -2067,9 +2067,18 @@ export class GameEngine {
     // because those branches return early above and own the body completely.
     stepWobble(f.wobble, dt, f.vx, f.vy, f.onGround, f.flying, this.lowPower);
 
-    // Maintain afterimage trail for fast skins
+    // Maintain afterimage trail for fast skins (and during Bamf strikes for depth motion-blur)
     const fast = f.skin.id === "flash" || f.skin.id === "atrain";
-    if (fast && (Math.abs(f.vx) > 200 || f.meleeKind)) {
+    const bamfStrike = f.meleeKind === "bamfPunch" || f.meleeKind === "bamfKick";
+    if (bamfStrike) {
+      // Push every frame so the swing leaves a dense smear toward the camera
+      f.trail.push({
+        x: f.x, y: f.y, phase: f.walkPhase, vx: f.vx, vy: f.vy,
+        onGround: f.onGround, facing: f.facing, pose: this.poseFor(f),
+      });
+      const cap = this.lowPower ? 5 : 10;
+      while (f.trail.length > cap) f.trail.shift();
+    } else if (fast && (Math.abs(f.vx) > 200 || f.meleeKind)) {
       f.trail.push({
         x: f.x, y: f.y, phase: f.walkPhase, vx: f.vx, vy: f.vy,
         onGround: f.onGround, facing: f.facing, pose: this.poseFor(f),
@@ -2784,13 +2793,19 @@ export class GameEngine {
     // Afterimage ghosts (drawn under main fighters)
     for (const f of [this.p1, this.p2]) {
       if (f.trail.length === 0) continue;
+      const bamf = f.meleeKind === "bamfPunch" || f.meleeKind === "bamfKick";
+      if (bamf) {
+        // Additive purple tint for depth-implying motion smear
+        ctx.globalCompositeOperation = "lighter";
+      }
       for (let i = 0; i < f.trail.length; i++) {
-        const a = (i + 1) / (f.trail.length + 1) * 0.4;
+        const a = (i + 1) / (f.trail.length + 1) * (bamf ? 0.55 : 0.4);
         ctx.globalAlpha = a;
         const t = f.trail[i];
         this.drawFighterAt(f, t.x, t.y, t.pose, true);
       }
       ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
     }
 
     // Hide attacker (and target) during frenzy — replaced by video clip below.
@@ -3033,8 +3048,36 @@ export class GameEngine {
     const ctx = this.ctx;
     const skin = f.skin;
 
+    // ---- Bamf strike depth FX (perspective scale + z-shadow) ----
+    // Drives a punch-in zoom toward the camera plus a darker offset shadow underfoot
+    // to fake a Z-axis (depth) push during the active swing window.
+    let bamfScale = 1;
+    let bamfActive = false;
+    if (!ghost && (f.meleeKind === "bamfPunch" || f.meleeKind === "bamfKick") && f.meleeDur > 0) {
+      bamfActive = true;
+      const p = Math.min(1, f.meleeT / f.meleeDur);
+      // Bell curve peaking near contact (~45%) → zooms toward camera then settles
+      const bell = Math.sin(Math.min(1, p * 1.6) * Math.PI);
+      bamfScale = 1 + bell * 0.18;
+      // Z-offset shadow: heavier offset under the fighter to imply forward push
+      if (f.onGround) {
+        ctx.save();
+        ctx.fillStyle = `oklch(0 0 0 / ${0.18 + bell * 0.22})`;
+        ctx.beginPath();
+        ctx.ellipse(x + f.facing * bell * 6, y + FIGHTER_H - 1, 22 + bell * 10, 5 + bell * 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
     ctx.save();
     ctx.translate(x, y);
+    if (bamfActive) {
+      // Perspective scale anchored at the feet so the head/fist swell forward.
+      ctx.translate(0, FIGHTER_H);
+      ctx.scale(bamfScale, bamfScale);
+      ctx.translate(0, -FIGHTER_H);
+    }
     // Wobbly jiggle: gentle squash + sway around the feet, scaled with motion
     // and amplified briefly after a hit. Keeps stickman feeling alive/jelly.
     if (!ghost && f.ragdollT <= 0) {

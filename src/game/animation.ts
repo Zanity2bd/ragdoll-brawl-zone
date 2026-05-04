@@ -347,9 +347,19 @@ export function computeAttackPose(
         if (facing > 0) { out.armL = [-sxF, sy, -facing * 4, sy - 4, gx, gy]; out.handL = [gx, gy]; }
         else { out.armR = [-sxF, sy, -facing * 4, sy - 4, gx, gy]; out.handR = [gx, gy]; }
       } else if (inActive) {
-        const reach = 30 + 10 * at;
+        // Foreshortened limb-stretch: arm reach grows past natural length to fake
+        // a fist coming straight at the camera (z-extrusion illusion).
+        const stretch = 1 + at * 0.55; // up to 1.55x
+        const reach = (30 + 12 * at) * stretch;
         setStrike(reach, -1);
-        // Lean into the punch
+        // Push the elbow further forward too so the limb segments compress (foreshortening)
+        if (facing > 0) {
+          out.armR = [sxF, sy, facing * (reach * 0.65), sy + 1, facing * reach, sy - 1];
+          out.handR = [facing * reach, sy - 1];
+        } else {
+          out.armL = [sxF, sy, facing * (reach * 0.65), sy + 1, facing * reach, sy - 1];
+          out.handL = [facing * reach, sy - 1];
+        }
         out.lean = (out.lean ?? 0) + facing * 0.18;
       } else {
         setStrike(28, 2);
@@ -363,10 +373,12 @@ export function computeAttackPose(
       const a = inWind
         ? -0.6 + 0.5 * wt
         : (inActive ? -0.1 + 1.5 * at : 1.4);
-      const r = 26;
+      // Foreshorten leg on the active strike for a 3D push toward the camera
+      const stretch = inActive ? 1 + at * 0.5 : 1;
+      const r = 26 * stretch;
       const footX = facing * Math.cos(a) * r;
       const footY = hipY + 8 + Math.sin(a) * r * 0.6;
-      const kneeX = facing * Math.cos(a) * (r * 0.5);
+      const kneeX = facing * Math.cos(a) * (r * 0.6);
       const kneeY = hipY + 10 + Math.sin(a) * r * 0.3;
       // Lead leg = back leg whips forward (use legR for facing right, legL for left)
       if (facing > 0) {
