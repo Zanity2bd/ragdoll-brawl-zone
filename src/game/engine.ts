@@ -2906,7 +2906,7 @@ export class GameEngine {
             const angle = desired;
             // Normal beam: blocked by cover AND props (whichever is closer).
             // Overload: pierces everything (chain-shatter handled below).
-            const beamMaxLen = m.range;
+            const beamMaxLen = overload ? 4000 : m.range;
             const platHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
             let beamLen = platHit ? platHit.dist : beamMaxLen;
             let blockedProp: Prop | null = null;
