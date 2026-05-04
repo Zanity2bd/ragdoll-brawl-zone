@@ -358,15 +358,16 @@ function HUD({ snap, onRematch, onChange, onOpenSettings, onFrenzyP1 }: { snap: 
         </div>
       )}
 
-      {snap.phase === "ko" && (
+      {snap.phase === "ko" && snap.koCinematicT >= 1.1 && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm px-4">
-          <div className="text-center" style={{ animation: "fade-in 0.35s ease-out" }}>
+          <div className="text-center" style={{ animation: "fade-in 0.45s ease-out" }}>
             <div
               className="font-black tracking-widest mb-4"
               style={{
                 fontSize: "clamp(3.5rem, 16vw, 8rem)",
                 color: snap.winner === "p1" ? "oklch(0.85 0.18 210)" : "oklch(0.72 0.28 340)",
                 textShadow: `0 0 40px ${snap.winner === "p1" ? "oklch(0.75 0.22 215)" : "oklch(0.65 0.30 345)"}`,
+                animation: "scale-in 0.35s ease-out",
               }}
             >
               K.O.
