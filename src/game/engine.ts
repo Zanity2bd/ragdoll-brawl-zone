@@ -911,7 +911,7 @@ export class GameEngine {
     const t = targetId === "p1" ? this.p1 : this.p2;
     if (t.id === attacker.id) return;
     t.hp = Math.max(0, t.hp - SUPER_DAMAGE);
-    t.hitFlash = 0.4;
+    t.hitFlash = 0.55;
     const dir = Math.sign(t.x - attacker.x) || attacker.facing;
     t.vx = dir * SUPER_KB_X;
     t.vy = SUPER_KB_Y;
@@ -923,14 +923,38 @@ export class GameEngine {
     this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
     this.slowmoMode = "impact";
     this.impactFlash = 1;
-    this.burst(t.x, t.y + FIGHTER_H * 0.5, attacker.skin.glow, 48);
-    this.burst(t.x, t.y + FIGHTER_H * 0.5, "oklch(0.95 0.08 80)", 28);
+    // Cinematic glow burst — multi-ring shockwaves + dense particle explosion
+    const cx = t.x, cy = t.y + FIGHTER_H * 0.5;
+    this.burst(cx, cy, attacker.skin.glow, 64);
+    this.burst(cx, cy, "oklch(0.98 0.10 80)", 48);
+    this.burst(cx, cy, "oklch(0.92 0.18 30)", 36);
+    // Radial spark streaks
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
+      const sp = 380 + Math.random() * 320;
+      this.particles.push({
+        x: cx, y: cy,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.55 + Math.random() * 0.3, maxLife: 0.85,
+        color: i % 2 ? attacker.skin.glow : "oklch(0.95 0.08 80)",
+        size: 2 + Math.random() * 3,
+      });
+    }
     this.shockwaves.push({
-      x: t.x, y: t.y + FIGHTER_H * 0.5, r: 10, rMax: 220,
-      life: 0.55, maxLife: 0.55, color: attacker.skin.glow,
+      x: cx, y: cy, r: 12, rMax: 280,
+      life: 0.7, maxLife: 0.7, color: attacker.skin.glow,
     });
-    Sfx.play("boom", 0.9);
-    Sfx.play("heavy", 0.8);
+    this.shockwaves.push({
+      x: cx, y: cy, r: 6, rMax: 180,
+      life: 0.5, maxLife: 0.5, color: "oklch(0.98 0.05 80)",
+    });
+    this.shockwaves.push({
+      x: cx, y: cy, r: 20, rMax: 360,
+      life: 0.85, maxLife: 0.85, color: "oklch(0.85 0.18 30)",
+    });
+    Sfx.play("boom", 1);
+    Sfx.play("heavy", 0.95);
+    Sfx.play("punch", 0.8);
     if (t.hp <= 0 && this.phase === "fight") {
       this.phase = "ko"; this.winner = attacker.id;
     }
