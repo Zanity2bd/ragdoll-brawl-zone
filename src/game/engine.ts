@@ -1449,7 +1449,57 @@ export class GameEngine {
       }
     }
 
-    // ---- Iron Man Micro-Missiles ----
+    // ---- Beam start/end edge-triggers (recoil + camera shake + audio) ----
+    // Unified for Homelander laserSweep, Superman heat vision, Iron Man unibeam fire.
+    for (const f of [this.p1, this.p2]) {
+      const isHomelaserActive = f.meleeKind === "laserSweep" && f.meleeT >= f.move.windup && f.meleeT < f.move.windup + f.move.active;
+      const active = isHomelaserActive || f.heatVisionT > 0 || f.unibeamFireT > 0;
+      const wasActive = this.beamWasActive[f.id];
+      if (active && !wasActive) {
+        // START: body recoil away from beam direction + camera shake + audio
+        f.bodyLagV -= f.facing * 220;
+        f.wobble.bvx -= f.facing * 180;
+        f.wobble.bvy -= 60;
+        f.wobble.squashV -= 5;
+        f.bodyRollV -= f.facing * 1.6;
+        this.shake = Math.max(this.shake, 18);
+        this.impactFlash = Math.max(this.impactFlash, 0.45);
+        this.shockwaves.push({
+          x: f.x + f.facing * 16, y: f.y + 28, r: 6, rMax: 110,
+          life: 0.35, maxLife: 0.35,
+          color: f.skin.glow ?? "oklch(0.95 0.18 60)",
+        });
+        // Always play the homelander laser sample whenever any laser starts.
+        Sfx.play("homelanderLaser", 0.95);
+      } else if (!active && wasActive) {
+        // END: settling recoil pop + smaller shake
+        f.bodyLagV += f.facing * 110;
+        f.wobble.bvx += f.facing * 80;
+        f.wobble.squashV += 3;
+        this.shake = Math.max(this.shake, 10);
+        this.impactFlash = Math.max(this.impactFlash, 0.25);
+      }
+      this.beamWasActive[f.id] = active;
+    }
+
+    // ---- Debris physics (cover blocks shattered by overload) ----
+    if (this.debris.length) {
+      for (const d of this.debris) {
+        d.life -= dt;
+        d.vy += GRAVITY * dt * 0.6;
+        d.x += d.vx * dt;
+        d.y += d.vy * dt;
+        d.rot += d.rotV * dt;
+        if (d.y > GROUND_Y - d.h * 0.5) {
+          d.y = GROUND_Y - d.h * 0.5;
+          d.vy *= -0.32; d.vx *= 0.7; d.rotV *= 0.6;
+          if (Math.abs(d.vy) < 30) d.vy = 0;
+        }
+      }
+      this.debris = this.debris.filter(d => d.life > 0);
+    }
+
+
     for (const ms of this.missiles) {
       if (freezeActive && ms.owner !== this.timeFreezer) continue;
       if (ms.delay > 0) { ms.delay -= dt; continue; }
