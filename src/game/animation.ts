@@ -287,56 +287,118 @@ export function computeAttackPose(
 
   switch (kind) {
     case "basicKick": {
-      // Snappy front kick: chamber knee up, snap shin out, retract.
+      // Front snap kick: plant support leg, chamber knee high, snap foot
+      // forward at hip height, retract. Body pivots over the support hip.
       const hipY = walk.hipY;
-      // Arc angle for the kicking foot (back leg whips forward).
-      // Wind-up: knee up & cocked back. Active: leg snaps forward and slightly up.
-      // Recover: leg drops back toward the ground.
-      let a: number;
-      let r: number;
+      const groundY = hipY + 34; // feet plant on ground (FIGHTER_H - hipYBase)
+      const recT = !inWind && !inActive
+        ? Math.min(1, Math.max(0, (p - timing.wp - timing.ap) / Math.max(0.0001, 1 - timing.wp - timing.ap)))
+        : 0;
+      const rt = recT;
+
+      // Easing helpers
+      const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
+      const easeIn  = (t: number) => t * t;
+
+      // Phase-driven kick extension and chamber.
+      // chamber = how high the knee is pulled up (0..1)
+      // extend  = how far the foot has snapped forward (0..1, can briefly exceed 1)
+      let chamber: number, extend: number, retract: number;
       if (inWind) {
-        a = -0.5 - 0.4 * wt;          // chamber: leg coiled back
-        r = 14 + 4 * wt;
+        chamber = easeOut(wt);     // pull knee up fast
+        extend = 0;
+        retract = 0;
       } else if (inActive) {
-        a = -0.9 + 1.7 * at;          // explosive snap forward
-        r = 22 + 14 * at;
+        // Knee stays chambered while shin whips out
+        chamber = 1 - 0.25 * at;
+        // Slight overshoot at peak for snap (1.08 then settle)
+        const e = easeOut(at);
+        extend = e * (1 + 0.08 * Math.sin(at * Math.PI));
+        retract = 0;
       } else {
-        a = 0.7;
-        r = 22;
+        // Recovery: pull leg back in, drop foot back to ground
+        const r = easeIn(rt);
+        chamber = 1 - 0.6 * r;
+        extend = 1 - r;
+        retract = r;
       }
-      const footX = facing * Math.cos(a) * r;
-      const footY = hipY + 10 + Math.sin(a) * r * 0.55;
-      const kneeX = facing * Math.cos(a) * (r * 0.55);
-      const kneeY = hipY + 12 + Math.sin(a) * r * 0.3;
+
+      // Kicking leg geometry (in fighter-local space, +x = facing)
+      // Hip is at (±3, hipY). Knee chambers up toward chest, then snaps forward.
+      const hipKX = facing * 2;
+      const hipKY = hipY;
+
+      // Knee position: high & forward when chambered, drives forward as leg extends
+      const kneeBaseY = hipY - 14 * chamber;          // up to ~14px above hip = chest height
+      const kneeBaseX = facing * (6 + 10 * chamber);  // pulled in toward body
+      // As leg extends, knee straightens out forward
+      const kneeX = kneeBaseX + facing * 8 * extend;
+      const kneeY = kneeBaseY + 6 * extend;           // drops slightly as leg straightens
+
+      // Foot: chambered tight under butt, then whips out to full extension at hip height
+      const chamberFootX = facing * 4;
+      const chamberFootY = hipY + 2 - 18 * chamber;   // tucked up high
+      const extendFootX = facing * (38 + 8 * extend); // full reach past knee
+      const extendFootY = hipY + 4;                   // strike at hip height
+      const footX = chamberFootX * (1 - extend) + extendFootX * extend;
+      const footY = chamberFootY * (1 - extend) + extendFootY * extend;
+
+      // Support leg: planted flat on the ground, slight bend for stability,
+      // shifts under the body weight (toward the kicking side hip).
+      const supX = -facing * 2;
+      const supKneeX = -facing * 4;
+      const supKneeY = hipY + 18;
+      const supFootX = -facing * 1;
+      const supFootY = groundY;                       // ON the ground — no float
+
       if (facing > 0) {
-        out.legR = [3, hipY, kneeX, kneeY, footX, footY];
+        out.legR = [hipKX, hipKY, kneeX, kneeY, footX, footY];
         out.footR = [footX, footY];
-        out.legL = [-3, hipY, -4, hipY + 14, -6, hipY + 24];
-        out.footL = [-6, hipY + 24];
+        out.legL = [supX, hipY, supKneeX, supKneeY, supFootX, supFootY];
+        out.footL = [supFootX, supFootY];
       } else {
-        out.legL = [-3, hipY, kneeX, kneeY, footX, footY];
+        out.legL = [hipKX, hipKY, kneeX, kneeY, footX, footY];
         out.footL = [footX, footY];
-        out.legR = [3, hipY, 4, hipY + 14, 6, hipY + 24];
-        out.footR = [6, hipY + 24];
+        out.legR = [supX, hipY, supKneeX, supKneeY, supFootX, supFootY];
+        out.footR = [supFootX, supFootY];
       }
-      // Arms: small counter-balance — back arm out, front arm guards.
-      const balX = -facing * 14, balY = sy + 4;
-      const guardX = facing * 8, guardY = sy + 2;
+
+      // Arms throw back for momentum (real kicks pull arms opposite the leg).
+      // Front arm pulls in to guard the face, back arm flares behind for balance.
+      const armPhase = inWind ? wt * 0.6 : (inActive ? 0.6 + at * 0.4 : 1 - rt);
+      const backHandX = -facing * (10 + 14 * armPhase);
+      const backHandY = sy + 6 + 4 * armPhase;
+      const backElbowX = -facing * (6 + 6 * armPhase);
+      const backElbowY = sy + 4;
+      const guardHandX = facing * (4 + 6 * armPhase);
+      const guardHandY = sy - 2 - 4 * armPhase;       // raised toward face
+      const guardElbowX = facing * 6;
+      const guardElbowY = sy + 2;
+
       if (facing > 0) {
-        out.armL = [-sxF, sy, -facing * 7, sy + 2, balX, balY];
-        out.handL = [balX, balY];
-        out.armR = [sxF, sy, facing * 5, sy + 2, guardX, guardY];
-        out.handR = [guardX, guardY];
+        // Right side kicks → left arm guards (front), right arm flares back
+        out.armL = [-sxF, sy, guardElbowX, guardElbowY, guardHandX, guardHandY];
+        out.handL = [guardHandX, guardHandY];
+        out.armR = [sxF, sy, backElbowX, backElbowY, backHandX, backHandY];
+        out.handR = [backHandX, backHandY];
       } else {
-        out.armR = [-sxF, sy, -facing * 7, sy + 2, balX, balY];
-        out.handR = [balX, balY];
-        out.armL = [sxF, sy, facing * 5, sy + 2, guardX, guardY];
-        out.handL = [guardX, guardY];
+        out.armR = [sxF, sy, guardElbowX, guardElbowY, guardHandX, guardHandY];
+        out.handR = [guardHandX, guardHandY];
+        out.armL = [-sxF, sy, backElbowX, backElbowY, backHandX, backHandY];
+        out.handL = [backHandX, backHandY];
       }
-      // Slight backward lean on chamber, forward push on snap.
-      const tilt = inWind ? -0.10 * wt : (inActive ? 0.10 + 0.18 * at : 0.18);
+
+      // Body lean: chamber pulls torso back, snap throws it slightly forward,
+      // then settles. Shoulder roll opens hip into the kick.
+      const tilt = inWind ? -0.18 * wt
+                : inActive ? -0.18 + 0.30 * at
+                : 0.12 * (1 - rt);
       out.lean = (walk.lean ?? 0) + facing * tilt;
-      out.headOffsetY = walk.headOffsetY - (inActive ? 1 : 0);
+      out.shoulderRoll = (walk.shoulderRoll ?? 0) + facing * (0.10 + 0.10 * extend);
+      // Head tracks the action: tucks slightly on chamber, pushes forward on snap
+      out.headOffsetY = walk.headOffsetY + (inWind ? 1 * wt : (inActive ? -1.5 * at : -0.5 * (1 - rt)));
+      // Hips dip under body weight onto support leg
+      out.hipY = walk.hipY + 1 * chamber;
       break;
     }
     case "heatPunch": {
