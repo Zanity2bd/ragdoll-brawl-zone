@@ -13,6 +13,7 @@ import {
   WALK_LOOP_FRAMES, PUNCH_FRAME_START, RECOVERY_FRAME,
   JUMP_TAKEOFF_FRAME, JUMP_RISE_FRAME, JUMP_APEX_FRAME, JUMP_LAND_FRAME,
   DOWN_FRAME, GETUP_FRAME_A, GETUP_FRAME_B, HURT_FRAME,
+  KICK_CHAMBER_FRAME, KICK_HIT_FRAME, KNEE_CHAMBER_FRAME, KNEE_HIT_FRAME,
 } from "./walkSprite";
 
 export type PlayerId = "p1" | "p2";
@@ -168,6 +169,13 @@ interface Fighter {
   punchCd: number;
   punchHit: boolean;    // ensures one hit per swing
   recoverT: number;     // frame-15 transition timer (visual only)
+  // 3-tap combo: 0 = next is basic punch, 1 = next is high kick, 2 = next is knee finisher
+  comboStep: number;
+  comboWindowT: number; // window during which the next tap chains the combo
+  comboT: number;       // active timer for kick/knee swing
+  comboDur: number;     // duration of current combo swing
+  comboKind: "kick" | "knee" | null;
+  comboHit: boolean;
 }
 
 interface SmokeCloud {
@@ -747,6 +755,7 @@ export class GameEngine {
       bamfCombo: null,
       swing: null,
       punchT: 0, punchCd: 0, punchHit: false, recoverT: 0, justLandedT: 0,
+      comboStep: 0, comboWindowT: 0, comboT: 0, comboDur: 0, comboKind: null, comboHit: false,
     };
   }
 
@@ -2360,13 +2369,50 @@ export class GameEngine {
       }
     }
 
-    // ---- Universal basic punch (sprite-driven, frames 11–14 + recovery 15) ----
+    // ---- Universal basic punch + 3-tap combo (punch → high-kick → knee) ----
     f.punchCd = Math.max(0, f.punchCd - dt);
     if (f.recoverT > 0) f.recoverT = Math.max(0, f.recoverT - dt);
+    if (f.comboWindowT > 0) {
+      f.comboWindowT = Math.max(0, f.comboWindowT - dt);
+      if (f.comboWindowT === 0) f.comboStep = 0;
+    }
+    // Active combo swing (kick / knee)
+    if (f.comboKind && f.comboT > 0) {
+      f.comboT += dt;
+      const u = f.comboT / Math.max(0.001, f.comboDur);
+      const inActive = u >= 0.35 && u <= 0.7;
+      if (inActive && !f.comboHit) {
+        const target = f.id === "p1" ? this.p2 : this.p1;
+        const dx = (target.x - f.x) * f.facing;
+        const range = f.comboKind === "kick" ? 78 : 58;
+        const dmg = f.comboKind === "kick" ? 4 : 6;
+        if (dx > -10 && dx < range && Math.abs(target.y - f.y) < FIGHTER_H) {
+          if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
+            f.comboHit = true;
+            target.hp = Math.max(0, target.hp - dmg);
+            target.hitFlash = 0.28;
+            target.vx += f.facing * (f.comboKind === "kick" ? 220 : 180);
+            target.vy -= f.comboKind === "knee" ? 180 : 60;
+            const ix = target.x;
+            const iy = target.y + (f.comboKind === "knee" ? 50 : 32);
+            this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 46, life: 0.2, maxLife: 0.2, color: "oklch(0.95 0.05 80)" });
+            this.burst(ix, iy, "oklch(0.95 0.06 80)", 10);
+            this.shake = Math.max(this.shake, 9);
+            this.hitstopT = Math.max(this.hitstopT, 0.08);
+            this.impactFlash = Math.max(this.impactFlash, 0.3);
+            Sfx.play("attackImpact", 0.9);
+            if (target.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
+          }
+        }
+      }
+      if (f.comboT >= f.comboDur) {
+        f.comboKind = null; f.comboT = 0; f.comboHit = false;
+        f.recoverT = 0.08;
+      }
+    }
     if (f.punchT > 0) {
       f.punchT += dt;
       const pt = f.punchT;
-      // Hit window = frames 12–13 (after windup, before follow-through)
       const hitStart = PUNCH_F11;
       const hitEnd = PUNCH_F11 + PUNCH_F12 + PUNCH_F13;
       const inActive = pt >= hitStart && pt < hitEnd;
@@ -2384,14 +2430,13 @@ export class GameEngine {
             target.hitFlash = 0.22;
             target.vx += f.facing * 90;
             target.vy -= 30;
-            // Chest-height impact for a punch
             const ix = target.x;
             const iy = target.y + 36;
             this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 38, life: 0.18, maxLife: 0.18, color: "oklch(0.95 0.04 80)" });
             this.shockwaves.push({ x: ix, y: iy, r: 2, rMax: 22, life: 0.12, maxLife: 0.12, color: "oklch(0.99 0.02 250)" });
             this.burst(ix, iy, "oklch(0.95 0.06 80)", 8);
             this.shake = Math.max(this.shake, 6);
-            this.hitstopT = Math.max(this.hitstopT, 0.06); // slight pause on hit
+            this.hitstopT = Math.max(this.hitstopT, 0.06);
             this.impactFlash = Math.max(this.impactFlash, 0.22);
             Sfx.play("punch", 0.8);
             if (target.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
@@ -2402,14 +2447,33 @@ export class GameEngine {
         f.punchT = 0;
         f.punchHit = false;
         f.recoverT = PUNCH_RECOVERY;
+        // Open combo window so a quick re-tap chains into kick
+        f.comboStep = 1;
+        f.comboWindowT = 0.45;
       }
     }
-    if (intent.punch && f.punchT === 0 && f.recoverT === 0 && f.punchCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
-      f.punchT = 0.0001;
-      f.punchHit = false;
-      f.punchCd = PUNCH_CD;
-      f.attackAnim = Math.max(f.attackAnim, PUNCH_DUR);
-      Sfx.play("whoosh", 0.35);
+    if (intent.punch && f.punchT === 0 && f.comboKind == null && f.punchCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
+      if (f.comboStep === 1 && f.comboWindowT > 0) {
+        // Step 2: high kick
+        f.comboKind = "kick"; f.comboT = 0.0001; f.comboDur = 0.32; f.comboHit = false;
+        f.attackAnim = Math.max(f.attackAnim, 0.32);
+        f.comboStep = 2; f.comboWindowT = 0.5;
+        f.punchCd = PUNCH_CD;
+        Sfx.play("whoosh", 0.5);
+      } else if (f.comboStep === 2 && f.comboWindowT > 0) {
+        // Step 3: knee finisher
+        f.comboKind = "knee"; f.comboT = 0.0001; f.comboDur = 0.36; f.comboHit = false;
+        f.attackAnim = Math.max(f.attackAnim, 0.36);
+        f.comboStep = 0; f.comboWindowT = 0;
+        f.punchCd = PUNCH_CD * 1.5;
+        Sfx.play("whoosh", 0.6);
+      } else if (f.recoverT === 0) {
+        f.punchT = 0.0001;
+        f.punchHit = false;
+        f.punchCd = PUNCH_CD;
+        f.attackAnim = Math.max(f.attackAnim, PUNCH_DUR);
+        Sfx.play("whoosh", 0.35);
+      }
     }
     intent.punch = false;
     if (f.canFly) f.flying = true;
@@ -4889,6 +4953,17 @@ export class GameEngine {
 
       // ---- Just landed (squash) ----
       if (f.justLandedT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
+
+      // ---- Combo swing (high kick / knee finisher) ----
+      if (f.comboKind && f.comboT > 0) {
+        const u = f.comboT / Math.max(0.001, f.comboDur);
+        if (f.comboKind === "kick") {
+          drawFrame(u < 0.4 ? KICK_CHAMBER_FRAME : KICK_HIT_FRAME);
+        } else {
+          drawFrame(u < 0.4 ? KNEE_CHAMBER_FRAME : KNEE_HIT_FRAME);
+        }
+        return;
+      }
 
       // ---- Punch one-shot (frames 10..13) ----
       if (f.punchT > 0) {

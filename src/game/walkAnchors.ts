@@ -44,4 +44,18 @@ export const WALK_ANCHORS: ReadonlyArray<WalkAnchor> = [
   { hx: 75, hy: 62, hr: 14, cx: 66, cy: 91, hipY: 125, footY: 193 },
   // Hurt / recoil (22)
   { hx: 68, hy: 14, hr: 14, cx: 73, cy: 46, hipY: 106, footY: 193 },
+  // High kick chamber (23) — supporting leg, kick leg horizontal
+  { hx: 78, hy: 18, hr: 13, cx: 76, cy: 50, hipY: 110, footY: 193 },
+  // High kick extend (24) — leg up & forward
+  { hx: 70, hy: 18, hr: 13, cx: 73, cy: 52, hipY: 112, footY: 193 },
+  // Knee chamber (25) — crouched low, head right
+  { hx: 80, hy: 88, hr: 13, cx: 75, cy: 115, hipY: 145, footY: 193 },
+  // Knee strike (26) — driving knee up
+  { hx: 65, hy: 32, hr: 13, cx: 72, cy: 64, hipY: 124, footY: 193 },
+  // Slash windup (27) — coiled
+  { hx: 76, hy: 22, hr: 13, cx: 73, cy: 54, hipY: 116, footY: 193 },
+  // Slash forward (28) — weapon out, body extended
+  { hx: 76, hy: 18, hr: 13, cx: 73, cy: 50, hipY: 110, footY: 193 },
+  // Slash recover (29) — weapon overhead
+  { hx: 64, hy: 22, hr: 13, cx: 70, cy: 52, hipY: 112, footY: 193 },
 ];

@@ -9,7 +9,7 @@ import type { Skin } from "./skins";
 
 export const WALK_FRAME_W = 144;
 export const WALK_FRAME_H = 200;
-export const WALK_FRAME_COUNT = 23;
+export const WALK_FRAME_COUNT = 30;
 export const WALK_LOOP_FRAMES = 10;        // walk cycle: frames 0..9
 export const PUNCH_FRAME_START = 10;       // punch: frames 10..13
 export const PUNCH_FRAME_COUNT = 4;
@@ -23,6 +23,14 @@ export const DOWN_FRAME = 19;              // ragdoll / KO silhouette
 export const GETUP_FRAME_A = 20;
 export const GETUP_FRAME_B = 21;
 export const HURT_FRAME = 22;
+// Combo extension — high kick (23–24), knee (25–26), slash (27–29)
+export const KICK_CHAMBER_FRAME = 23;
+export const KICK_HIT_FRAME = 24;
+export const KNEE_CHAMBER_FRAME = 25;
+export const KNEE_HIT_FRAME = 26;
+export const SLASH_WINDUP_FRAME = 27;
+export const SLASH_HIT_FRAME = 28;
+export const SLASH_RECOVER_FRAME = 29;
 export const WALK_FOOT_Y = 189;
 
 let sheet: HTMLImageElement | null = null;
