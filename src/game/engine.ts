@@ -8,7 +8,12 @@ import { MOVES, type MoveSpec } from "./combat";
 import { Sfx } from "./sfx";
 import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, type WobbleState } from "./wobble";
 import { CpuController, type Difficulty } from "./ai";
-import { loadWalkSheet, isWalkSheetReady, drawWalkFrame, WALK_LOOP_FRAMES, PUNCH_FRAME_START, RECOVERY_FRAME } from "./walkSprite";
+import {
+  loadWalkSheet, isWalkSheetReady, drawWalkFrame,
+  WALK_LOOP_FRAMES, PUNCH_FRAME_START, RECOVERY_FRAME,
+  JUMP_TAKEOFF_FRAME, JUMP_RISE_FRAME, JUMP_APEX_FRAME, JUMP_LAND_FRAME,
+  DOWN_FRAME, GETUP_FRAME_A, GETUP_FRAME_B, HURT_FRAME,
+} from "./walkSprite";
 
 export type PlayerId = "p1" | "p2";
 
@@ -157,6 +162,7 @@ interface Fighter {
   bamfCombo: null | { step: number; t: number; nextAt: number; targetId: PlayerId };
   // Spider-Man Web Swing — pendulum physics
   swing: null | { ax: number; ay: number; len: number; angle: number; angV: number; t: number };
+  justLandedT: number;  // brief squash on touchdown
   // Universal basic punch — sprite-driven (frames 11–14 + recovery 15)
   punchT: number;       // 0 = idle, otherwise progress through PUNCH_DUR
   punchCd: number;
@@ -740,7 +746,7 @@ export class GameEngine {
       invisT: 0, webSnareT: 0, speedBoostT: 0,
       bamfCombo: null,
       swing: null,
-      punchT: 0, punchCd: 0, punchHit: false, recoverT: 0,
+      punchT: 0, punchCd: 0, punchHit: false, recoverT: 0, justLandedT: 0,
     };
   }
 
@@ -2814,7 +2820,10 @@ export class GameEngine {
       }
 
       // Landing impact: squash + dust scaled by impact velocity
+      // Decay landing-squash sprite timer every frame
+      f.justLandedT = Math.max(0, f.justLandedT - dt);
       if (landedOn && wasAirborne) {
+        f.justLandedT = 0.10;
         const impact = Math.max(0, Math.min(1, landingVy / 800));
         f.wobble.squashV -= 4 + impact * 7;     // squash on land
         f.wobble.bvy += 80 * impact;             // body dips
@@ -4823,19 +4832,16 @@ export class GameEngine {
     // / kicks) — the procedural attack pose draws on top so arms still swing
     // but the legs stay visible from the sprite. Disabled only for ragdoll,
     // KO, get-up, and flight where the procedural rig owns the full body.
+    // Sprite renderer covers walk, punch, jump, ragdoll, down/get-up, and hurt.
+    // Procedural rig still owns: flight and special melee arms.
+    const spriteReady = !ghost && isWalkSheetReady();
     const useSpriteWalk =
-      !ghost &&
-      f.onGround &&
-      f.ragdollT <= 0 &&
-      f.downedT <= 0 &&
-      f.getUpT <= 0 &&
-      !f.flying &&
-      isWalkSheetReady();
+      spriteReady &&
+      !f.flying;
 
     if (useSpriteWalk) {
-      // Soft accent pool — grounds the character; no hard contact shadow
-      // (was reading as a floating disc beneath the feet).
-      if (!this.lowPower) {
+      // Soft accent pool — only when grounded
+      if (f.onGround && !this.lowPower) {
         ctx.save();
         const grad = ctx.createRadialGradient(x, y + FIGHTER_H - 1, 1, x, y + FIGHTER_H - 1, 28);
         grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 28%, transparent)`);
@@ -4848,8 +4854,41 @@ export class GameEngine {
       }
 
       const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
-      const tint = f.hitFlash > 0 ? "oklch(0.95 0.20 30)" : skin.body;
-      void tint;
+      const drawFrame = (idx: number) =>
+        drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+
+      // ---- Ragdoll tumble (rotate down silhouette by physics angle) ----
+      if (f.ragdollT > 0) {
+        ctx.save();
+        ctx.translate(x + f.bodyLagX, y + FIGHTER_H * 0.5);
+        ctx.rotate(f.ragdollAng);
+        ctx.translate(0, FIGHTER_H * 0.5);
+        drawWalkFrame(ctx, skin, DOWN_FRAME, 0, 0, renderFacing, FIGHTER_H);
+        ctx.restore();
+        return;
+      }
+
+      // ---- Downed (KO laydown) ----
+      if (f.downedT > 0) { drawFrame(DOWN_FRAME); return; }
+
+      // ---- Get-up (two-frame transition) ----
+      if (f.getUpT > 0) {
+        const total = Math.max(0.001, f.getUpDur);
+        const u = 1 - (f.getUpT / total);
+        drawFrame(u < 0.5 ? GETUP_FRAME_A : GETUP_FRAME_B);
+        return;
+      }
+
+      // ---- Airborne (jump/fall) ----
+      if (!f.onGround) {
+        if (f.vy < -120) drawFrame(JUMP_RISE_FRAME);
+        else if (f.vy < 60) drawFrame(JUMP_APEX_FRAME);
+        else drawFrame(JUMP_APEX_FRAME);
+        return;
+      }
+
+      // ---- Just landed (squash) ----
+      if (f.justLandedT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
 
       // ---- Punch one-shot (frames 10..13) ----
       if (f.punchT > 0) {
@@ -4859,31 +4898,35 @@ export class GameEngine {
         else if (pt < PUNCH_F11 + PUNCH_F12) pIdx = 1;
         else if (pt < PUNCH_F11 + PUNCH_F12 + PUNCH_F13) pIdx = 2;
         else pIdx = 3;
-        drawWalkFrame(ctx, skin, PUNCH_FRAME_START + pIdx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
-        return;
-      }
-      // ---- Recovery (frame 14) ----
-      if (f.recoverT > 0) {
-        drawWalkFrame(ctx, skin, RECOVERY_FRAME, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+        drawFrame(PUNCH_FRAME_START + pIdx);
         return;
       }
 
-      // Drive walk loop frame index off walkPhase. Loop is frames 0..9 only.
+      // ---- Punch recovery ----
+      if (f.recoverT > 0) { drawFrame(RECOVERY_FRAME); return; }
+
+      // ---- Hurt flinch (briefly during heavy hit flash) ----
+      if (f.hitFlash > 0.25 && f.meleeKind == null && f.attackAnim <= 0) {
+        drawFrame(HURT_FRAME);
+        return;
+      }
+
+      // ---- Walk loop (frames 0..9) ----
       const moving = Math.abs(f.vx) > 18;
       const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
       const fIdx = moving ? cycleF * WALK_LOOP_FRAMES : 0;
       const f0 = Math.floor(fIdx) % WALK_LOOP_FRAMES;
       const f1 = (f0 + 1) % WALK_LOOP_FRAMES;
       const frac = fIdx - Math.floor(fIdx);
-      drawWalkFrame(ctx, skin, f0, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+      drawFrame(f0);
       if (moving && frac > 0.01) {
         ctx.save();
         ctx.globalAlpha = frac;
-        drawWalkFrame(ctx, skin, f1, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+        drawFrame(f1);
         ctx.restore();
       }
 
-      // If not attacking via a special, sprite is the whole body — done.
+      // If not in a special melee, sprite IS the whole body — done.
       if (f.attackAnim <= 0 && f.meleeKind == null) {
         return;
       }

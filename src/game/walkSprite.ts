@@ -9,11 +9,20 @@ import type { Skin } from "./skins";
 
 export const WALK_FRAME_W = 144;
 export const WALK_FRAME_H = 200;
-export const WALK_FRAME_COUNT = 15;
+export const WALK_FRAME_COUNT = 23;
 export const WALK_LOOP_FRAMES = 10;        // walk cycle: frames 0..9
 export const PUNCH_FRAME_START = 10;       // punch: frames 10..13
 export const PUNCH_FRAME_COUNT = 4;
-export const RECOVERY_FRAME = 14;          // one-shot transition
+export const RECOVERY_FRAME = 14;          // post-punch transition
+// Jump + state frames (extended pack)
+export const JUMP_TAKEOFF_FRAME = 15;
+export const JUMP_RISE_FRAME = 16;
+export const JUMP_APEX_FRAME = 17;
+export const JUMP_LAND_FRAME = 18;
+export const DOWN_FRAME = 19;              // ragdoll / KO silhouette
+export const GETUP_FRAME_A = 20;
+export const GETUP_FRAME_B = 21;
+export const HURT_FRAME = 22;
 export const WALK_FOOT_Y = 189;
 
 let sheet: HTMLImageElement | null = null;
