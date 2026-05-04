@@ -102,6 +102,8 @@ export class GameEngine {
   private raf = 0;
   private running = false;
   private elapsed = 0;
+  private lowPower = false;
+  private snapAccum = 0;
 
   private mapId: MapId = "neon-city";
   private p1Skin: SkinId = "spiderman";
@@ -210,6 +212,8 @@ export class GameEngine {
 
   isTeleTargeting() { return this.teleTargeting; }
 
+  setLowPower(v: boolean) { this.lowPower = v; }
+
   private update(dt: number) {
     this.elapsed += dt;
     const timeScale = this.slowmoT > 0 ? 0.15 : 1;
@@ -221,7 +225,9 @@ export class GameEngine {
       if (this.introT <= 0) this.phase = "fight";
     }
 
-    if (Math.random() < 0.4) {
+    const ambientRate = this.lowPower ? 0.1 : 0.4;
+    const maxParticles = this.lowPower ? 120 : 400;
+    if (Math.random() < ambientRate && this.particles.length < maxParticles) {
       this.particles.push({
         x: Math.random() * W, y: H,
         vx: (Math.random() - 0.5) * 10, vy: -20 - Math.random() * 30,
@@ -244,11 +250,13 @@ export class GameEngine {
 
     for (const pr of this.projectiles) {
       pr.x += pr.vx * sdt; pr.y += pr.vy * sdt; pr.life -= dt;
-      this.particles.push({
-        x: pr.x, y: pr.y,
-        vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 30,
-        life: 0.4, maxLife: 0.4, color: pr.glow, size: 3,
-      });
+      if (!this.lowPower || Math.random() < 0.5) {
+        this.particles.push({
+          x: pr.x, y: pr.y,
+          vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 30,
+          life: 0.4, maxLife: 0.4, color: pr.glow, size: 3,
+        });
+      }
     }
     for (const pr of this.projectiles) {
       const target = pr.owner === "p1" ? this.p2 : this.p1;
@@ -273,7 +281,13 @@ export class GameEngine {
     this.particles = this.particles.filter(p => p.life > 0);
 
     this.shake = Math.max(0, this.shake - dt * 40);
-    this.emit();
+
+    // Throttle React HUD updates to ~10 Hz
+    this.snapAccum += dt;
+    if (this.snapAccum >= 0.1 || this.phase !== "fight") {
+      this.snapAccum = 0;
+      this.emit();
+    }
 
     for (const id of ["p1", "p2"] as PlayerId[]) {
       this.intents[id].fire = false;

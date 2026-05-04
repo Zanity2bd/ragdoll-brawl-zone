@@ -36,10 +36,11 @@ export function GameCanvas() {
 
   useEffect(() => {
     const canvas = canvasRef.current!;
+    const dprCap = Math.min(devicePixelRatio || 1, 1.5);
     const resize = () => {
       const r = canvas.getBoundingClientRect();
-      canvas.width = Math.floor(r.width * devicePixelRatio);
-      canvas.height = Math.floor(r.height * devicePixelRatio);
+      canvas.width = Math.floor(r.width * dprCap);
+      canvas.height = Math.floor(r.height * dprCap);
     };
     resize();
     window.addEventListener("resize", resize);
@@ -47,7 +48,20 @@ export function GameCanvas() {
     const engine = new GameEngine(canvas);
     engineRef.current = engine;
     engine.onSnapshot = setSnap;
+
+    // Detect low-power profile (mobile / few cores / small screen)
+    const isTouchDev = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    const fewCores = (navigator.hardwareConcurrency || 8) <= 4;
+    const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 700;
+    engine.setLowPower(isTouchDev || fewCores || smallScreen);
+
     engine.start();
+
+    // Pause when tab/page hidden
+    const onVis = () => {
+      if (document.hidden) engine.stop(); else engine.start();
+    };
+    document.addEventListener("visibilitychange", onVis);
 
     const down = (e: KeyboardEvent) => {
       const m = KEY_MAP[e.code];
@@ -85,6 +99,7 @@ export function GameCanvas() {
       window.removeEventListener("resize", resize);
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      document.removeEventListener("visibilitychange", onVis);
       canvas.removeEventListener("click", click);
       canvas.removeEventListener("touchstart", touch);
     };
@@ -129,9 +144,8 @@ export function GameCanvas() {
 function HUD({ snap, onRematch, onChange }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void }) {
   return (
     <>
-      <div className="pointer-events-none absolute top-0 left-0 right-0 p-4 flex gap-4 items-start">
+      <div className="pointer-events-none absolute top-0 left-0 right-0 p-2 sm:p-4 flex gap-2 sm:gap-4 items-start">
         <HpBar p={snap.p1} side="left" />
-        <div className="flex-1" />
         <HpBar p={snap.p2} side="right" />
       </div>
 
@@ -251,7 +265,10 @@ function TouchControls({ engine }: { engine: GameEngine }) {
   const hold = (p: PlayerId, action: "left" | "right", on: boolean) =>
     engine.setIntent(p, { [action]: on });
   return (
-    <div className="absolute inset-x-0 bottom-0 p-4 flex justify-between pointer-events-none">
+    <div
+      className="absolute inset-x-0 bottom-0 px-3 flex justify-between pointer-events-none"
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+    >
       <Pad
         onLeft={(d) => hold("p1", "left", d)}
         onRight={(d) => hold("p1", "right", d)}
@@ -284,7 +301,7 @@ function Pad({
   color: string;
   mirror?: boolean;
 }) {
-  const btn = "w-14 h-14 rounded-full border-2 font-mono text-xs flex items-center justify-center backdrop-blur-sm bg-background/40 active:bg-foreground/20 pointer-events-auto select-none";
+  const btn = "w-[60px] h-[60px] rounded-full border-2 font-mono text-[11px] flex items-center justify-center backdrop-blur-sm bg-background/40 active:bg-foreground/30 pointer-events-auto select-none touch-manipulation";
   const style = { borderColor: color, color };
   return (
     <div className={`flex gap-3 ${mirror ? "flex-row-reverse" : ""}`}>
