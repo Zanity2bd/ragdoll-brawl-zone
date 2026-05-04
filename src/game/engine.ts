@@ -509,6 +509,7 @@ export class GameEngine {
       this.intents[id].teleport = false;
       this.intents[id].jump = false;
       this.intents[id].melee = false;
+      this.intents[id].toggleFlight = false;
     }
   }
 
