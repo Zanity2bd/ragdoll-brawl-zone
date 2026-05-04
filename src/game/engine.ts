@@ -1405,18 +1405,54 @@ export class GameEngine {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
 
-    // Platforms — beveled neon slab with rim light
+    // Platforms — different look per kind
     for (const pl of this.platforms) {
-      if (!this.lowPower) { ctx.shadowBlur = 18; ctx.shadowColor = "oklch(0.75 0.22 215)"; }
-      const g = ctx.createLinearGradient(pl.x, pl.y, pl.x, pl.y + pl.h);
-      g.addColorStop(0, "oklch(0.55 0.18 230)");
-      g.addColorStop(1, "oklch(0.30 0.14 235)");
-      ctx.fillStyle = g;
-      ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
-      ctx.shadowBlur = 0;
-      // Top rim
-      ctx.fillStyle = "oklch(0.92 0.10 215 / 0.9)";
-      ctx.fillRect(pl.x, pl.y, pl.w, 1.2);
+      if (pl.kind === "cover") {
+        // Solid cover block — beveled stone with metallic rim
+        const g = ctx.createLinearGradient(pl.x, pl.y, pl.x, pl.y + pl.h);
+        g.addColorStop(0, "oklch(0.40 0.04 250)");
+        g.addColorStop(1, "oklch(0.18 0.03 250)");
+        ctx.fillStyle = g;
+        ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
+        // Rim highlights
+        ctx.fillStyle = "oklch(0.70 0.05 235 / 0.85)";
+        ctx.fillRect(pl.x, pl.y, pl.w, 2);
+        ctx.fillStyle = "oklch(0.10 0.02 250 / 0.6)";
+        ctx.fillRect(pl.x, pl.y + pl.h - 2, pl.w, 2);
+        // Side bevels
+        ctx.fillStyle = "oklch(0.50 0.05 240 / 0.5)";
+        ctx.fillRect(pl.x, pl.y + 2, 2, pl.h - 4);
+        ctx.fillStyle = "oklch(0.12 0.02 250 / 0.6)";
+        ctx.fillRect(pl.x + pl.w - 2, pl.y + 2, 2, pl.h - 4);
+      } else {
+        if (!this.lowPower) { ctx.shadowBlur = 18; ctx.shadowColor = "oklch(0.75 0.22 215)"; }
+        const g = ctx.createLinearGradient(pl.x, pl.y, pl.x, pl.y + pl.h);
+        g.addColorStop(0, "oklch(0.55 0.18 230)");
+        g.addColorStop(1, "oklch(0.30 0.14 235)");
+        ctx.fillStyle = g;
+        ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
+        ctx.shadowBlur = 0;
+        // Top rim
+        ctx.fillStyle = "oklch(0.92 0.10 215 / 0.9)";
+        ctx.fillRect(pl.x, pl.y, pl.w, 1.2);
+      }
+    }
+
+    // Ledge-grab flash on fighters
+    if (!this.lowPower) {
+      ctx.globalCompositeOperation = "lighter";
+      for (const f of [this.p1, this.p2]) {
+        if (f.ledgeFlash > 0) {
+          const a = Math.min(1, f.ledgeFlash / 0.3);
+          ctx.globalAlpha = a * 0.5;
+          ctx.fillStyle = f.skin.glow;
+          ctx.beginPath();
+          ctx.arc(f.x, f.y + FIGHTER_H, 22 + (1 - a) * 18, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
     }
 
     // Shockwaves
