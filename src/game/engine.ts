@@ -3544,6 +3544,64 @@ export class GameEngine {
     // Switch to screen space for full-screen overlays
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
+    // Speed lines: dense radial streaks during a super-punch dash to convey
+    // the camera tearing through the air with the fighter. Centered on the
+    // attacker's screen-space position, fading at the edges.
+    const dasher = this.p1.dash ? this.p1 : (this.p2.dash ? this.p2 : null);
+    if (dasher && dasher.dash) {
+      const u = Math.min(1, dasher.dash.t / Math.max(0.001, dasher.dash.dur));
+      // Ramp in fast, peak through mid-dash, fade just before impact
+      const intensity = Math.sin(Math.min(1, u * 1.15) * Math.PI);
+      const cxS = (dasher.x - this.camX) * worldScale + cw / 2;
+      const cyS = (dasher.y + FIGHTER_H * 0.45 - this.camY) * worldScale + ch / 2;
+      const facing = dasher.facing;
+      const maxR = Math.hypot(cw, ch) * 0.65;
+      // Tinted black wash from the edges inward (vignette darken to focus eye)
+      const wash = ctx.createRadialGradient(cxS, cyS, maxR * 0.18, cxS, cyS, maxR);
+      wash.addColorStop(0, "rgba(0,0,0,0)");
+      wash.addColorStop(1, `rgba(0,0,0,${(0.45 * intensity).toFixed(3)})`);
+      ctx.fillStyle = wash;
+      ctx.fillRect(0, 0, cw, ch);
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const lineCount = this.lowPower ? 36 : 90;
+      const seed = Math.floor(this.elapsed * 60);
+      for (let i = 0; i < lineCount; i++) {
+        // Pseudo-random but stable per-frame angle around the attacker
+        const r = ((i * 9301 + 49297 + seed * 73) % 233280) / 233280;
+        // Bias angles toward the direction of travel: clamp around facing
+        const spread = 1.05;
+        const ang = (r - 0.5) * Math.PI * spread + (facing > 0 ? 0 : Math.PI);
+        // Distance from center: start near the fighter, extend past the edge
+        const r0 = 90 + ((i * 7919) % 220);
+        const len = 80 + ((i * 6151) % 260) + intensity * 180;
+        const sx = cxS + Math.cos(ang) * r0;
+        const sy = cyS + Math.sin(ang) * r0;
+        const ex = sx + Math.cos(ang) * len;
+        const ey = sy + Math.sin(ang) * len;
+        const a = (0.18 + 0.55 * intensity) * (0.4 + 0.6 * (1 - r0 / 320));
+        ctx.strokeStyle = i % 7 === 0
+          ? `rgba(255,235,170,${a.toFixed(3)})`
+          : `rgba(235,240,255,${(a * 0.7).toFixed(3)})`;
+        ctx.lineWidth = i % 11 === 0 ? 2.2 : 1.1;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Chromatic-aberration tinted ring around the focal point for "punch-in" feel
+      if (!this.lowPower) {
+        const ring = ctx.createRadialGradient(cxS, cyS, 30, cxS, cyS, 200);
+        ring.addColorStop(0, `rgba(255,210,140,${(0.18 * intensity).toFixed(3)})`);
+        ring.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = ring;
+        ctx.fillRect(0, 0, cw, ch);
+      }
+    }
+
     // Impact flash vignette
     if (this.impactFlash > 0) {
       ctx.fillStyle = `oklch(0.99 0.05 80 / ${this.impactFlash * 0.35})`;
