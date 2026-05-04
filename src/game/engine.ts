@@ -2953,6 +2953,16 @@ export class GameEngine {
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
+    // Charge-ring telegraph for the new sprite-driven specials.
+    if (m.kind === "heatPunch" || m.kind === "crowbar" || m.kind === "repulsor" || m.kind === "groundSmash") {
+      const cy = m.kind === "groundSmash" ? f.y + FIGHTER_H - 6 : f.y + 36;
+      const col: GlobalCompositeOperation = "lighter";
+      spawnFx(this.attackFx, "chargeRing", f.x + f.facing * 8, cy, {
+        size: m.kind === "groundSmash" ? 38 : 28,
+        life: Math.max(0.18, m.windup),
+        spin: 6, grow: 18, blend: col, facing: f.facing as 1 | -1,
+      });
+    }
     // (Homelander laser SFX is played on every beam start via the beam edge-trigger
     //  in update(), so it plays for any laser/heat-vision/unibeam in any match.)
     // Flash blink: instantly teleport behind opponent
