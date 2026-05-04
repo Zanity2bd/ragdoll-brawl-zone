@@ -34,20 +34,42 @@ export function GameCanvas() {
   const [p1Skin, setP1Skin] = useState<SkinId>("spiderman");
   const [p2Skin, setP2Skin] = useState<SkinId>("homelander");
   const [muted, setMuted] = useState(false);
+  const [needsLandscape, setNeedsLandscape] = useState(false);
 
   useEffect(() => {
-    setIsTouch(window.matchMedia("(hover: none) and (pointer: coarse)").matches);
+    const touch = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    setIsTouch(touch);
+    if (!touch) return;
+    const check = () => setNeedsLandscape(window.innerHeight > window.innerWidth);
+    check();
+    window.addEventListener("resize", check);
+    window.addEventListener("orientationchange", check);
+    return () => {
+      window.removeEventListener("resize", check);
+      window.removeEventListener("orientationchange", check);
+    };
   }, []);
 
   useEffect(() => { Sfx.setMuted(muted); }, [muted]);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
-    const dprCap = Math.min(devicePixelRatio || 1, 1.5);
+
+    // Detect device tier: low-power gets simpler effects + lower DPR;
+    // high-end gets crisper rendering up to DPR 2.
+    const isTouchDev = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    const cores = navigator.hardwareConcurrency || 8;
+    const mem = (navigator as any).deviceMemory || 8;
+    const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 700;
+    const lowPower = (isTouchDev && (cores <= 4 || mem <= 3)) || smallScreen;
+    const highEnd = !lowPower && cores >= 8 && mem >= 6;
+    const dprCap = lowPower ? 1 : highEnd ? 2 : 1.5;
+
     const resize = () => {
       const r = canvas.getBoundingClientRect();
-      canvas.width = Math.floor(r.width * dprCap);
-      canvas.height = Math.floor(r.height * dprCap);
+      const dpr = Math.min(devicePixelRatio || 1, dprCap);
+      canvas.width = Math.floor(r.width * dpr);
+      canvas.height = Math.floor(r.height * dpr);
     };
     resize();
     window.addEventListener("resize", resize);
@@ -55,12 +77,7 @@ export function GameCanvas() {
     const engine = new GameEngine(canvas);
     engineRef.current = engine;
     engine.onSnapshot = setSnap;
-
-    // Detect low-power profile (mobile / few cores / small screen)
-    const isTouchDev = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
-    const fewCores = (navigator.hardwareConcurrency || 8) <= 4;
-    const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 700;
-    engine.setLowPower(isTouchDev || fewCores || smallScreen);
+    engine.setLowPower(lowPower);
 
     engine.start();
 
@@ -149,6 +166,18 @@ export function GameCanvas() {
           onConfirm={(p1, p2) => { setP1Skin(p1); setP2Skin(p2); startFight(mapId, p1, p2); }}
         />
       )}
+
+      {needsLandscape && <RotatePrompt />}
+    </div>
+  );
+}
+
+function RotatePrompt() {
+  return (
+    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background text-foreground p-6 text-center gap-4">
+      <div className="text-5xl animate-pulse" style={{ transform: "rotate(90deg)" }}>📱</div>
+      <div className="font-mono text-sm uppercase tracking-widest text-foreground/80">Rotate your device</div>
+      <div className="font-mono text-xs text-foreground/50 max-w-xs">OgunArena is best played in landscape. Turn your phone sideways to enter the arena.</div>
     </div>
   );
 }
