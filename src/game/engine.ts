@@ -56,6 +56,7 @@ export interface GameSnapshot {
   phase: "intro" | "fight" | "ko";
   slowmo: boolean;
   teleTargeting: boolean;
+  koCinematicT: number; // seconds elapsed since KO trigger; UI waits to overlay
 }
 
 interface Fighter {
