@@ -106,6 +106,15 @@ interface Fighter {
     target: PlayerId;
     landed: boolean;
   };
+  // Hulk Rage Frenzy state (special cinematic clip)
+  frenzy: null | {
+    t: number;        // elapsed seconds
+    dur: number;      // total duration
+    target: PlayerId;
+    nextTick: number; // accumulator for damage ticks
+    transitionT: number; // 0..0.25 transform-in
+  };
+  frenzyCd: number;
 }
 
 interface Projectile {
