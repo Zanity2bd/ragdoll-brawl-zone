@@ -1210,6 +1210,7 @@ export class GameEngine {
       // Cover blocks projectiles (web/batarang excluded — web is a tether, batarang homes)
       if (pr.kind === "bolt") {
         for (const pl of this.platforms) {
+          if (pl.destroyed) continue;
           if (pl.kind !== "cover") continue;
           if (pr.x > pl.x && pr.x < pl.x + pl.w && pr.y > pl.y && pr.y < pl.y + pl.h) {
             this.burst(pr.x, pr.y, pr.glow, 14);
