@@ -226,7 +226,7 @@ export function GameCanvas() {
       {screen === "skin" && (
         <SkinSelect
           onBack={() => setScreen("map")}
-          onConfirm={(p1, p2) => { setP1Skin(p1); setP2Skin(p2); startFight(mapId, p1, p2); }}
+          onConfirm={(p1, p2, opts) => { setP1Skin(p1); setP2Skin(p2); startFight(mapId, p1, p2, opts); }}
         />
       )}
 
