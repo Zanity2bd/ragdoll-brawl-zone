@@ -3724,6 +3724,35 @@ export class GameEngine {
           break;
         }
       }
+
+      // ---- Damage visualization: cracks + white flash overlay ----
+      const dmgRatio = 1 - p.hp / p.maxHp;
+      if (dmgRatio > 0.05) {
+        // Crack lines, more as HP drops. Deterministic from seed.
+        const s = (p.seed ?? 1) * 9301;
+        const tier = dmgRatio > 0.75 ? 3 : dmgRatio > 0.45 ? 2 : 1;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(p.x, p.y, p.w, p.h);
+        ctx.clip();
+        ctx.strokeStyle = `oklch(0.08 0.02 ${hue} / ${0.45 + dmgRatio * 0.4})`;
+        ctx.lineWidth = 1 + dmgRatio * 1.5;
+        for (let i = 0; i < tier * 2; i++) {
+          const r1 = ((s + i * 113) % 1000) / 1000;
+          const r2 = ((s + i * 271) % 1000) / 1000;
+          const r3 = ((s + i * 419) % 1000) / 1000;
+          const r4 = ((s + i * 587) % 1000) / 1000;
+          ctx.beginPath();
+          ctx.moveTo(p.x + r1 * p.w, p.y + r2 * p.h);
+          ctx.lineTo(p.x + r3 * p.w, p.y + r4 * p.h);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      if (p.damageFlash > 0.01) {
+        ctx.fillStyle = `oklch(0.98 0.05 60 / ${p.damageFlash * 0.55})`;
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+      }
     }
   }
 
