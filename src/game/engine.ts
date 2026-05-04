@@ -1563,6 +1563,14 @@ export class GameEngine {
 
     const intent = this.intents[f.id];
 
+    // Lock movement during stun / unibeam charge+fire / sustained beams.
+    const powerLocked = f.stunT > 0 || f.unibeamChargeT > 0 || f.unibeamFireT > 0 || f.heatVisionT > 0;
+    if (powerLocked) {
+      intent.left = false; intent.right = false;
+      intent.melee = false; intent.fire = false;
+      intent.ax = 0; intent.ay = 0;
+    }
+
     // Active melee progresses regardless of input
     if (f.meleeKind) {
       f.meleeT += dt;
