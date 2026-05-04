@@ -228,6 +228,9 @@ export function GameCanvas() {
 
   const engine = engineRef.current;
 
+  // Xbox / PS controller support — drives P1 while in a fight.
+  useGamepad(engine, "p1", { enabled: screen === "fight", onMenu: () => setSettingsOpen(o => !o) });
+
   const startFight = (m: MapId, p1: SkinId, p2: SkinId, opts: { cpu: boolean; difficulty: Difficulty }) => {
     setCpuEnabled(opts.cpu);
     setDifficulty(opts.difficulty);
