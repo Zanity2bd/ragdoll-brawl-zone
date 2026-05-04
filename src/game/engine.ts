@@ -204,17 +204,26 @@ interface Debris {
   life: number; maxLife: number; color: string;
 }
 
-// Foreground decorative props that can be shattered by laser overload.
-// Walk-through (no collision) — purely visual/destructible flavor for each map.
+// Foreground props are SOLID destructible cover. They block movement & attacks
+// for grounded fighters; flying fighters pass over freely. Buildings expose a
+// walkable door so ground fighters can move through them. High-power piercing
+// abilities (laser overload) chain-damage them in sequence.
 type PropKind = "car" | "building" | "barrel" | "crate" | "lamppost" | "trashcan" | "vending" | "pillar";
 interface Prop {
   x: number; y: number; w: number; h: number;
   kind: PropKind;
   destroyed?: boolean;
+  hp: number;            // current health
+  maxHp: number;         // for damage visualization (cracks/flash)
+  damageFlash: number;   // 0..1 white flash when hit, decays each tick
   hue?: number;          // primary hue for body color
   accent?: number;       // accent hue (glow / trim / door)
-  hasDoor?: boolean;     // glowing walkable door highlight
-  seed?: number;         // for deterministic detail (windows, panels)
+  hasDoor?: boolean;     // building only: walkable door at base
+  doorX?: number;        // computed door rect (world coords)
+  doorW?: number;
+  doorY?: number;
+  doorH?: number;
+  seed?: number;
 }
 
 export interface Intents {
@@ -1305,6 +1314,20 @@ export class GameEngine {
             break;
           }
         }
+        // Bolts also damage props (with door pass-through for buildings)
+        if (pr.life > 0) {
+          for (const p of this.props) {
+            if (p.destroyed) continue;
+            if (pr.x > p.x && pr.x < p.x + p.w && pr.y > p.y && pr.y < p.y + p.h) {
+              if (this.pointInDoor(p, pr.x, pr.y)) continue;
+              this.damageProp(p, pr.damage ?? FIRE_DAMAGE, pr.x, pr.y);
+              this.burst(pr.x, pr.y, pr.glow, 14);
+              this.shake = Math.max(this.shake, 6);
+              pr.life = 0;
+              break;
+            }
+          }
+        }
       }
       if (pr.kind === "bolt" && (!this.lowPower || Math.random() < 0.5)) {
         this.particles.push({
@@ -1651,6 +1674,11 @@ export class GameEngine {
         }
       }
       this.debris = this.debris.filter(d => d.life > 0);
+    }
+
+    // Decay prop damage-flash each tick
+    for (const p of this.props) {
+      if (p.damageFlash > 0) p.damageFlash = Math.max(0, p.damageFlash - dt * 3);
     }
 
 
@@ -2447,6 +2475,24 @@ export class GameEngine {
         }
       }
 
+      // Solid props: block grounded fighters laterally. Flyers pass over freely.
+      // Buildings expose a walkable door so ground fighters can move through.
+      if (!f.flying) {
+        for (const p of this.props) {
+          if (p.destroyed) continue;
+          const hw = FIGHTER_W / 2;
+          const overlapX = f.x + hw > p.x && f.x - hw < p.x + p.w;
+          const overlapY = f.y + FIGHTER_H > p.y + 2 && f.y < p.y + p.h;
+          if (!overlapX || !overlapY) continue;
+          if (this.fighterInDoor(p, f.x, f.y)) continue; // walk through door
+          const fromLeft = (f.x + hw) - p.x;
+          const fromRight = (p.x + p.w) - (f.x - hw);
+          if (fromLeft < fromRight) { f.x = p.x - hw; if (f.vx > 0) f.vx = 0; }
+          else { f.x = p.x + p.w + hw; if (f.vx < 0) f.vx = 0; }
+        }
+      }
+
+
       let landedOn: Platform | null = null;
       const wasAirborne = !f.onGround;
       const landingVy = f.vy;
@@ -2477,6 +2523,23 @@ export class GameEngine {
             f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
             f.ledgeFlash = 0.3;
             landedOn = pl;
+          }
+        }
+      }
+
+      // Top-land on solid props (cars, crates, vending, etc.) — buildings too,
+      // unless the fighter is dropping into the doorway.
+      if (!f.flying) {
+        for (const p of this.props) {
+          if (p.destroyed) continue;
+          const feet = f.y + FIGHTER_H;
+          const prevFeet = prevY + FIGHTER_H;
+          const hw = FIGHTER_W / 2;
+          const overX = f.x + hw > p.x && f.x - hw < p.x + p.w;
+          if (!overX) continue;
+          if (f.vy >= 0 && prevFeet <= p.y + 2 && feet >= p.y && f.dropT <= 0) {
+            f.y = p.y - FIGHTER_H; f.vy = 0; f.onGround = true;
+            landedOn = { x: p.x, y: p.y, w: p.w, h: p.h, kind: "cover" };
           }
         }
       }
@@ -2588,6 +2651,13 @@ export class GameEngine {
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
             if (dx > -10 && dx < m.range && Math.abs(target.y - f.y) < FIGHTER_H) {
+              // Cover absorbs the strike
+              if (this.meleeBlockedByProp(f, m.range, m.damage)) {
+                f.meleeHitMask.add(1);
+                this.shake = Math.max(this.shake, 5);
+                Sfx.play("thud", 0.5);
+                break;
+              }
               this.applyMeleeHit(f, target, m, target.x, target.y + 40);
               f.meleeHitMask.add(1);
               if (m.kind === "repulsor") {
@@ -2656,6 +2726,11 @@ export class GameEngine {
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
             if (!f.meleeHitMask.has(tick) && dx > -10 && dx < m.range && Math.abs(target.y - f.y) < FIGHTER_H) {
+              // Cover blocks the flurry tick (and takes damage)
+              if (this.meleeBlockedByProp(f, m.range, m.damage)) {
+                f.meleeHitMask.add(tick);
+                break;
+              }
               if (target.iframeT > 0 || target.downedT > 0 || target.getUpT > 0) { f.meleeHitMask.add(tick); break; }
               f.meleeHitMask.add(tick);
               target.hp = Math.max(0, target.hp - m.damage);
@@ -2698,10 +2773,26 @@ export class GameEngine {
             const dx = tx - sx; const dy = ty - sy;
             const desired = Math.atan2(dy, dx);
             const angle = desired;
-            // Normal beam: blocked by cover. Overload: pierces everything.
+            // Normal beam: blocked by cover AND props (whichever is closer).
+            // Overload: pierces everything (chain-shatter handled below).
             const beamMaxLen = m.range;
-            const blockHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
-            const beamLen = blockHit ? blockHit.dist : beamMaxLen;
+            const platHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
+            let beamLen = platHit ? platHit.dist : beamMaxLen;
+            let blockedProp: Prop | null = null;
+            if (!overload) {
+              const exFull = sx + Math.cos(desired) * beamLen;
+              const eyFull = sy + Math.sin(desired) * beamLen;
+              const ph = this.firstPropHit(sx, sy, exFull, eyFull);
+              if (ph) {
+                beamLen = beamLen * ph.t;
+                blockedProp = ph.prop;
+              }
+            }
+            const blockHit: { dist: number } | null = platHit || (blockedProp ? { dist: beamLen } : null);
+            if (blockedProp) {
+              // Sustained damage on the prop while the beam holds against it
+              this.damageProp(blockedProp, m.damage * 1.5 * dt, sx, sy);
+            }
             // Tag the beam so the renderer can switch to the red overload look.
             this.beams.push({
               owner: f.id, x: sx, y: sy, angle: desired, length: beamLen, life: 0.05,
@@ -3169,7 +3260,21 @@ export class GameEngine {
   private buildPropsForMap(mapId: MapId): Prop[] {
     const out: Prop[] = [];
     const gy = GROUND_Y;
-    const add = (p: Prop) => out.push(p);
+    const hpFor: Record<PropKind, number> = {
+      barrel: 35, trashcan: 25, crate: 45, lamppost: 30,
+      vending: 65, car: 110, pillar: 160, building: 260,
+    };
+    const add = (p: Omit<Prop, "hp" | "maxHp" | "damageFlash"> & { hp?: number; maxHp?: number }) => {
+      const max = p.maxHp ?? p.hp ?? hpFor[p.kind];
+      const full: Prop = { ...p, hp: p.hp ?? max, maxHp: max, damageFlash: 0 };
+      if (full.kind === "building" && full.hasDoor) {
+        full.doorW = 36;
+        full.doorH = 56;
+        full.doorX = full.x + full.w / 2 - 18;
+        full.doorY = full.y + full.h - 56;
+      }
+      out.push(full);
+    };
     switch (mapId) {
       case "neon-city": {
         // Cyber sedan + neon storefront w/ glowing door + lamppost
@@ -3309,6 +3414,111 @@ export class GameEngine {
       }
     }
   }
+
+  /** Apply damage to a prop. Triggers shatter when depleted. */
+  private damageProp(p: Prop, amount: number, sx: number, sy: number) {
+    if (p.destroyed || amount <= 0) return;
+    p.hp = Math.max(0, p.hp - amount);
+    p.damageFlash = Math.min(1, p.damageFlash + 0.6);
+    // Small chip burst — premium feedback without spam
+    if (!this.lowPower) {
+      const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+      const hue = p.hue ?? 250;
+      const n = Math.min(8, 2 + Math.round(amount / 6));
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = 80 + Math.random() * 160;
+        this.particles.push({
+          x: cx + (Math.random() - 0.5) * p.w * 0.6,
+          y: cy + (Math.random() - 0.5) * p.h * 0.6,
+          vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40,
+          life: 0.32, maxLife: 0.32,
+          color: `oklch(0.65 0.10 ${hue})`,
+          size: 1.4 + Math.random() * 1.6,
+        });
+      }
+    }
+    if (p.hp <= 0) this.shatterProp(p, sx, sy);
+  }
+
+  /** True if (x,y) is inside the walkable door rect of a building. */
+  private pointInDoor(p: Prop, x: number, y: number): boolean {
+    if (p.kind !== "building" || !p.hasDoor || p.doorX == null) return false;
+    return x > p.doorX && x < p.doorX + (p.doorW ?? 0)
+      && y > (p.doorY ?? 0) && y < (p.doorY ?? 0) + (p.doorH ?? 0);
+  }
+
+  /** True if the fighter's hitbox overlaps the door (used to allow walk-through). */
+  private fighterInDoor(p: Prop, fx: number, fy: number): boolean {
+    if (p.kind !== "building" || !p.hasDoor || p.doorX == null) return false;
+    const hw = FIGHTER_W / 2;
+    const dy = p.doorY ?? 0;
+    const dh = p.doorH ?? 0;
+    const dx = p.doorX;
+    const dw = p.doorW ?? 0;
+    // Fighter's feet must be inside the door arch range
+    const feet = fy + FIGHTER_H;
+    const overlapX = fx + hw > dx - 4 && fx - hw < dx + dw + 4;
+    const overlapY = feet > dy && fy < dy + dh;
+    return overlapX && overlapY;
+  }
+
+  /** Find first non-destroyed prop the segment hits. Returns prop + dist. */
+  private firstPropHit(sx: number, sy: number, ex: number, ey: number): { prop: Prop; t: number } | null {
+    let best: { prop: Prop; t: number } | null = null;
+    for (const p of this.props) {
+      if (p.destroyed) continue;
+      const t = this.segmentRectEntryT(sx, sy, ex, ey, p.x, p.y, p.w, p.h);
+      if (t == null) continue;
+      if (best == null || t < best.t) best = { prop: p, t };
+    }
+    return best;
+  }
+
+  /** Returns parametric t in [0,1] of segment entry into rect, or null. */
+  private segmentRectEntryT(sx: number, sy: number, ex: number, ey: number,
+                            rx: number, ry: number, rw: number, rh: number): number | null {
+    const dx = ex - sx, dy = ey - sy;
+    let tmin = 0, tmax = 1;
+    if (Math.abs(dx) < 1e-6) {
+      if (sx < rx || sx > rx + rw) return null;
+    } else {
+      let t1 = (rx - sx) / dx, t2 = (rx + rw - sx) / dx;
+      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+      tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+      if (tmin > tmax) return null;
+    }
+    if (Math.abs(dy) < 1e-6) {
+      if (sy < ry || sy > ry + rh) return null;
+    } else {
+      let t1 = (ry - sy) / dy, t2 = (ry + rh - sy) / dy;
+      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+      tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+      if (tmin > tmax) return null;
+    }
+    return Math.max(0, tmin);
+  }
+
+  /**
+   * Returns the FIRST solid prop blocking a melee swing from attacker `f` to a
+   * point at offset `range` in front of them. Buildings count as cover unless
+   * the attacker is standing in the door. Flying attackers ignore cover.
+   * If a prop is in the way, it is damaged for `damage` and we return true so
+   * the caller can SKIP applying damage to the opponent (cover absorbs the hit).
+   */
+  private meleeBlockedByProp(f: Fighter, range: number, damage: number): boolean {
+    if (f.flying) return false;
+    const sx = f.x, sy = f.y + FIGHTER_H * 0.45;
+    const ex = f.x + f.facing * range, ey = sy;
+    const hit = this.firstPropHit(sx, sy, ex, ey);
+    if (!hit) return false;
+    const p = hit.prop;
+    // Allow ground fighters to attack THROUGH the doorway
+    if (this.fighterInDoor(p, f.x, f.y)) return false;
+    this.damageProp(p, damage, sx, sy);
+    return true;
+  }
+
 
   /** Render all map props with kind-specific premium look. Walk-through; pulses if has door. */
   private drawProps(ctx: CanvasRenderingContext2D) {
@@ -3518,6 +3728,35 @@ export class GameEngine {
           ctx.stroke();
           break;
         }
+      }
+
+      // ---- Damage visualization: cracks + white flash overlay ----
+      const dmgRatio = 1 - p.hp / p.maxHp;
+      if (dmgRatio > 0.05) {
+        // Crack lines, more as HP drops. Deterministic from seed.
+        const s = (p.seed ?? 1) * 9301;
+        const tier = dmgRatio > 0.75 ? 3 : dmgRatio > 0.45 ? 2 : 1;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(p.x, p.y, p.w, p.h);
+        ctx.clip();
+        ctx.strokeStyle = `oklch(0.08 0.02 ${hue} / ${0.45 + dmgRatio * 0.4})`;
+        ctx.lineWidth = 1 + dmgRatio * 1.5;
+        for (let i = 0; i < tier * 2; i++) {
+          const r1 = ((s + i * 113) % 1000) / 1000;
+          const r2 = ((s + i * 271) % 1000) / 1000;
+          const r3 = ((s + i * 419) % 1000) / 1000;
+          const r4 = ((s + i * 587) % 1000) / 1000;
+          ctx.beginPath();
+          ctx.moveTo(p.x + r1 * p.w, p.y + r2 * p.h);
+          ctx.lineTo(p.x + r3 * p.w, p.y + r4 * p.h);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      if (p.damageFlash > 0.01) {
+        ctx.fillStyle = `oklch(0.98 0.05 60 / ${p.damageFlash * 0.55})`;
+        ctx.fillRect(p.x, p.y, p.w, p.h);
       }
     }
   }
