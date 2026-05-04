@@ -352,6 +352,10 @@ export class GameEngine {
     // Ambient floor bubbles removed — kept the screen too busy.
     const maxParticles = this.lowPower ? 120 : 400;
 
+    if (this.cpu && this.phase === "fight") {
+      this.cpu.update(dt, this.buildSnapshot());
+    }
+
     if (this.phase === "fight") {
       this.updateFighter(this.p1, sdt);
       this.updateFighter(this.p2, sdt);
