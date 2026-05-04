@@ -265,7 +265,10 @@ function TouchControls({ engine }: { engine: GameEngine }) {
   const hold = (p: PlayerId, action: "left" | "right", on: boolean) =>
     engine.setIntent(p, { [action]: on });
   return (
-    <div className="absolute inset-x-0 bottom-0 p-4 flex justify-between pointer-events-none">
+    <div
+      className="absolute inset-x-0 bottom-0 px-3 flex justify-between pointer-events-none"
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+    >
       <Pad
         onLeft={(d) => hold("p1", "left", d)}
         onRight={(d) => hold("p1", "right", d)}
@@ -298,7 +301,7 @@ function Pad({
   color: string;
   mirror?: boolean;
 }) {
-  const btn = "w-14 h-14 rounded-full border-2 font-mono text-xs flex items-center justify-center backdrop-blur-sm bg-background/40 active:bg-foreground/20 pointer-events-auto select-none";
+  const btn = "w-[60px] h-[60px] rounded-full border-2 font-mono text-[11px] flex items-center justify-center backdrop-blur-sm bg-background/40 active:bg-foreground/30 pointer-events-auto select-none touch-manipulation";
   const style = { borderColor: color, color };
   return (
     <div className={`flex gap-3 ${mirror ? "flex-row-reverse" : ""}`}>
