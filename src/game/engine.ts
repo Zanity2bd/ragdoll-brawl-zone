@@ -3310,7 +3310,218 @@ export class GameEngine {
     }
   }
 
-  private buildSnapshot(): GameSnapshot {
+  /** Render all map props with kind-specific premium look. Walk-through; pulses if has door. */
+  private drawProps(ctx: CanvasRenderingContext2D) {
+    if (!this.props.length) return;
+    const t = this.elapsed;
+    for (const p of this.props) {
+      if (p.destroyed) continue;
+      const hue = p.hue ?? 250;
+      const acc = p.accent ?? hue;
+      const seed = p.seed ?? 1;
+      switch (p.kind) {
+        case "car": {
+          // Body
+          const g = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+          g.addColorStop(0, `oklch(0.42 0.10 ${hue})`);
+          g.addColorStop(1, `oklch(0.18 0.06 ${hue})`);
+          ctx.fillStyle = g;
+          ctx.fillRect(p.x, p.y + p.h * 0.4, p.w, p.h * 0.6);
+          // Cabin (greenhouse)
+          ctx.fillStyle = `oklch(0.22 0.06 ${hue})`;
+          ctx.beginPath();
+          ctx.moveTo(p.x + p.w * 0.18, p.y + p.h * 0.4);
+          ctx.lineTo(p.x + p.w * 0.32, p.y);
+          ctx.lineTo(p.x + p.w * 0.72, p.y);
+          ctx.lineTo(p.x + p.w * 0.86, p.y + p.h * 0.4);
+          ctx.closePath(); ctx.fill();
+          // Windows (tinted glow)
+          ctx.fillStyle = `oklch(0.55 0.18 ${acc} / 0.55)`;
+          ctx.fillRect(p.x + p.w * 0.34, p.y + 4, p.w * 0.13, p.h * 0.34);
+          ctx.fillRect(p.x + p.w * 0.53, p.y + 4, p.w * 0.13, p.h * 0.34);
+          // Highlight strip
+          ctx.fillStyle = `oklch(0.85 0.10 ${acc} / 0.85)`;
+          ctx.fillRect(p.x + 4, p.y + p.h * 0.42, p.w - 8, 2);
+          // Headlight glow
+          ctx.shadowBlur = 16; ctx.shadowColor = `oklch(0.95 0.18 ${acc})`;
+          ctx.fillStyle = `oklch(0.95 0.18 ${acc})`;
+          ctx.fillRect(p.x + p.w - 6, p.y + p.h * 0.55, 4, 6);
+          ctx.shadowBlur = 0;
+          // Wheels
+          ctx.fillStyle = "oklch(0.08 0 0)";
+          ctx.beginPath(); ctx.arc(p.x + p.w * 0.22, p.y + p.h, p.h * 0.32, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(p.x + p.w * 0.78, p.y + p.h, p.h * 0.32, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = `oklch(0.45 0.04 ${hue})`;
+          ctx.beginPath(); ctx.arc(p.x + p.w * 0.22, p.y + p.h, p.h * 0.14, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(p.x + p.w * 0.78, p.y + p.h, p.h * 0.14, 0, Math.PI * 2); ctx.fill();
+          break;
+        }
+        case "building": {
+          // Facade
+          const g = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+          g.addColorStop(0, `oklch(0.22 0.05 ${hue})`);
+          g.addColorStop(1, `oklch(0.10 0.03 ${hue})`);
+          ctx.fillStyle = g;
+          ctx.fillRect(p.x, p.y, p.w, p.h);
+          // Roof trim
+          ctx.fillStyle = `oklch(0.32 0.08 ${hue})`;
+          ctx.fillRect(p.x - 4, p.y, p.w + 8, 8);
+          // Windows grid (random lit)
+          const cols = 4, rows = Math.max(3, Math.floor(p.h / 50));
+          const ww = (p.w - 24) / cols - 6;
+          const wh = 22;
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              const wx = p.x + 12 + c * (ww + 6);
+              const wy = p.y + 18 + r * (wh + 12);
+              if (wy + wh > p.y + p.h - 60) continue;
+              const lit = ((r * 7 + c * 3 + seed) % 5) < 3;
+              const flick = lit ? (0.7 + 0.3 * Math.sin(t * 2 + r + c)) : 0.15;
+              ctx.shadowBlur = lit ? 8 : 0; ctx.shadowColor = `oklch(0.85 0.12 ${acc})`;
+              ctx.fillStyle = `oklch(${lit ? 0.75 : 0.22} 0.12 ${acc} / ${flick})`;
+              ctx.fillRect(wx, wy, ww, wh);
+              ctx.shadowBlur = 0;
+            }
+          }
+          // Walkable glowing door
+          if (p.hasDoor) {
+            const dw = 36, dh = 56;
+            const dx = p.x + p.w / 2 - dw / 2;
+            const dy = p.y + p.h - dh;
+            // Door frame glow pulse
+            const pulse = 0.55 + 0.45 * Math.sin(t * 2.4);
+            ctx.shadowBlur = 14 * pulse; ctx.shadowColor = `oklch(0.85 0.22 ${acc})`;
+            ctx.fillStyle = `oklch(0.18 0.04 ${hue})`;
+            ctx.fillRect(dx - 3, dy - 3, dw + 6, dh + 3);
+            ctx.fillStyle = `oklch(${0.45 + 0.25 * pulse} 0.20 ${acc})`;
+            ctx.fillRect(dx, dy, dw, dh);
+            ctx.shadowBlur = 0;
+            // Door arch highlight + handle
+            ctx.fillStyle = `oklch(0.92 0.10 ${acc} / 0.9)`;
+            ctx.fillRect(dx, dy, dw, 2);
+            ctx.fillStyle = "oklch(0.85 0.05 80)";
+            ctx.beginPath(); ctx.arc(dx + dw - 6, dy + dh / 2, 2, 0, Math.PI * 2); ctx.fill();
+            // Welcoming light spill on ground
+            ctx.fillStyle = `oklch(0.85 0.18 ${acc} / ${0.10 * pulse})`;
+            ctx.beginPath();
+            ctx.moveTo(dx, dy + dh);
+            ctx.lineTo(dx - 18, dy + dh + 22);
+            ctx.lineTo(dx + dw + 18, dy + dh + 22);
+            ctx.lineTo(dx + dw, dy + dh);
+            ctx.closePath(); ctx.fill();
+          }
+          break;
+        }
+        case "lamppost": {
+          ctx.fillStyle = `oklch(0.18 0.01 ${hue})`;
+          ctx.fillRect(p.x, p.y, p.w, p.h);
+          // Crossarm
+          ctx.fillRect(p.x - 24, p.y, 60, 6);
+          // Bulb glow
+          const flick = 0.7 + 0.3 * Math.sin(t * 11) * Math.sin(t * 3);
+          ctx.shadowBlur = 22 * flick; ctx.shadowColor = `oklch(0.9 0.16 ${acc})`;
+          ctx.fillStyle = `oklch(0.9 0.16 ${acc} / ${0.6 + 0.4 * flick})`;
+          ctx.beginPath(); ctx.arc(p.x + 32, p.y + 4, 6, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0;
+          // Light cone on ground
+          ctx.fillStyle = `oklch(0.85 0.12 ${acc} / 0.08)`;
+          ctx.beginPath();
+          ctx.moveTo(p.x + 32, p.y + 8);
+          ctx.lineTo(p.x + 32 - 60, p.y + p.h);
+          ctx.lineTo(p.x + 32 + 60, p.y + p.h);
+          ctx.closePath(); ctx.fill();
+          break;
+        }
+        case "vending": {
+          const g = ctx.createLinearGradient(p.x, p.y, p.x + p.w, p.y);
+          g.addColorStop(0, `oklch(0.42 0.16 ${hue})`);
+          g.addColorStop(1, `oklch(0.28 0.12 ${hue})`);
+          ctx.fillStyle = g; ctx.fillRect(p.x, p.y, p.w, p.h);
+          // Display window
+          ctx.fillStyle = "oklch(0.10 0.02 240)";
+          ctx.fillRect(p.x + 4, p.y + 8, p.w - 8, p.h * 0.55);
+          // Bottles
+          for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 2; j++) {
+              ctx.fillStyle = `oklch(0.7 0.18 ${(i * 80 + j * 40) % 360})`;
+              ctx.fillRect(p.x + 8 + i * (p.w / 3), p.y + 12 + j * 22, p.w / 3 - 6, 16);
+            }
+          }
+          // Glow trim
+          const flick = 0.6 + 0.4 * Math.sin(t * 4 + seed);
+          ctx.shadowBlur = 10 * flick; ctx.shadowColor = `oklch(0.85 0.20 ${acc})`;
+          ctx.fillStyle = `oklch(0.85 0.20 ${acc} / ${0.6 + 0.4 * flick})`;
+          ctx.fillRect(p.x, p.y + p.h * 0.6, p.w, 3);
+          ctx.shadowBlur = 0;
+          break;
+        }
+        case "barrel": {
+          const g = ctx.createLinearGradient(p.x, p.y, p.x + p.w, p.y);
+          g.addColorStop(0, `oklch(0.30 0.08 ${hue})`);
+          g.addColorStop(0.5, `oklch(0.46 0.10 ${hue})`);
+          g.addColorStop(1, `oklch(0.22 0.06 ${hue})`);
+          ctx.fillStyle = g; ctx.fillRect(p.x, p.y, p.w, p.h);
+          // Bands
+          ctx.fillStyle = `oklch(0.18 0.04 ${hue})`;
+          ctx.fillRect(p.x, p.y + p.h * 0.2, p.w, 3);
+          ctx.fillRect(p.x, p.y + p.h * 0.7, p.w, 3);
+          // Hazard symbol
+          ctx.fillStyle = `oklch(0.85 0.20 ${acc})`;
+          ctx.fillRect(p.x + p.w / 2 - 6, p.y + p.h * 0.4, 12, 12);
+          break;
+        }
+        case "crate": {
+          const g = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+          g.addColorStop(0, `oklch(0.42 0.06 ${hue})`);
+          g.addColorStop(1, `oklch(0.22 0.04 ${hue})`);
+          ctx.fillStyle = g; ctx.fillRect(p.x, p.y, p.w, p.h);
+          // Cross planks
+          ctx.strokeStyle = `oklch(0.14 0.03 ${hue})`; ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + p.w, p.y + p.h);
+          ctx.moveTo(p.x + p.w, p.y); ctx.lineTo(p.x, p.y + p.h);
+          ctx.rect(p.x + 2, p.y + 2, p.w - 4, p.h - 4);
+          ctx.stroke();
+          break;
+        }
+        case "trashcan": {
+          ctx.fillStyle = `oklch(0.28 0.05 ${hue})`;
+          ctx.fillRect(p.x, p.y + 6, p.w, p.h - 6);
+          ctx.fillStyle = `oklch(0.40 0.06 ${hue})`;
+          ctx.fillRect(p.x - 2, p.y, p.w + 4, 8);
+          // Vertical ribs
+          ctx.strokeStyle = `oklch(0.18 0.03 ${hue})`; ctx.lineWidth = 1;
+          for (let i = 1; i < 4; i++) {
+            ctx.beginPath();
+            ctx.moveTo(p.x + (p.w * i / 4), p.y + 10);
+            ctx.lineTo(p.x + (p.w * i / 4), p.y + p.h - 4);
+            ctx.stroke();
+          }
+          break;
+        }
+        case "pillar": {
+          const g = ctx.createLinearGradient(p.x, p.y, p.x + p.w, p.y);
+          g.addColorStop(0, `oklch(0.18 0.02 ${hue})`);
+          g.addColorStop(0.5, `oklch(0.34 0.04 ${hue})`);
+          g.addColorStop(1, `oklch(0.18 0.02 ${hue})`);
+          ctx.fillStyle = g; ctx.fillRect(p.x, p.y, p.w, p.h);
+          // Caps
+          ctx.fillStyle = `oklch(0.40 0.05 ${hue})`;
+          ctx.fillRect(p.x - 6, p.y, p.w + 12, 12);
+          ctx.fillRect(p.x - 6, p.y + p.h - 12, p.w + 12, 12);
+          // Cracks
+          ctx.strokeStyle = `oklch(0.08 0.02 ${hue})`; ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(p.x + p.w * 0.3, p.y + 18);
+          ctx.lineTo(p.x + p.w * 0.5, p.y + p.h * 0.5);
+          ctx.lineTo(p.x + p.w * 0.4, p.y + p.h - 18);
+          ctx.stroke();
+          break;
+        }
+      }
+    }
+  }
+
     return {
       p1: this.snapPlayer(this.p1),
       p2: this.snapPlayer(this.p2),
