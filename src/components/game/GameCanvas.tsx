@@ -125,7 +125,7 @@ export function GameCanvas() {
       const m = KEY_MAP[e.code];
       if (!m) return;
       if (m.p === "p2" && cpuEnabledRef.current) return;
-      if (m.action === "left" || m.action === "right") {
+      if (m.action === "left" || m.action === "right" || m.action === "jump") {
         engine.setIntent(m.p, { [m.action]: false });
       }
     };
@@ -425,7 +425,11 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
             engine.setIntent("p1", { left: x < -0.25, right: x > 0.25 });
             engine.setAirSteering("p1", x, y);
           }}
-          onJump={() => engine.pressJump("p1")}
+          onJump={() => {
+            engine.setIntent("p1", { jump: true });
+            engine.pressJump("p1");
+            window.setTimeout(() => engine.setIntent("p1", { jump: false }), 180);
+          }}
           onFire={() => engine.pressFire("p1")}
           onPunch={() => engine.pressMelee("p1")}
           onTele={() => engine.pressTeleport("p1")}
@@ -440,7 +444,11 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
               engine.setIntent("p2", { left: x < -0.25, right: x > 0.25 });
               engine.setAirSteering("p2", x, y);
             }}
-            onJump={() => engine.pressJump("p2")}
+            onJump={() => {
+              engine.setIntent("p2", { jump: true });
+              engine.pressJump("p2");
+              window.setTimeout(() => engine.setIntent("p2", { jump: false }), 180);
+            }}
             onFire={() => engine.pressFire("p2")}
             onPunch={() => engine.pressMelee("p2")}
             onTele={() => engine.pressTeleport("p2")}

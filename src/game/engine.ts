@@ -84,6 +84,11 @@ interface Fighter {
   // ledge / drop-through state
   dropT: number;
   ledgeFlash: number;
+  // jump feel: coyote + buffer + variable height
+  coyoteT: number;
+  jumpBufferT: number;
+  jumpHeldT: number;       // remaining time variable-height boost is active
+  airJumps: number;        // remaining mid-air jumps
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
@@ -152,10 +157,17 @@ const W = 1280;
 const H = 720;
 const GROUND_Y = 600;
 const GRAVITY = 1500;
+const FALL_GRAVITY_MUL = 1.55;     // heavier on the way down → snappy arc
+const LOW_JUMP_GRAVITY_MUL = 1.9;  // stop boosting when jump released early
 const MOVE_SPEED = 210;
 const ACCEL = 1400;
 const FRICTION = 1600;
-const JUMP_V = 620;
+const AIR_CONTROL = 0.55;          // accel multiplier in air
+const JUMP_V = 640;
+const JUMP_HOLD_T = 0.18;          // window during which holding jump keeps gravity light
+const COYOTE_T = 0.10;             // post-leave grace
+const JUMP_BUFFER_T = 0.13;        // press buffer
+const MAX_AIR_JUMPS = 1;            // double-jump for non-flyers
 const FIGHTER_H = 90;
 const FIGHTER_W = 30;
 
@@ -165,9 +177,9 @@ const FIRE_DAMAGE = 12;
 const FIRE_KNOCKBACK = 320;
 
 // Flight tuning
-const FLY_ACCEL = 1300;          // px/s^2 toward target velocity
-const FLY_MAX = 360;             // top airspeed (px/s)
-const FLY_DAMP = 2.6;            // velocity damping per second when no input
+const FLY_ACCEL = 1700;          // px/s^2 toward target velocity (snappier response)
+const FLY_MAX = 420;             // top airspeed (px/s)
+const FLY_DAMP = 3.2;            // velocity damping per second when no input
 const HOVER_AMP = 4.5;           // pixels of idle hover bob
 const HOVER_RATE = 1.6;          // hover frequency (Hz-ish)
 
@@ -346,6 +358,7 @@ export class GameEngine {
       trail: [],
       canFly, flying: canFly, hoverPhase: 0, superCd: 0,
       dropT: 0, ledgeFlash: 0,
+      coyoteT: 0, jumpBufferT: 0, jumpHeldT: 0, airJumps: 0,
       wobble: createWobble(),
       dash: null,
     };
@@ -373,7 +386,11 @@ export class GameEngine {
   setIntent(p: PlayerId, intent: Partial<Intents>) { Object.assign(this.intents[p], intent); }
   pressFire(p: PlayerId) { this.intents[p].fire = true; }
   pressTeleport(p: PlayerId) { this.intents[p].teleport = true; }
-  pressJump(p: PlayerId) { this.intents[p].jump = true; }
+  pressJump(p: PlayerId) {
+    this.intents[p].jump = true;
+    const f = p === "p1" ? this.p1 : this.p2;
+    if (f) f.jumpBufferT = JUMP_BUFFER_T;
+  }
   pressMelee(p: PlayerId) { this.intents[p].melee = true; }
   setAirSteering(p: PlayerId, ax: number, ay: number) {
     this.intents[p].ax = Math.max(-1, Math.min(1, ax));
@@ -575,7 +592,8 @@ export class GameEngine {
     for (const id of ["p1", "p2"] as PlayerId[]) {
       this.intents[id].fire = false;
       this.intents[id].teleport = false;
-      this.intents[id].jump = false;
+      // NOTE: do NOT clear .jump — kept as a held flag for variable-height jumps.
+      // Edge-buffered presses live in fighter.jumpBufferT instead.
       this.intents[id].melee = false;
       this.intents[id].toggleFlight = false;
     }
@@ -899,27 +917,82 @@ export class GameEngine {
       const staggered = f.wobble.staggerT > 0;
       const moveMul = staggered ? 0.65 : 1;
       const accelMul = staggered ? 0.7 : 1;
+      // Air control: reduced accel & friction when airborne for natural arcs
+      const airMul = f.onGround ? 1 : AIR_CONTROL;
       if (move !== 0) {
         const target = move * MOVE_SPEED * moveMul;
-        const a = ACCEL * accelMul * ldt;
+        const a = ACCEL * accelMul * airMul * ldt;
         if (f.vx < target) f.vx = Math.min(target, f.vx + a);
         else if (f.vx > target) f.vx = Math.max(target, f.vx - a);
       } else {
-        const fr = FRICTION * ldt;
+        const fr = FRICTION * (f.onGround ? 1 : 0.25) * ldt;
         if (f.vx > 0) f.vx = Math.max(0, f.vx - fr);
         else if (f.vx < 0) f.vx = Math.min(0, f.vx + fr);
       }
 
-      // Jump (with drop-through if pressing down on a one-way platform)
+      // ---- Jump feel: coyote time + buffered press + variable height + 1 air-jump ----
+      if (f.onGround) { f.coyoteT = COYOTE_T; f.airJumps = MAX_AIR_JUMPS; }
+      else f.coyoteT = Math.max(0, f.coyoteT - ldt);
+      if (f.jumpBufferT > 0) f.jumpBufferT = Math.max(0, f.jumpBufferT - ldt);
+      if (f.jumpHeldT > 0) f.jumpHeldT = Math.max(0, f.jumpHeldT - ldt);
+
       const wantsDrop = !locked && intent.jump && intent.ay > 0.5 && f.onGround;
       if (wantsDrop) {
-        // Allow falling through one-way ledges briefly
         f.dropT = 0.18;
         f.onGround = false;
         f.y += 2;
-      } else if (!locked && intent.jump && f.onGround) {
-        f.vy = -JUMP_V; f.onGround = false;
+        f.jumpBufferT = 0;
+      } else if (!locked && f.jumpBufferT > 0 && (f.onGround || f.coyoteT > 0)) {
+        // Ground / coyote jump
+        f.vy = -JUMP_V;
+        f.onGround = false;
+        f.coyoteT = 0;
+        f.jumpBufferT = 0;
+        f.jumpHeldT = JUMP_HOLD_T;
+        // Launch squash: compress slightly, springs into stretch
+        f.wobble.squashV -= 5;
+        // Dust puff
+        if (!this.lowPower) {
+          for (let i = 0; i < 5; i++) {
+            this.particles.push({
+              x: f.x + (Math.random() - 0.5) * 18,
+              y: f.y + FIGHTER_H - 2,
+              vx: (Math.random() - 0.5) * 90,
+              vy: -10 - Math.random() * 30,
+              life: 0.32, maxLife: 0.32,
+              color: "oklch(0.8 0.04 230)",
+              size: 1.5 + Math.random() * 1.4,
+            });
+          }
+        }
+      } else if (!locked && f.jumpBufferT > 0 && f.airJumps > 0 && !f.onGround) {
+        // Mid-air double jump
+        f.airJumps--;
+        f.vy = -JUMP_V * 0.85;
+        f.jumpBufferT = 0;
+        f.jumpHeldT = JUMP_HOLD_T * 0.7;
+        // Air-jump shockwave puff
+        if (!this.lowPower) {
+          for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * Math.PI * 2;
+            this.particles.push({
+              x: f.x + Math.cos(a) * 4,
+              y: f.y + FIGHTER_H - 4,
+              vx: Math.cos(a) * 60,
+              vy: Math.sin(a) * 30 - 10,
+              life: 0.28, maxLife: 0.28,
+              color: f.skin.glow,
+              size: 1.4 + Math.random(),
+            });
+          }
+        }
       }
+
+      // Variable-height: if jump released early during ascent, kill upward velocity faster
+      if (!intent.jump && f.vy < 0 && f.jumpHeldT > 0) {
+        f.jumpHeldT = 0;
+      }
+
       if (f.dropT > 0) f.dropT -= ldt;
       if (f.ledgeFlash > 0) f.ledgeFlash -= ldt;
 
@@ -942,7 +1015,16 @@ export class GameEngine {
       }
 
       const prevY = f.y;
-      f.vy += GRAVITY * ldt;
+      // Variable gravity: lighter while jump held & ascending, heavier on the way down
+      let gMul = 1;
+      if (f.vy < 0) {
+        gMul = (intent.jump && f.jumpHeldT > 0) ? 0.6 : LOW_JUMP_GRAVITY_MUL;
+      } else {
+        gMul = FALL_GRAVITY_MUL;
+      }
+      f.vy += GRAVITY * gMul * ldt;
+      // Terminal velocity
+      if (f.vy > 1400) f.vy = 1400;
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
 
@@ -965,9 +1047,12 @@ export class GameEngine {
       }
 
       let landedOn: Platform | null = null;
+      const wasAirborne = !f.onGround;
+      const landingVy = f.vy;
 
       if (f.y + FIGHTER_H >= GROUND_Y) {
         f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
+        if (wasAirborne) landedOn = { x: 0, y: GROUND_Y, w: W, h: 0, kind: "cover" };
       } else { f.onGround = false; }
 
       for (const pl of this.platforms) {
@@ -985,9 +1070,8 @@ export class GameEngine {
 
         // Auto ledge-grab: forgiving catch when arc clips a one-way ledge edge.
         if (pl.kind === "platform" && f.vy >= -40 && f.dropT <= 0 && !f.onGround) {
-          const margin = 16; // forgiveness in px above the ledge
+          const margin = 16;
           if (feet >= pl.y - margin && feet <= pl.y + 18 && prevFeet <= pl.y + margin + 4) {
-            // Snap onto the ledge — feels like an auto-grab
             f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
             f.ledgeFlash = 0.3;
             landedOn = pl;
@@ -995,19 +1079,27 @@ export class GameEngine {
         }
       }
 
-      // Landing dust (only on fresh landings: was airborne last frame)
-      if (landedOn && Math.abs(prevY - f.y) > 4 && !this.lowPower) {
-        for (let i = 0; i < 5; i++) {
-          this.particles.push({
-            x: f.x + (Math.random() - 0.5) * 22,
-            y: landedOn.y - 2,
-            vx: (Math.random() - 0.5) * 70,
-            vy: -10 - Math.random() * 25,
-            life: 0.35, maxLife: 0.35,
-            color: "oklch(0.78 0.04 230)",
-            size: 1.6 + Math.random() * 1.6,
-          });
+      // Landing impact: squash + dust scaled by impact velocity
+      if (landedOn && wasAirborne) {
+        const impact = Math.max(0, Math.min(1, landingVy / 800));
+        f.wobble.squashV -= 4 + impact * 7;     // squash on land
+        f.wobble.bvy += 80 * impact;             // body dips
+        if (impact > 0.25) this.shake = Math.max(this.shake, 4 + impact * 6);
+        if (!this.lowPower) {
+          const n = Math.round(4 + impact * 8);
+          for (let i = 0; i < n; i++) {
+            this.particles.push({
+              x: f.x + (Math.random() - 0.5) * (20 + impact * 14),
+              y: landedOn.y - 2,
+              vx: (Math.random() - 0.5) * (70 + impact * 80),
+              vy: -10 - Math.random() * (25 + impact * 25),
+              life: 0.35 + impact * 0.15, maxLife: 0.5,
+              color: "oklch(0.78 0.04 230)",
+              size: 1.4 + Math.random() * (1.6 + impact),
+            });
+          }
         }
+        Sfx.play("thud", 0.25 + impact * 0.45);
       }
     }
 
