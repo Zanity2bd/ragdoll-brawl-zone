@@ -802,7 +802,9 @@ function KickButton({ engine, snap, cpu }: { engine: GameEngine; snap: GameSnaps
       onClick={(e) => e.preventDefault()}
       className="pointer-events-auto absolute rounded-full font-black flex items-center justify-center select-none touch-none active:scale-95 transition-transform"
       style={{
-        [side]: "calc(env(safe-area-inset-" + side + ", 0px) + 12px)" as unknown as string,
+        ...(side === "right"
+          ? { right: "calc(env(safe-area-inset-right, 0px) + 12px)" }
+          : { left: "calc(env(safe-area-inset-left, 0px) + 12px)" }),
         bottom: "calc(env(safe-area-inset-bottom, 0px) + 150px)",
         width: "clamp(46px, 11vw, 64px)",
         height: "clamp(46px, 11vw, 64px)",
