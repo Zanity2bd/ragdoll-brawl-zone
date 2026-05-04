@@ -722,7 +722,29 @@ export class GameEngine {
     this.introT = 1.2;
     this.phase = "intro";
     this.winner = null;
+    this.koCinematicT = 0;
+    this.koFocus = null;
     this.emit();
+  }
+
+  /**
+   * Single funnel for "fight is over". Stamps cinematic state once so the UI
+   * can hold off the K.O. overlay until the slow-mo + zoom + flash plays out.
+   */
+  private triggerKo(winnerId: PlayerId) {
+    if (this.phase !== "fight") return;
+    this.phase = "ko";
+    this.winner = winnerId;
+    this.koCinematicT = 0;
+    const loser = winnerId === "p1" ? this.p2 : this.p1;
+    this.koFocus = { x: loser.x, y: loser.y + FIGHTER_H * 0.4 };
+    // Massive juice on the killing blow
+    this.shake = Math.max(this.shake, 44);
+    this.hitstopT = Math.max(this.hitstopT, 0.22);
+    this.slowmoT = Math.max(this.slowmoT, 1.1);
+    this.slowmoMode = "impact";
+    this.impactFlash = 1;
+    Sfx.play("boom", 0.9);
   }
 
   private makeFighter(id: PlayerId, x: number, skin: Skin): Fighter {
