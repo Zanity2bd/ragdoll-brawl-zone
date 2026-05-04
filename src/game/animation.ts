@@ -459,7 +459,7 @@ export function computeFlightPose(
     handR: [armR[4], armR[5]],
     footL, footR,
     lean: pitch,
-    shoulderRoll: Math.sin(phase * 0.5) * 0.03 * (1 - horiz),
+    shoulderRoll: bank * 0.7 + Math.sin(phase * 0.5) * 0.03 * (1 - horiz),
   };
 }
 
