@@ -142,6 +142,8 @@ interface Fighter {
   invisT: number;        // Batman smoke bomb invisibility / iframes
   webSnareT: number;     // Spider-Man web snare lock
   speedBoostT: number;   // A-Train Sonic Sprint
+  // Nightcrawler Bamf Combo — scripted 3-hit teleport sequence
+  bamfCombo: null | { step: number; t: number; nextAt: number; targetId: PlayerId };
 }
 
 interface SmokeCloud { x: number; y: number; r: number; rMax: number; life: number; maxLife: number; }
@@ -584,6 +586,7 @@ export class GameEngine {
       unibeamChargeT: 0,
       unibeamFireT: 0,
       invisT: 0, webSnareT: 0, speedBoostT: 0,
+      bamfCombo: null,
     };
   }
 
