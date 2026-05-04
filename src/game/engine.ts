@@ -3134,6 +3134,7 @@ export class GameEngine {
 
     // Platforms — different look per kind
     for (const pl of this.platforms) {
+      if (pl.destroyed) continue;
       if (pl.kind === "cover") {
         // Solid cover block — beveled stone with metallic rim
         const g = ctx.createLinearGradient(pl.x, pl.y, pl.x, pl.y + pl.h);
