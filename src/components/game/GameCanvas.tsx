@@ -389,43 +389,56 @@ function HUD({ snap, onRematch, onChange, onOpenSettings, onFrenzyP1 }: { snap: 
 
 function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "right"; onFrenzy?: () => void }) {
   const isP1 = p.id === "p1";
-  const color = isP1 ? "oklch(0.85 0.18 210)" : "oklch(0.72 0.28 340)";
-  const glow = isP1 ? "oklch(0.75 0.22 215)" : "oklch(0.65 0.30 345)";
+  // Dual-stop gradient per side for premium feel
+  const grad = isP1
+    ? "linear-gradient(90deg, oklch(0.65 0.22 235), oklch(0.78 0.20 195))"
+    : "linear-gradient(270deg, oklch(0.55 0.28 350), oklch(0.72 0.26 320))";
+  const accent = isP1 ? "oklch(0.78 0.20 215)" : "oklch(0.72 0.28 340)";
+  const glow = isP1 ? "oklch(0.65 0.22 215)" : "oklch(0.65 0.28 340)";
   const pct = (p.hp / p.maxHp) * 100;
   return (
-    <div className={`flex-1 max-w-md ${side === "right" ? "items-end" : ""} flex flex-col gap-2`}>
+    <div className={`flex-1 max-w-md ${side === "right" ? "items-end" : ""} flex flex-col gap-1.5`}>
       <div className={`flex items-center gap-3 ${side === "right" ? "flex-row-reverse" : ""}`}>
-        <div className="font-mono text-xs tracking-widest uppercase" style={{ color }}>
+        <div className="font-mono text-[11px] sm:text-xs tracking-[0.2em] uppercase font-bold"
+             style={{ color: accent, textShadow: `0 0 12px ${glow}` }}>
           {p.name}
         </div>
-        <div className="font-mono text-xs text-foreground/60">{Math.ceil(p.hp)} HP</div>
+        <div className="font-mono text-[10px] text-foreground/55">{Math.ceil(p.hp)} / {p.maxHp}</div>
       </div>
-      <div className="h-3 bg-foreground/10 rounded-sm overflow-hidden border border-foreground/10">
+      <div className="relative h-3 sm:h-3.5 rounded-full overflow-hidden"
+           style={{
+             background: "linear-gradient(180deg, oklch(0.10 0.03 275 / 0.85), oklch(0.06 0.02 275 / 0.95))",
+             border: "1px solid oklch(0.40 0.10 280 / 0.4)",
+             boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)",
+           }}>
         <div
-          className="h-full transition-[width] duration-200"
+          className="absolute inset-y-0 transition-[width] duration-200"
           style={{
             width: `${pct}%`,
-            background: color,
-            boxShadow: `0 0 12px ${glow}`,
-            marginLeft: side === "right" ? "auto" : 0,
+            background: grad,
+            boxShadow: `0 0 16px ${glow}, inset 0 1px 0 rgba(255,255,255,0.2)`,
+            [side === "right" ? "right" : "left"]: 0,
           }}
         />
+        {/* Glossy highlight */}
+        <div className="absolute inset-x-0 top-0 h-1/2 pointer-events-none"
+             style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.18), transparent)" }} />
       </div>
-      <div className={`flex flex-wrap gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
+      <div className={`flex flex-wrap gap-1.5 ${side === "right" ? "flex-row-reverse" : ""}`}>
         {p.hasPower1 && (
-          <CdPill label={`HOLD · ${p.power1Name}`} cd={p.power1Cd} max={p.power1CdMax} color={color} />
+          <CdPill label={p.power1Name} cd={p.power1Cd} max={p.power1CdMax} color={accent} />
         )}
         {p.hasPower2 && (
-          <CdPill label={`TAP · ${p.power2Name}`} cd={p.power2Cd} max={p.power2CdMax} color={color} />
+          <CdPill label={p.power2Name} cd={p.power2Cd} max={p.power2CdMax} color={accent} />
         )}
         {p.name === "Heatwave" && !p.hasPower1 && (
-          <CdPill label={isP1 ? "F · Fire" : "K · Fire"} cd={p.fireCd} max={p.fireCdMax} color={color} />
+          <CdPill label="Fire" cd={p.fireCd} max={p.fireCdMax} color={accent} />
         )}
         {p.name === "Nightcrawler" && (
-          <CdPill label={isP1 ? "G · Tele" : "L · Tele"} cd={p.teleCd} max={p.teleCdMax} color={color} />
+          <CdPill label="Teleport" cd={p.teleCd} max={p.teleCdMax} color={accent} />
         )}
         {!p.hasPower2 && (
-          <CdPill label={`${isP1 ? "J" : ";"} · ${p.meleeName}`} cd={p.meleeCd} max={p.meleeCdMax} color={color} />
+          <CdPill label={p.meleeName} cd={p.meleeCd} max={p.meleeCdMax} color={accent} />
         )}
       </div>
       {p.hasFrenzy && (
@@ -433,7 +446,6 @@ function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "r
           cd={p.frenzyCd} max={p.frenzyCdMax} active={p.frenzyActive}
           side={side}
           onActivate={isP1 ? onFrenzy : undefined}
-          hint={isP1 ? "B · Tap" : "N"}
         />
       )}
     </div>
