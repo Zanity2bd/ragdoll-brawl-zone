@@ -531,6 +531,10 @@ export class GameEngine {
       frenzyCd: 0,
       power1Cd: 0, power2Cd: 0,
       freezeT: 0,
+      stunT: 0,
+      heatVisionT: 0,
+      unibeamChargeT: 0,
+      unibeamFireT: 0,
     };
   }
 
