@@ -2742,6 +2742,7 @@ export class GameEngine {
           const overlapX = f.x + hw > p.x && f.x - hw < p.x + p.w;
           const overlapY = f.y + FIGHTER_H > p.y + 2 && f.y < p.y + p.h;
           if (!overlapX || !overlapY) continue;
+          if (p.kind === "building") continue; // phase through buildings (top-landing still works)
           if (this.fighterInDoor(p, f.x, f.y)) continue; // walk through door
           const fromLeft = (f.x + hw) - p.x;
           const fromRight = (p.x + p.w) - (f.x - hw);
