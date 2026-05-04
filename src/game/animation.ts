@@ -615,31 +615,28 @@ export function computeFlightPose(
   _H: number,
 ): Pose {
   const speed = Math.hypot(vx, vy);
-  const horiz = Math.min(1, speed / 320);
+  // Always read as a forward-streaking flyer (image 1 silhouette) — never the
+  // upright idle stance. Floor `horiz` high so the cruise pose is the baseline.
+  const horiz = Math.max(0.78, Math.min(1, speed / 320));
   const goingUp = vy < -40;
   const goingDown = vy > 40;
-  const cruising = horiz > 0.4;
+  const cruising = true;
 
-  // Pitch: gentle forward lean that grows with speed. Capped well below
-  // horizontal — a fully flat body reads as ragdoll, not flight. Vertical
-  // motion adds a small nose-up / nose-down tilt on top.
-  const cruisePitch = horiz * 0.22;             // max ~13° — keeps head/torso aligned
+  // Pitch: forward lean baked in so the body reads horizontal even at rest.
+  const cruisePitch = horiz * 0.26;
   const verticalPitch = (goingUp ? -0.08 : 0) + (goingDown ? 0.10 : 0);
-  // Single facing multiplier — do NOT add a baseline lean (was 0.04 baked in).
   const rawPitch = (cruisePitch + verticalPitch) * facing;
-  const pitch = Math.max(-0.36, Math.min(0.36, rawPitch)); // softer clamp ~20°
+  const pitch = Math.max(-0.4, Math.min(0.4, rawPitch));
 
-  // Idle hover bob (disabled when flying fast).
-  const bobAmp = (1 - horiz) * 2.2;
+  // Subtle hover bob even at rest, but small so the streak silhouette holds.
+  const bobAmp = 0.8;
   const bob = bobAmp * Math.sin(hoverPhase);
   // Bank/roll into lateral motion.
   const bank = Math.max(-0.42, Math.min(0.42, vx / 520));
-  // Soft body sway when banking hard
   const sway = bank * 1.4;
 
   const shoulderY = 28 + bob;
   const hipY = 56 + bob * 0.5;
-  // Head sits naturally on the neck — no aggressive forward push that detaches it.
   const headOffsetY = -2 + bob * 0.3 - horiz * 0.4;
 
   // ---- Legs: striding silhouette — one leg leads forward, one trails back ----
