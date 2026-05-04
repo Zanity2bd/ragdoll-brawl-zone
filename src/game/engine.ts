@@ -592,7 +592,8 @@ export class GameEngine {
     for (const id of ["p1", "p2"] as PlayerId[]) {
       this.intents[id].fire = false;
       this.intents[id].teleport = false;
-      this.intents[id].jump = false;
+      // NOTE: do NOT clear .jump — kept as a held flag for variable-height jumps.
+      // Edge-buffered presses live in fighter.jumpBufferT instead.
       this.intents[id].melee = false;
       this.intents[id].toggleFlight = false;
     }
