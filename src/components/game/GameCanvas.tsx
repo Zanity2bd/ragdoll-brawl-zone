@@ -34,9 +34,20 @@ export function GameCanvas() {
   const [p1Skin, setP1Skin] = useState<SkinId>("spiderman");
   const [p2Skin, setP2Skin] = useState<SkinId>("homelander");
   const [muted, setMuted] = useState(false);
+  const [needsLandscape, setNeedsLandscape] = useState(false);
 
   useEffect(() => {
-    setIsTouch(window.matchMedia("(hover: none) and (pointer: coarse)").matches);
+    const touch = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    setIsTouch(touch);
+    if (!touch) return;
+    const check = () => setNeedsLandscape(window.innerHeight > window.innerWidth);
+    check();
+    window.addEventListener("resize", check);
+    window.addEventListener("orientationchange", check);
+    return () => {
+      window.removeEventListener("resize", check);
+      window.removeEventListener("orientationchange", check);
+    };
   }, []);
 
   useEffect(() => { Sfx.setMuted(muted); }, [muted]);
