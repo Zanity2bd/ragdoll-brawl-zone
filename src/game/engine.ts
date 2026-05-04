@@ -187,13 +187,7 @@ export class GameEngine {
       this.cpuDifficulty = opts.difficulty ?? this.cpuDifficulty;
     }
     this.reset();
-    if (this.cpuEnabled) {
-      // Lazy import to avoid circular type issues at top-level.
-      const { CpuController } = require("./ai") as typeof import("./ai");
-      this.cpu = new CpuController(this, "p2", this.cpuDifficulty);
-    } else {
-      this.cpu = null;
-    }
+    this.cpu = this.cpuEnabled ? new CpuController(this, "p2", this.cpuDifficulty) : null;
   }
 
   setDifficulty(d: import("./ai").Difficulty) {
