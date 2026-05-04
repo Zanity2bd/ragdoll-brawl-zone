@@ -425,6 +425,54 @@ export class GameEngine {
   canFly(p: PlayerId) { return (p === "p1" ? this.p1 : this.p2).canFly; }
   isFlying(p: PlayerId) { return (p === "p1" ? this.p1 : this.p2).flying; }
 
+  /** Hulk-only Rage Frenzy: triggers cinematic clip and chunky damage. Returns true if started. */
+  pressFrenzy(attacker: PlayerId): boolean {
+    const a = attacker === "p1" ? this.p1 : this.p2;
+    const t = attacker === "p1" ? this.p2 : this.p1;
+    if (a.skin.id !== "hulk") return false;
+    if (a.frenzy || a.frenzyCd > 0) return false;
+    if (a.dash || a.meleeKind || a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
+    // Must be in close contact range
+    if (Math.abs(t.x - a.x) > FRENZY_RANGE) return false;
+    if (!t.onGround && !a.onGround) { /* allow */ }
+    a.frenzyCd = FRENZY_CD;
+    a.facing = (t.x - a.x) >= 0 ? 1 : -1;
+    a.vx = 0; a.vy = 0; a.onGround = true;
+    // Snap target into position next to hulk for the cinematic
+    const targetOffset = a.facing * 48;
+    t.x = a.x + targetOffset;
+    t.y = GROUND_Y - FIGHTER_H;
+    t.vx = 0; t.vy = 0; t.onGround = true;
+    t.meleeKind = null; t.meleeT = 0;
+    // Lock target out: clear ragdoll/getup to keep them upright in scene
+    t.ragdollT = 0; t.downedT = 0; t.getUpT = 0;
+    a.frenzy = { t: 0, dur: FRENZY_DUR, target: t.id, nextTick: 0, transitionT: 0 };
+    this.shake = Math.max(this.shake, 24);
+    this.hitstopT = Math.max(this.hitstopT, 0.08);
+    this.impactFlash = 1;
+    this.slowmoT = Math.max(this.slowmoT, 0.25);
+    this.slowmoMode = "impact";
+    Sfx.play("boom", 1);
+    Sfx.play("heavy", 0.9);
+    return true;
+  }
+  isFrenzyActive(p: PlayerId): boolean {
+    return (p === "p1" ? this.p1 : this.p2).frenzy !== null;
+  }
+  /** Returns active frenzy info for the renderer. */
+  getFrenzyInfo(): null | { attackerId: PlayerId; x: number; y: number; facing: 1 | -1; t: number; dur: number; transitionT: number } {
+    for (const f of [this.p1, this.p2]) {
+      if (f.frenzy) {
+        return {
+          attackerId: f.id, x: f.x, y: f.y,
+          facing: f.facing, t: f.frenzy.t, dur: f.frenzy.dur,
+          transitionT: f.frenzy.transitionT,
+        };
+      }
+    }
+    return null;
+  }
+
   /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
   pressSuperDash(attacker: PlayerId): boolean {
     const a = attacker === "p1" ? this.p1 : this.p2;
