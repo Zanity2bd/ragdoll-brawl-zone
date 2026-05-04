@@ -239,6 +239,7 @@ export interface Intents {
   fire: boolean;
   teleport: boolean;
   melee: boolean;
+  kick: boolean;
   // Analog flight steering, -1..1. When flying, replaces ground walk input.
   ax: number;
   ay: number;
