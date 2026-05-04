@@ -29,6 +29,16 @@ export interface PlayerState {
   frenzyCdMax: number;
   hasFrenzy: boolean;
   frenzyActive: boolean;
+  // Dual-power system (per character: HOLD-joystick power + TAP-opponent power)
+  hasPower1: boolean;
+  hasPower2: boolean;
+  power1Name: string;
+  power2Name: string;
+  power1Cd: number; power1CdMax: number;
+  power2Cd: number; power2CdMax: number;
+  // Status effects from powers
+  frozen: boolean;          // currently time-frozen
+  freezeRemaining: number;  // seconds left
 }
 
 export interface GameSnapshot {
