@@ -937,6 +937,16 @@ export class GameEngine {
         Sfx.play("whoosh", 0.7);
         return true;
       }
+      case "nightcrawler": {
+        // Bamf Combo — scripted 3-hit teleport sequence (top punch, left kick, left punch)
+        if (a.bamfCombo) return false;
+        a.power2Cd = BAMF_COMBO_CD;
+        a.bamfCombo = { step: 0, t: 0, nextAt: 0, targetId: t.id };
+        // Cleanse self stuns/snares so the combo always plays out
+        a.stunT = 0; a.webSnareT = 0; a.slowedT = 0;
+        a.iframeT = Math.max(a.iframeT, 0.2);
+        return true;
+      }
     }
     return false;
   }
