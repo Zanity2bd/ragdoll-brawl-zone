@@ -2251,6 +2251,7 @@ export class GameEngine {
 
       // Cover blocks: solid horizontal collision (lateral) — push fighter out.
       for (const pl of this.platforms) {
+        if (pl.destroyed) continue;
         if (pl.kind !== "cover") continue;
         const hw = FIGHTER_W / 2;
         const overlapX = f.x + hw > pl.x && f.x - hw < pl.x + pl.w;
