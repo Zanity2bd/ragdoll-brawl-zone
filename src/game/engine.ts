@@ -485,6 +485,7 @@ export class GameEngine {
       if (this.phase !== "fight") continue;
       const hitR = pr.kind === "batarang" ? 18 : (pr.kind === "web" ? 14 : FIGHTER_W);
       if (Math.abs(pr.x - target.x) < hitR && pr.y > target.y && pr.y < target.y + FIGHTER_H) {
+        if (target.iframeT > 0 || target.downedT > 0 || target.getUpT > 0) { pr.life = 0; continue; }
         const dmg = pr.damage ?? FIRE_DAMAGE;
         target.hp = Math.max(0, target.hp - dmg);
         target.hitFlash = 0.25;
