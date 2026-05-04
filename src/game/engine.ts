@@ -1162,8 +1162,14 @@ export class GameEngine {
 
       if (!isFrozenFor("p1")) this.updateFighter(this.p1, sdt);
       if (!isFrozenFor("p2")) this.updateFighter(this.p2, sdt);
-      if (!this.p1.ragdollT && !this.p1.downedT && !this.p1.getUpT && !isFrozenFor("p1")) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
-      if (!this.p2.ragdollT && !this.p2.downedT && !this.p2.getUpT && !isFrozenFor("p2")) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
+      // Auto-face the opponent only when we are NOT mid-attack and NOT airborne.
+      // Flipping during a melee or jump produces visible pose/render desync;
+      // the character commits to a direction for the duration of those actions.
+      const canFlip = (f: typeof this.p1) =>
+        !f.ragdollT && !f.downedT && !f.getUpT && !f.meleeKind && f.attackAnim <= 0
+        && (f.onGround || f.flying);
+      if (!isFrozenFor("p1") && canFlip(this.p1)) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
+      if (!isFrozenFor("p2") && canFlip(this.p2)) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
       this.resolveMelees(sdt);
       this.updateBamfCombo(this.p1, dt);
       this.updateBamfCombo(this.p2, dt);
