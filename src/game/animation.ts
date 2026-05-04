@@ -76,7 +76,8 @@ export function computeWalkPose(
   const hipYBase = 56;
 
   // Stronger lean at sprint (was speed/1700, capped 0.16)
-  const lean = moving ? facing * Math.min(0.22, speed / 1300) : 0;
+  // Bigger forward lean at run speeds — matches reference run silhouette
+  const lean = moving ? facing * Math.min(0.32, speed / 900) : 0;
 
   if (!onGround && attacking) {
     // ----- Flying kick (airborne basic kick) -----
@@ -194,9 +195,11 @@ export function computeWalkPose(
   // Smoothstep amp ramp — eliminates the hard idle/walk snap when vx crosses threshold
   const ampLin = Math.min(1, speed / 160);
   const amp = ampLin * ampLin * (3 - 2 * ampLin);
-  // Speed-shaped stride/lift/swing — non-linear so sprint reads as sprint
-  const stride = 15 * amp;
-  const lift = 16 * amp + 8 * amp * amp;
+  // ---- High-knee run cycle (matches the reference run video) ----
+  // Sharper, taller knee lift, deeper stride. Walk reads as walk at low amp.
+  const stride = 14 * amp + 10 * amp * amp;          // up to ~24 at sprint
+  const lift = 18 * amp + 18 * amp * amp;            // knees punch up to hip line
+
 
   // Phase-delayed body bobs: hips lead, shoulders & head lag (~80–140ms).
   // The spine "follows" the pelvis instead of moving in lockstep.
@@ -231,15 +234,20 @@ export function computeWalkPose(
   // Arms counter-swing the legs; idle arms have a gentle micro-sway.
   // Shoulder anchor counter-sways the hips for natural balance.
   const sxL = -4 - hipSwayX * 0.5, sxR = 4 - hipSwayX * 0.5;
-  const armSwingMax = moving ? 14 * amp + 10 * amp * amp : 0;
+  // Big deep arm pump at run speed — fists swing high in front, far behind back.
+  const armSwingMax = moving ? 18 * amp + 18 * amp * amp : 0;
   const idleSwayL = moving ? 0 : Math.sin(phase * 0.7) * 0.6;
   const idleSwayR = moving ? 0 : Math.sin(phase * 0.7 + Math.PI) * 0.6;
   // Arm L counter-swings R leg, and vice versa
   const swingL = Math.cos((cycR) * Math.PI * 2);
   const swingR = Math.cos((cycL) * Math.PI * 2);
 
-  const handLBob = moving ? Math.max(0, -swingL) * 2.5 : 0;
-  const handRBob = moving ? Math.max(0, -swingR) * 2.5 : 0;
+  // Front-pump (positive swing toward facing) lifts the fist near chin level.
+  // Back-pump drops & extends back. Mirrors the runner's piston arm cycle.
+  const frontL = Math.max(0, swingL * facing);
+  const frontR = Math.max(0, swingR * facing);
+  const handLBob = moving ? Math.max(0, -swingL) * 2.5 - frontL * 12 * amp : 0;
+  const handRBob = moving ? Math.max(0, -swingR) * 2.5 - frontR * 12 * amp : 0;
 
   const handLX = sxL + swingL * armSwingMax + idleSwayL;
   const handLY = shoulderY + 22 + handLBob;
