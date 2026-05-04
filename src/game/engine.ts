@@ -575,6 +575,7 @@ export class GameEngine {
       heatVisionT: 0,
       unibeamChargeT: 0,
       unibeamFireT: 0,
+      invisT: 0, webSnareT: 0, speedBoostT: 0,
     };
   }
 
