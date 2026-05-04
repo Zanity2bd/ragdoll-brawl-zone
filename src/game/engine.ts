@@ -126,6 +126,11 @@ interface Fighter {
     punchPulse: number;  // 0..1, bumped on each tick, decays — drives flash + blur
   };
   frenzyCd: number;
+  // Dual powers (HOLD-joystick power1 + TAP-opponent power2)
+  power1Cd: number;
+  power2Cd: number;
+  // Time-freeze status (set by Flash's Time Freeze power on opponent)
+  freezeT: number;
 }
 
 interface Projectile {
