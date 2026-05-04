@@ -240,8 +240,12 @@ export class GameEngine {
     if (!this.teleTargeting) return;
     const f = this.teleTargeting === "p1" ? this.p1 : this.p2;
     const rect = this.canvas.getBoundingClientRect();
-    const sx = canvasX * (W / rect.width);
-    const sy = canvasY * (H / rect.height);
+    // Match the contain-fit used in render(): map CSS pixels -> stage coords.
+    const scale = Math.min(rect.width / W, rect.height / H);
+    const offX = (rect.width - W * scale) / 2;
+    const offY = (rect.height - H * scale) / 2;
+    const sx = (canvasX - offX) / scale;
+    const sy = (canvasY - offY) / scale;
     this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
     f.x = Math.max(40, Math.min(W - 40, sx));
     f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy - FIGHTER_H / 2));
@@ -731,8 +735,20 @@ export class GameEngine {
     const sx = (Math.random() - 0.5) * this.shake;
     const sy = (Math.random() - 0.5) * this.shake;
 
+    // Uniform-fit (contain) the 1280x720 stage into the actual canvas so
+    // characters and arena keep correct proportions on every device.
+    const cw = this.canvas.width, ch = this.canvas.height;
+    const scale = Math.min(cw / W, ch / H);
+    const offX = (cw - W * scale) / 2 + sx;
+    const offY = (ch - H * scale) / 2 + sy;
+
     ctx.save();
-    ctx.setTransform(this.canvas.width / W, 0, 0, this.canvas.height / H, sx, sy);
+    // Letterbox bars
+    ctx.fillStyle = "oklch(0.08 0.02 250)";
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.setTransform(scale, 0, 0, scale, offX, offY);
+    // Clip to stage so background can't paint into letterbox bars
+    ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
 
     getMap(this.mapId).drawBackground(ctx, this.elapsed, W, H, GROUND_Y);
 
@@ -864,6 +880,22 @@ export class GameEngine {
 
     ctx.save();
     ctx.translate(x, y);
+    // Wobbly jiggle: gentle squash + sway around the feet, scaled with motion
+    // and amplified briefly after a hit. Keeps stickman feeling alive/jelly.
+    if (!ghost && f.ragdollT <= 0) {
+      const t = this.elapsed + (f.id === "p1" ? 0 : 1.7);
+      const moving = Math.min(1, Math.abs(f.vx) / 280);
+      const hit = Math.min(1, f.hitFlash * 4);
+      const wobAmp = 0.022 + moving * 0.018 + hit * 0.05;
+      const wob = Math.sin(t * 6.2) * wobAmp;
+      const breath = 1 + Math.sin(t * 2.4) * 0.012;
+      const squash = 1 + Math.sin(t * 5.5) * (0.018 + hit * 0.04);
+      ctx.translate(0, FIGHTER_H);
+      ctx.scale(squash, 2 - squash);
+      ctx.scale(breath, breath);
+      ctx.rotate(wob);
+      ctx.translate(0, -FIGHTER_H);
+    }
     ctx.translate(0, FIGHTER_H);
     ctx.rotate(pose.lean);
     ctx.translate(0, -FIGHTER_H);

@@ -410,11 +410,16 @@ function Joystick({ color, onMove, onJump }: { color: string; onMove: (x: number
     }
   };
 
+  const arrow = "absolute text-[10px] leading-none font-bold pointer-events-none select-none";
   return (
     <div
       ref={ref}
-      className="relative w-[112px] h-[112px] rounded-full border-2 backdrop-blur-md bg-background/30 pointer-events-auto touch-none"
-      style={{ borderColor: color }}
+      className="relative w-[120px] h-[120px] rounded-full pointer-events-auto touch-none"
+      style={{
+        background: `radial-gradient(circle at 50% 45%, color-mix(in oklab, ${color} 55%, transparent) 0%, color-mix(in oklab, ${color} 28%, transparent) 60%, color-mix(in oklab, ${color} 12%, transparent) 100%)`,
+        border: `3px solid color-mix(in oklab, ${color} 75%, transparent)`,
+        boxShadow: `0 6px 20px color-mix(in oklab, ${color} 35%, transparent), inset 0 -4px 12px rgba(0,0,0,0.25), inset 0 2px 6px rgba(255,255,255,0.15)`,
+      }}
       onPointerDown={(e) => {
         (e.target as Element).setPointerCapture(e.pointerId);
         idRef.current = e.pointerId;
@@ -429,11 +434,15 @@ function Joystick({ color, onMove, onJump }: { color: string; onMove: (x: number
       }}
       onPointerCancel={() => { idRef.current = null; setKnob({ x: 0, y: 0 }); onMove(0); }}
     >
+      <span className={arrow} style={{ top: 6, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▲</span>
+      <span className={arrow} style={{ bottom: 6, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▼</span>
+      <span className={arrow} style={{ left: 6, top: "50%", transform: "translateY(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>◀</span>
+      <span className={arrow} style={{ right: 6, top: "50%", transform: "translateY(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▶</span>
       <div
-        className="absolute top-1/2 left-1/2 w-12 h-12 -mt-6 -ml-6 rounded-full border-2"
+        className="absolute top-1/2 left-1/2 w-14 h-14 -mt-7 -ml-7 rounded-full"
         style={{
-          borderColor: color,
-          background: `color-mix(in oklab, ${color} 25%, transparent)`,
+          background: `radial-gradient(circle at 35% 30%, color-mix(in oklab, ${color} 95%, white) 0%, ${color} 60%, color-mix(in oklab, ${color} 60%, black) 100%)`,
+          boxShadow: `0 4px 10px rgba(0,0,0,0.4), inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.4)`,
           transform: `translate(${knob.x}px, ${knob.y}px)`,
           transition: idRef.current == null ? "transform 0.15s ease-out" : "none",
         }}
