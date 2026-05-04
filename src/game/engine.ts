@@ -1718,16 +1718,6 @@ export class GameEngine {
       f.bodyRoll = Math.max(-0.45, Math.min(0.45, f.bodyRoll));
     }
 
-      // Body roll from turn whip & impact (radians)
-      const rk = 60, rc = 9;
-      const ra = (0 - f.bodyRoll) * rk - f.bodyRollV * rc;
-      f.bodyRollV += ra * dt;
-      if (turn) f.bodyRollV += f.facing * 5.5;
-      if (impact > 0) f.bodyRollV += -f.facing * 4.2 * impact;
-      f.bodyRoll += f.bodyRollV * dt;
-      f.bodyRoll = Math.max(-0.55, Math.min(0.55, f.bodyRoll));
-    }
-
 
     // Per-fighter slow (a-train flurry victim)
     const localScale = f.slowedT > 0 ? 0.25 : 1;
