@@ -158,8 +158,10 @@ export function GameCanvas() {
       if (Math.abs(sx - opp.x) < hitW / 2 && sy > opp.y - 15 && sy < opp.y + hitH) {
         const p1Name = engine.getSkinIdFor("p1");
         if (p1Name === "hulk") return true;
-        // NOTE: Rage Frenzy is NOT triggered by tapping — it must be activated
-        // explicitly via the Rage Frenzy HUD button or the dedicated key (B).
+        // Flash: tap on opponent → Lightning Blast
+        if (p1Name === "flash") {
+          if (engine.pressPower2("p1")) return true;
+        }
         if (engine.canFly("p1") && engine.isFlying("p1")) {
           if (engine.pressSuperDash("p1")) return true;
         }
