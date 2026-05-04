@@ -2348,7 +2348,54 @@ export class GameEngine {
       }
     }
 
-    // Flyers stay airborne — flight is always on, no toggle needed.
+    // ---- Universal basic kick ----
+    f.kickCd = Math.max(0, f.kickCd - dt);
+    if (f.kickT > 0) {
+      f.kickT += dt;
+      const kt = f.kickT;
+      const inActive = kt >= KICK_WINDUP && kt < KICK_WINDUP + KICK_ACTIVE;
+      if (inActive && !f.kickHit) {
+        const target = f.id === "p1" ? this.p2 : this.p1;
+        const dx = (target.x - f.x) * f.facing;
+        if (dx > -10 && dx < KICK_RANGE && Math.abs(target.y - f.y) < FIGHTER_H) {
+          // Cover blocks the kick (and takes a tiny chip of damage)
+          if (this.meleeBlockedByProp(f, KICK_RANGE, KICK_DMG)) {
+            f.kickHit = true;
+            this.shake = Math.max(this.shake, 3);
+            Sfx.play("thud", 0.35);
+          } else if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
+            f.kickHit = true;
+            target.hp = Math.max(0, target.hp - KICK_DMG);
+            target.hitFlash = 0.22;
+            target.vx += f.facing * 90;
+            target.vy -= 30;
+            // Snappy impact frames — ring + sparks at the foot height
+            const ix = target.x;
+            const iy = target.y + 56;
+            this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 38, life: 0.18, maxLife: 0.18, color: "oklch(0.95 0.04 80)" });
+            this.shockwaves.push({ x: ix, y: iy, r: 2, rMax: 22, life: 0.12, maxLife: 0.12, color: "oklch(0.99 0.02 250)" });
+            this.burst(ix, iy, "oklch(0.95 0.06 80)", 8);
+            this.shake = Math.max(this.shake, 6);
+            this.hitstopT = Math.max(this.hitstopT, 0.05);
+            this.impactFlash = Math.max(this.impactFlash, 0.22);
+            Sfx.play("jab", 0.7); Sfx.play("punch", 0.35);
+            if (target.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
+          }
+        }
+      }
+      if (kt >= KICK_DUR) {
+        f.kickT = 0;
+        f.kickHit = false;
+      }
+    }
+    if (intent.kick && f.kickT === 0 && f.kickCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
+      f.kickT = 0.0001;
+      f.kickHit = false;
+      f.kickCd = KICK_CD;
+      f.attackAnim = Math.max(f.attackAnim, KICK_WINDUP + KICK_ACTIVE);
+      Sfx.play("whoosh", 0.4);
+    }
+    intent.kick = false;
     if (f.canFly) f.flying = true;
 
     if (f.flying && f.canFly) {
