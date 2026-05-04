@@ -2360,12 +2360,8 @@ export class GameEngine {
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
-    // Homelander laser SFX — plays once per match, synced to the beam's first
-    // active frame (after the windup) so the audio onset matches the visual.
-    if (m.kind === "laserSweep" && f.skin.id === "homelander" && !this.homelanderVoPlayed) {
-      this.homelanderVoPlayed = true;
-      this.pendingSfx.push({ at: this.elapsed + m.windup, name: "homelanderLaser", vol: 1.0 });
-    }
+    // (Homelander laser SFX is played on every beam start via the beam edge-trigger
+    //  in update(), so it plays for any laser/heat-vision/unibeam in any match.)
     // Flash blink: instantly teleport behind opponent
     if (m.kind === "phaseStrike") {
       const t = f.id === "p1" ? this.p2 : this.p1;
