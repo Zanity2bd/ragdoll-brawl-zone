@@ -280,6 +280,7 @@ export function GameCanvas() {
         onClose={() => setSettingsOpen(false)}
       />
       {screen === "fight" && isTouch && engine && snap && <TouchControls engine={engine} snap={snap} cpu={cpuEnabled} />}
+      {screen === "fight" && engine && snap && <KickButton engine={engine} snap={snap} cpu={cpuEnabled} />}
 
       {screen === "splash" && (
         <Splash onPlay={() => { Sfx.unlock(); setScreen("map"); }} />
