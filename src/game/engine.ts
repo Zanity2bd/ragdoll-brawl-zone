@@ -1194,32 +1194,36 @@ export class GameEngine {
     ctx.shadowBlur = 0;
     ctx.globalCompositeOperation = "source-over";
 
+    // Switch to screen space for full-screen overlays
+    const cw = this.canvas.width, ch = this.canvas.height;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+
     // Impact flash vignette
     if (this.impactFlash > 0) {
       ctx.fillStyle = `oklch(0.99 0.05 80 / ${this.impactFlash * 0.35})`;
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, 0, cw, ch);
     }
 
     if (this.teleTargeting) {
       ctx.fillStyle = "oklch(0.1 0.05 275 / 0.45)";
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, 0, cw, ch);
       const f = this.teleTargeting === "p1" ? this.p1 : this.p2;
       if (!this.lowPower) { ctx.shadowBlur = 30; ctx.shadowColor = f.skin.glow; }
       ctx.strokeStyle = f.skin.body;
       ctx.lineWidth = 2;
       ctx.setLineDash([8, 8]);
-      ctx.strokeRect(20, 20, W - 40, H - 40);
+      ctx.strokeRect(20, 20, cw - 40, ch - 40);
       ctx.setLineDash([]);
       ctx.shadowBlur = 0;
     }
 
     // Cinematic vignette (cheap full-screen radial overlay)
     if (!this.lowPower) {
-      const grad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.7);
+      const grad = ctx.createRadialGradient(cw / 2, ch / 2, Math.min(cw, ch) * 0.35, cw / 2, ch / 2, Math.max(cw, ch) * 0.7);
       grad.addColorStop(0, "rgba(0,0,0,0)");
       grad.addColorStop(1, "rgba(0,0,0,0.55)");
       ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, 0, cw, ch);
     }
 
     ctx.restore();
