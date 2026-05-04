@@ -2562,6 +2562,64 @@ export class GameEngine {
                 }
               }
             }
+            // Overload's "destroyer" pass: melt any platform the beam crosses
+            // and shatter it into fluid debris chunks. Runs only during overload.
+            if (overload) {
+              const ex = sx + Math.cos(desired) * beamLen;
+              const ey = sy + Math.sin(desired) * beamLen;
+              for (const pl of this.platforms) {
+                if (pl.destroyed) continue;
+                if (!this.segmentIntersectsRect(sx, sy, ex, ey, pl.x, pl.y, pl.w, pl.h)) continue;
+                pl.destroyed = true;
+                this.shake = Math.max(this.shake, 22);
+                this.impactFlash = Math.max(this.impactFlash, 0.6);
+                this.shockwaves.push({
+                  x: pl.x + pl.w / 2, y: pl.y + pl.h / 2,
+                  r: 8, rMax: Math.max(pl.w, pl.h) * 1.6,
+                  life: 0.5, maxLife: 0.5, color: "oklch(0.85 0.22 40)",
+                });
+                // Shatter into a grid of chunks for a fluid breakup
+                const cols = Math.max(3, Math.round(pl.w / 18));
+                const rows = Math.max(2, Math.round(Math.max(pl.h, 14) / 16));
+                const cw = pl.w / cols;
+                const ch = Math.max(8, pl.h / rows);
+                for (let cy = 0; cy < rows; cy++) {
+                  for (let cx = 0; cx < cols; cx++) {
+                    const px = pl.x + cx * cw + cw / 2;
+                    const py = pl.y + cy * ch + ch / 2;
+                    const blast = 240 + Math.random() * 220;
+                    const ang2 = Math.atan2(py - sy, px - sx);
+                    this.debris.push({
+                      x: px, y: py,
+                      vx: Math.cos(ang2) * blast + (Math.random() - 0.5) * 80,
+                      vy: Math.sin(ang2) * blast - 120 - Math.random() * 140,
+                      w: cw * (0.7 + Math.random() * 0.4),
+                      h: ch * (0.7 + Math.random() * 0.4),
+                      rot: Math.random() * Math.PI,
+                      rotV: (Math.random() - 0.5) * 12,
+                      life: 1.4 + Math.random() * 0.6,
+                      maxLife: 2.0,
+                      color: pl.kind === "cover"
+                        ? (Math.random() < 0.5 ? "oklch(0.40 0.04 250)" : "oklch(0.28 0.04 250)")
+                        : "oklch(0.45 0.16 230)",
+                    });
+                  }
+                }
+                // Molten ember burst
+                for (let i = 0; i < 18; i++) {
+                  const a = Math.random() * Math.PI * 2;
+                  const s = 80 + Math.random() * 220;
+                  this.particles.push({
+                    x: pl.x + pl.w / 2, y: pl.y + pl.h / 2,
+                    vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60,
+                    life: 0.6, maxLife: 0.6,
+                    color: Math.random() < 0.5 ? "oklch(0.80 0.26 30)" : "oklch(0.95 0.20 70)",
+                    size: 2 + Math.random() * 2.4,
+                  });
+                }
+                Sfx.play("boom", 0.6);
+              }
+            }
             // Hit if target is within beam cone AND closer than the blocker (or overload pierces)
             const ang = Math.abs(((angle - desired + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
             const targetDist = Math.hypot(dx, dy);
