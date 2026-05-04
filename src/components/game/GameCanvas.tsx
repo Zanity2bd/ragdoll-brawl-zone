@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GameEngine, type GameSnapshot, type PlayerId } from "@/game/engine";
 import { type MapId } from "@/game/maps";
 import { type SkinId } from "@/game/skins";
-import { MapSelect } from "./MapSelect";
+import { Lobby } from "./Lobby";
 import { SkinSelect } from "./SkinSelect";
 
 const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" }> = {
@@ -129,7 +129,7 @@ export function GameCanvas() {
       {screen === "fight" && isTouch && engine && <TouchControls engine={engine} />}
 
       {screen === "map" && (
-        <MapSelect onPick={(id) => { setMapId(id); setScreen("skin"); }} />
+        <Lobby onPickMap={(id) => { setMapId(id); setScreen("skin"); }} />
       )}
       {screen === "skin" && (
         <SkinSelect
