@@ -321,6 +321,9 @@ export class GameEngine {
       if (!this.running) return;
       const dt = Math.min(0.033, (t - this.last) / 1000);
       this.last = t;
+      // Adaptive perf guard: if frames consistently exceed ~22ms, drop to lowPower
+      if (dt > 1 / 45) this.slowFrames++; else this.slowFrames = Math.max(0, this.slowFrames - 1);
+      if (!this.lowPower && this.slowFrames > 30) this.lowPower = true;
       this.update(dt);
       this.render();
       this.raf = requestAnimationFrame(loop);
