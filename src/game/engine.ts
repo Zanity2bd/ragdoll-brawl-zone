@@ -3178,25 +3178,8 @@ export class GameEngine {
             ctx.fillStyle = `oklch(${L1} 0.08 ${hue.toFixed(0)})`;
             ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
           }
-    }
-
-    // Debris chunks (cover/platforms shattered by laser overload)
-    for (const d of this.debris) {
-      const a = Math.min(1, d.life / 0.6);
-      ctx.save();
-      ctx.translate(d.x, d.y);
-      ctx.rotate(d.rot);
-      ctx.globalAlpha = a;
-      ctx.fillStyle = d.color;
-      ctx.fillRect(-d.w / 2, -d.h / 2, d.w, d.h);
-      // Hot rim while still glowing
-      if (d.life > d.maxLife - 0.5) {
-        ctx.fillStyle = "oklch(0.85 0.22 50 / 0.7)";
-        ctx.fillRect(-d.w / 2, -d.h / 2, d.w, 1.5);
-      }
-      ctx.restore();
-    }
-    ctx.globalAlpha = 1;
+          }
+        }
         // Core highlight (slight purple glow)
         ctx.globalCompositeOperation = "lighter";
         ctx.globalAlpha = alpha * 0.18;
