@@ -229,6 +229,16 @@ export function computeWalkPose(
   // Smoothstep amp ramp — eliminates the hard idle/walk snap when vx crosses threshold
   const ampLin = Math.min(1, speed / 160);
   const amp = ampLin * ampLin * (3 - 2 * ampLin);
+  // Phase-delayed body bobs (kept from procedural cycle so spine "follows" hips)
+  const bobHip = moving ? (1 - Math.cos(phase * 2)) * 0.9 * amp : 0;
+  const bobShoulder = moving ? (1 - Math.cos(phase * 2 - 0.5)) * 0.9 * amp : 0;
+  const bobHead = moving ? (1 - Math.cos(phase * 2 - 0.9)) * 0.9 * amp : 0;
+  const heelDip = moving ? Math.max(0, -Math.cos(phase * 2)) * 1.0 * amp : 0;
+  const hipSwayX = moving ? Math.sin(phase) * 1.6 * amp : 0;
+  const shoulderY = shoulderYBase - bobShoulder * 0.6;
+  const hipY = hipYBase + bobHip * 0.4 + heelDip;
+  const shoulderRoll = moving ? Math.sin(phase) * 0.04 * amp : 0;
+
   // ---- Baked Mixamo walk cycle ----
   // Sample the FBX walk at the current phase and project into renderer space.
   // Renderer Y is down; FBX Y is up → invert. Bone scale = hip→foot pixels.
