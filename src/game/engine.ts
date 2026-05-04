@@ -24,6 +24,11 @@ export interface PlayerState {
   meleeCdMax: number;
   meleeName: string;
   teleporting: boolean;
+  // Hulk-only "Rage Frenzy" cinematic special
+  frenzyCd: number;
+  frenzyCdMax: number;
+  hasFrenzy: boolean;
+  frenzyActive: boolean;
 }
 
 export interface GameSnapshot {
@@ -101,6 +106,15 @@ interface Fighter {
     target: PlayerId;
     landed: boolean;
   };
+  // Hulk Rage Frenzy state (special cinematic clip)
+  frenzy: null | {
+    t: number;        // elapsed seconds
+    dur: number;      // total duration
+    target: PlayerId;
+    nextTick: number; // accumulator for damage ticks
+    transitionT: number; // 0..0.25 transform-in
+  };
+  frenzyCd: number;
 }
 
 interface Projectile {
@@ -193,6 +207,13 @@ const SUPER_SLOWMO = 0.7;
 const SUPER_RAGDOLL = 1.3;
 const SUPER_SHAKE = 52;
 
+// Hulk Rage Frenzy (cinematic video special)
+const FRENZY_CD = 18;          // long cooldown — high impact special
+const FRENZY_DUR = 4.0;        // seconds (matches video clip)
+const FRENZY_TICK = 0.18;      // damage tick interval
+const FRENZY_TICK_DMG = 7;     // per tick → ~155 total over full clip
+const FRENZY_RANGE = 110;      // close-range gate
+
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
@@ -253,11 +274,25 @@ export class GameEngine {
   private cpuDifficulty: Difficulty = "hard";
   private cpu: CpuController | null = null;
 
+  // Hulk frenzy video — preloaded once, drawn into canvas during cinematic
+  private frenzyVideo: HTMLVideoElement | null = null;
+  private frenzyVideoReady = false;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("no ctx");
     this.ctx = ctx;
+    if (typeof document !== "undefined") {
+      const v = document.createElement("video");
+      v.src = "/fx/hulk-special.webm";
+      v.preload = "auto";
+      v.muted = true;
+      v.playsInline = true;
+      v.crossOrigin = "anonymous";
+      v.addEventListener("loadeddata", () => { this.frenzyVideoReady = true; });
+      this.frenzyVideo = v;
+    }
     this.reset();
   }
 
@@ -361,6 +396,8 @@ export class GameEngine {
       coyoteT: 0, jumpBufferT: 0, jumpHeldT: 0, airJumps: 0,
       wobble: createWobble(),
       dash: null,
+      frenzy: null,
+      frenzyCd: 0,
     };
   }
 
@@ -401,6 +438,57 @@ export class GameEngine {
   /** Returns true if the fighter can fly. */
   canFly(p: PlayerId) { return (p === "p1" ? this.p1 : this.p2).canFly; }
   isFlying(p: PlayerId) { return (p === "p1" ? this.p1 : this.p2).flying; }
+
+  /** Hulk-only Rage Frenzy: triggers cinematic clip and chunky damage. Returns true if started. */
+  pressFrenzy(attacker: PlayerId): boolean {
+    const a = attacker === "p1" ? this.p1 : this.p2;
+    const t = attacker === "p1" ? this.p2 : this.p1;
+    if (a.skin.id !== "hulk") return false;
+    if (a.frenzy || a.frenzyCd > 0) return false;
+    if (a.dash || a.meleeKind || a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
+    // Must be in close contact range
+    if (Math.abs(t.x - a.x) > FRENZY_RANGE) return false;
+    if (!t.onGround && !a.onGround) { /* allow */ }
+    a.frenzyCd = FRENZY_CD;
+    a.facing = (t.x - a.x) >= 0 ? 1 : -1;
+    a.vx = 0; a.vy = 0; a.onGround = true;
+    // Snap target into position next to hulk for the cinematic
+    const targetOffset = a.facing * 48;
+    t.x = a.x + targetOffset;
+    t.y = GROUND_Y - FIGHTER_H;
+    t.vx = 0; t.vy = 0; t.onGround = true;
+    t.meleeKind = null; t.meleeT = 0;
+    // Lock target out: clear ragdoll/getup to keep them upright in scene
+    t.ragdollT = 0; t.downedT = 0; t.getUpT = 0;
+    a.frenzy = { t: 0, dur: FRENZY_DUR, target: t.id, nextTick: 0, transitionT: 0 };
+    if (this.frenzyVideo) {
+      try { this.frenzyVideo.currentTime = 0; void this.frenzyVideo.play(); } catch { /* ignore */ }
+    }
+    this.shake = Math.max(this.shake, 24);
+    this.hitstopT = Math.max(this.hitstopT, 0.08);
+    this.impactFlash = 1;
+    this.slowmoT = Math.max(this.slowmoT, 0.25);
+    this.slowmoMode = "impact";
+    Sfx.play("boom", 1);
+    Sfx.play("heavy", 0.9);
+    return true;
+  }
+  isFrenzyActive(p: PlayerId): boolean {
+    return (p === "p1" ? this.p1 : this.p2).frenzy !== null;
+  }
+  /** Returns active frenzy info for the renderer. */
+  getFrenzyInfo(): null | { attackerId: PlayerId; x: number; y: number; facing: 1 | -1; t: number; dur: number; transitionT: number } {
+    for (const f of [this.p1, this.p2]) {
+      if (f.frenzy) {
+        return {
+          attackerId: f.id, x: f.x, y: f.y,
+          facing: f.facing, t: f.frenzy.t, dur: f.frenzy.dur,
+          transitionT: f.frenzy.transitionT,
+        };
+      }
+    }
+    return null;
+  }
 
   /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
   pressSuperDash(attacker: PlayerId): boolean {
@@ -604,6 +692,59 @@ export class GameEngine {
     f.teleCd = Math.max(0, f.teleCd - dt);
     f.meleeCd = Math.max(0, f.meleeCd - dt);
     f.superCd = Math.max(0, f.superCd - dt);
+    f.frenzyCd = Math.max(0, f.frenzyCd - dt);
+
+    // ---- Hulk Rage Frenzy: cinematic clip drives positions, ticks damage ----
+    if (f.frenzy) {
+      const fr = f.frenzy;
+      fr.t += dt;
+      fr.transitionT = Math.min(0.25, fr.transitionT + dt);
+      const target = fr.target === "p1" ? this.p1 : this.p2;
+      // Lock both fighters in place
+      f.vx = 0; f.vy = 0; f.onGround = true;
+      target.vx = 0; target.vy = 0; target.onGround = true;
+      target.y = GROUND_Y - FIGHTER_H;
+      target.x = f.x + f.facing * 48;
+      // Suppress target actions
+      target.meleeKind = null; target.meleeT = 0;
+      target.iframeT = 0; target.ragdollT = 0; target.downedT = 0; target.getUpT = 0;
+      // Damage ticks + screen shake during punches
+      fr.nextTick -= dt;
+      if (fr.nextTick <= 0) {
+        fr.nextTick = FRENZY_TICK;
+        target.hp = Math.max(0, target.hp - FRENZY_TICK_DMG);
+        target.hitFlash = 0.25;
+        this.shake = Math.max(this.shake, 14);
+        this.impactFlash = Math.max(this.impactFlash, 0.55);
+        this.burst(target.x, target.y + 40, "oklch(0.95 0.18 30)", 8);
+        Sfx.play("punch", 0.7);
+        if (target.hp <= 0 && this.phase === "fight") {
+          this.phase = "ko"; this.winner = f.id;
+        }
+      }
+      if (fr.t >= fr.dur) {
+        // Final knockback to sell the impact
+        const dir = f.facing;
+        target.vx = dir * 720;
+        target.vy = -380;
+        target.onGround = false;
+        target.ragdollT = 1.2;
+        target.ragdollEnergy = 1;
+        target.ragdollAV = dir * 6;
+        target.ragdollImmuneT = 1.5;
+        this.shake = Math.max(this.shake, 36);
+        this.hitstopT = Math.max(this.hitstopT, 0.18);
+        this.slowmoT = Math.max(this.slowmoT, 0.45);
+        this.slowmoMode = "impact";
+        this.impactFlash = 1;
+        this.shockwaves.push({ x: target.x, y: target.y + 40, r: 10, rMax: 320, life: 0.7, maxLife: 0.7, color: "oklch(0.7 0.18 145)" });
+        Sfx.play("boom", 1);
+        f.frenzy = null;
+        if (this.frenzyVideo) { try { this.frenzyVideo.pause(); } catch { /* ignore */ } }
+      }
+      return;
+    }
+
     f.hitFlash = Math.max(0, f.hitFlash - dt);
     f.attackAnim = Math.max(0, f.attackAnim - dt);
     f.slowedT = Math.max(0, f.slowedT - dt);
@@ -1417,6 +1558,9 @@ export class GameEngine {
       meleeCd: f.meleeCd, meleeCdMax: f.move.cooldown,
       meleeName: f.move.name,
       teleporting: f.teleporting,
+      frenzyCd: f.frenzyCd, frenzyCdMax: FRENZY_CD,
+      hasFrenzy: f.skin.id === "hulk",
+      frenzyActive: f.frenzy !== null,
     };
   }
 
@@ -1608,8 +1752,51 @@ export class GameEngine {
       ctx.globalAlpha = 1;
     }
 
-    this.drawFighter(this.p1);
-    this.drawFighter(this.p2);
+    // Hide attacker (and target) during frenzy — replaced by video clip below.
+    const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
+    const frenzyTarget = frenzyAttacker
+      ? (frenzyAttacker.frenzy!.target === "p1" ? this.p1 : this.p2)
+      : null;
+    if (frenzyAttacker !== this.p1 && frenzyTarget !== this.p1) this.drawFighter(this.p1);
+    if (frenzyAttacker !== this.p2 && frenzyTarget !== this.p2) this.drawFighter(this.p2);
+
+    // Frenzy video overlay — drawn in stage space so the camera/zoom moves with it.
+    if (frenzyAttacker && this.frenzyVideo && this.frenzyVideoReady) {
+      const fr = frenzyAttacker.frenzy!;
+      const trans = Math.min(1, fr.transitionT / 0.25);
+      const ease = trans * trans * (3 - 2 * trans);
+      const fade = Math.min(1, fr.t * 6) * Math.min(1, (fr.dur - fr.t) * 4);
+      // Size relative to fighter — height ~ 2.4x stickman so the video reads big
+      const targetH = FIGHTER_H * 2.4;
+      const v = this.frenzyVideo;
+      const ratio = (v.videoWidth || 16) / (v.videoHeight || 9);
+      const targetW = targetH * ratio;
+      const cx = (frenzyAttacker.x + (frenzyTarget?.x ?? frenzyAttacker.x)) / 2;
+      const cy = frenzyAttacker.y + FIGHTER_H * 0.5;
+      const facing = frenzyAttacker.facing;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(facing * (0.6 + ease * 0.4), 0.6 + ease * 0.4);
+      ctx.globalAlpha = fade;
+      // Subtle screen-shake driven jitter for impact
+      const jx = (Math.random() - 0.5) * 4;
+      const jy = (Math.random() - 0.5) * 4;
+      try {
+        ctx.drawImage(v, -targetW / 2 + jx, -targetH / 2 + jy, targetW, targetH);
+      } catch { /* video may not be decode-ready */ }
+      ctx.restore();
+      // Transition flash burst on the first frames
+      if (trans < 1) {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = 1 - ease;
+        ctx.fillStyle = "oklch(0.85 0.22 145)";
+        ctx.beginPath();
+        ctx.arc(cx, cy, 80 + ease * 120, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      }
+    }
 
     // Beams (laser)
     ctx.globalCompositeOperation = "lighter";
