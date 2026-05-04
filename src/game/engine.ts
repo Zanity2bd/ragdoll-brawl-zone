@@ -1105,6 +1105,25 @@ export class GameEngine {
     this.emit();
   }
 
+  /** Instantaneous tap-to-teleport for Nightcrawler. No aim, no slow-mo. */
+  tapTeleport(p: PlayerId, canvasX: number, canvasY: number): boolean {
+    const f = p === "p1" ? this.p1 : this.p2;
+    if (f.skin.id !== "nightcrawler") return false;
+    if (f.teleCd > 0 || f.teleporting) return false;
+    if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) return false;
+    const { sx, sy } = this.cssToStage(canvasX, canvasY);
+    f.teleCd = TELE_CD;
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
+    Sfx.play("bamf", 0.95);
+    f.x = Math.max(40, Math.min(W - 40, sx));
+    f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy - FIGHTER_H / 2));
+    f.facing = (p === "p1" ? this.p2.x : this.p1.x) >= f.x ? 1 : -1;
+    f.vx = 0; f.vy = 0; f.teleporting = false;
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
+    this.emit();
+    return true;
+  }
+
   isTeleTargeting() { return this.teleTargeting; }
 
   setLowPower(v: boolean) { this.lowPower = v; }
