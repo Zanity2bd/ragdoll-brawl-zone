@@ -772,32 +772,4 @@ function Joystick({
   );
 }
 
-function AudioPanel({
-  open, muted, onToggleMute, sfxVol, musicVol, onSfx, onMusic, onClose,
-}: {
-  open: boolean; muted: boolean; onToggleMute: () => void;
-  sfxVol: number; musicVol: number;
-  onSfx: (v: number) => void; onMusic: (v: number) => void;
-  onClose: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <div className="absolute top-14 right-2 sm:top-14 sm:right-3 z-30 w-60 rounded-lg border border-foreground/20 bg-background/85 backdrop-blur-md p-3 shadow-xl">
-      <div className="flex items-center justify-between mb-3">
-        <div className="font-mono text-xs uppercase tracking-widest text-foreground/80">Audio</div>
-        <button onClick={onClose} className="text-foreground/50 hover:text-foreground text-xs">✕</button>
-      </div>
-      <button
-        onClick={onToggleMute}
-        className="w-full mb-3 px-2 py-1.5 rounded border border-foreground/15 hover:bg-foreground/10 font-mono text-[10px] uppercase tracking-widest text-foreground/80"
-      >
-        {muted ? "🔇 Muted" : "🔊 Sound on"}
-      </button>
-      <label className="block font-mono text-[10px] uppercase tracking-widest text-foreground/60 mb-1">SFX · {Math.round(sfxVol * 100)}</label>
-      <input type="range" min={0} max={100} value={Math.round(sfxVol * 100)} onChange={(e) => onSfx(Number(e.target.value) / 100)} className="w-full mb-3 accent-foreground" />
-      <label className="block font-mono text-[10px] uppercase tracking-widest text-foreground/60 mb-1">Music · {Math.round(musicVol * 100)}</label>
-      <input type="range" min={0} max={100} value={Math.round(musicVol * 100)} onChange={(e) => onMusic(Number(e.target.value) / 100)} className="w-full accent-foreground" />
-    </div>
-  );
-}
 
