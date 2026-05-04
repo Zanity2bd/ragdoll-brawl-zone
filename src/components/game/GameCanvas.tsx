@@ -115,6 +115,17 @@ export function GameCanvas() {
     document.addEventListener("visibilitychange", onVis);
 
     const down = (e: KeyboardEvent) => {
+      // Dedicated Hulk Rage Frenzy keys (B = P1, N = P2 if not CPU)
+      if (e.code === "KeyB") {
+        e.preventDefault();
+        engine.pressFrenzy("p1");
+        return;
+      }
+      if (e.code === "KeyN" && !cpuEnabledRef.current) {
+        e.preventDefault();
+        engine.pressFrenzy("p2");
+        return;
+      }
       const m = KEY_MAP[e.code];
       if (!m) return;
       if (m.p === "p2" && cpuEnabledRef.current) return;
