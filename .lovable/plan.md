@@ -1,70 +1,91 @@
 ## Goal
-Make OgunArena fill the entire viewport on every device with sharp HiDPI rendering, a consistently scaled HUD, smoother visuals, and a stable 60 FPS budget.
 
-## 1. True fullscreen canvas (no margins / black bars)
+Layer a Supreme-Duelist-style "wobble + soft ragdoll" feel on top of the existing rigid pose system without rewriting it. Idle stays stable, fast actions get jiggly, hits punch limbs around momentarily, and recovery is jitter-free. Reuses the current full-ragdoll for big knockdowns; this adds the missing "in-between" layer.
 
-`src/routes/play.tsx`
-- Wrap in a container that uses `100dvh`/`100svh` (mobile URL-bar safe) instead of relying on `inset-0` alone. Add `overscroll-none`, `touch-none`, and lock body scroll via a small effect.
-- Hide the top "◇ OgunArena ◇" link during fight (or move into HUD) so nothing overlays gameplay.
+## Approach
 
-`src/components/game/GameCanvas.tsx`
-- Outer wrapper: `fixed inset-0 w-[100dvw] h-[100dvh]` so the canvas always tracks the live viewport (handles iOS Safari URL-bar resize, Android keyboard, desktop resize).
-- Listen for `visualViewport` `resize`/`scroll` in addition to `window resize` so the canvas re-fits when mobile chrome animates in/out.
-- Drop the cover-fit letterbox in `engine.render()` — switch to **true fullscreen with a virtual camera** (see §3) so there are no black bars even on ultrawide or tall portrait phones.
+Three additive systems, all driven by springs (spring–damper, semi-implicit Euler) so they're cheap, stable at 60 FPS, and never explode:
 
-## 2. Sharp HiDPI rendering
+1. **Body wobble** — secondary motion on torso/head from velocity changes.
+2. **Limb jiggle** — soft offsets applied to elbows/knees/hands/feet after `poseFor()` returns, scaled by speed and recent impacts.
+3. **Partial ragdoll (stagger)** — short reactive limb-flail on small hits that does NOT trigger full tumble, with a resistance window to prevent spam.
 
-`GameCanvas.tsx` (resize block)
-- Use real `devicePixelRatio` (cap 3 on high-end, 2 on mid, 1.5 on low-power) and round backing size with `Math.round` to avoid sub-pixel blur.
-- Set `canvas.style.width/height` explicitly to the CSS box and `canvas.width/height = cssW * dpr` so `getBoundingClientRect()` math stays correct.
-- Call `ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high"` once after each resize.
-- Apply the DPR transform inside `engine.render()` via `setTransform(dpr*scale, …)` instead of writing the DPR into the bitmap dims only — guarantees crisp lines/text on Retina.
+All three run as a post-process on the existing `Pose` from `animation.ts`. Render code is unchanged.
 
-## 3. Adaptive stage + virtual camera (fills any aspect ratio)
+## Technical Plan
 
-`src/game/engine.ts`
-- Replace fixed `W=1280 H=720` with a base play-field height `H_BASE=720` and a width derived from viewport aspect (`W = H_BASE * (cw/ch)` clamped to `[960, 1920]`). Keeps gameplay area tall enough on portrait, wide enough on desktop, no letterbox, no clipping of fighters.
-- Render path:
-  1. `setTransform(dpr, 0, 0, dpr, 0, 0)` for HiDPI.
-  2. Compute `scale = ch / H_BASE`, `offX = (cw - W*scale)/2`.
-  3. `ctx.translate(offX + shake, shake); ctx.scale(scale, scale);`
-  4. Draw background to the full computed `W` (maps already accept `W,H` args).
-- Update `toStage()` in `GameCanvas.tsx` and `engine.handlePointer` to use the same dynamic `W`/scale (expose `engine.getStageMetrics()`).
-- Clamp fighter X to the dynamic `W` so they cannot walk off-screen on wide monitors.
+### 1. New module: `src/game/wobble.ts`
 
-## 4. HUD / UI scaling
+Pure functions + a small per-fighter state object. No allocations per frame.
 
-`GameCanvas.tsx`
-- Introduce a single CSS variable `--hud-scale` set from `Math.min(vw/420, vh/260, 1.6)` via a `ResizeObserver` on the wrapper. Apply to HUD root with `style={{ fontSize: 'calc(14px * var(--hud-scale))' }}`.
-- HpBar / CdPill / FIGHT! / KO overlay use `em`-based sizing so they scale together. Replace fixed `text-7xl/8xl` with `clamp(2.5rem, 8vw, 6rem)` etc.
-- Touch joystick + flight button sizes already responsive — re-anchor with `env(safe-area-inset-*)` on all four sides and increase hit targets to min 56 px.
-- Center HUD bars in a `max-w-[min(1200px,96vw)] mx-auto` container so desktop doesn't stretch them across an ultrawide monitor.
-- Audio button + back link respect safe-area insets; move bottom-left flight button up by `calc(env(safe-area-inset-bottom) + 9rem)`.
+```text
+WobbleState {
+  // torso secondary motion (1 spring, 2D)
+  bx, by, bvx, bvy        // body offset + velocity
+  tilt, tiltV             // extra lean rad
+  // limb springs (4 limbs × 2D pos + vel)
+  limb: Float32Array(16)  // [armL.x,y,vx,vy, armR..., legL..., legR...]
+  // hit impulse decay
+  staggerT: number        // 0..0.35s flail timer
+  staggerDir: -1|1
+  staggerMag: number      // 0..1
+}
+```
 
-## 5. Visual polish (premium but cheap)
+Functions:
+- `stepWobble(state, dt, vx, vy, ax, ay, onGround, flying)` — integrates springs. Stiffness/damping tuned per state:
+  - idle (speed<20): k=180, d=18 → near-rigid, no visible motion
+  - moving: k=120, d=12 → subtle sway
+  - airborne: k=80, d=8 → floppier
+  - stagger active: k=60, d=6 → loose flail
+- `applyImpulse(state, dirX, dirY, mag)` — adds velocity to body + limb springs.
+- `applyWobble(pose, state, facing) → Pose` — adds offsets to shoulder/hip/limbs and folds `tilt` into `pose.lean`. Limb offsets are damped (×0.6) so feet don't slide off the ground visibly.
 
-`engine.ts` render
-- Cache neon glow: pre-render fighter silhouette glow to an offscreen canvas once per frame per fighter instead of `shadowBlur` on every limb (shadowBlur is the #1 canvas perf killer).
-- Particles: switch to additive `radial-gradient` sprites pre-baked in an offscreen canvas (1 image, drawn with `globalAlpha`) — looks softer than solid arcs, costs less than per-particle shadowBlur.
-- Add a subtle vignette + bloom pass: one full-screen `radial-gradient` overlay (`globalCompositeOperation = "overlay"`) — cheap, cinematic.
-- Smooth animations: lerp camera shake decay (`shake *= 0.88`) and clamp; ease-out hp bar fill via existing CSS transition (already there) — extend to 250ms.
-- Smoother transitions between screens: add `animate-fade-in` (already in tailwind) on Splash/Lobby/SkinSelect roots and a 200 ms cross-fade when entering "fight".
+Clamps: every offset capped at ±6px, tilt at ±0.18 rad. Guarantees no broken silhouettes.
 
-## 6. 60 FPS stability
+### 2. Fighter integration in `src/game/engine.ts`
 
-`engine.ts`
-- Add a frame-time guard: if `dt > 1/45` for 30 consecutive frames, automatically flip `lowPower = true` (drops shadowBlur, halves particle cap, disables trail afterimages).
-- Cap particles per frame spawn (already partially done) and global cap at 250 (low) / 500 (high).
-- Skip background re-render every 2nd frame on lowPower by drawing background to an offscreen canvas only when `elapsed` crosses an integer step.
-- Use `performance.now()` delta clamped to 1/30 to avoid huge catch-up steps after tab switches.
-- Remove `requestAnimationFrame` work when `document.hidden` (already wired via visibilitychange) and additionally pause SFX timers.
+- Add `wobble: WobbleState` to `Fighter` interface; init in `makeFighter`.
+- In the per-fighter `update` step, after position integration, call `stepWobble(...)` with current velocity, intent axes, and state flags. Skipped during full ragdoll/downed/getup (those already own the body).
+- In `poseFor`, wrap the final return: `return applyWobble(base, f.wobble, f.facing)`. Full-ragdoll branch (existing `blendPose` path) is left untouched.
 
-## 7. Files touched
+### 3. Hit-reactive partial ragdoll (stagger)
 
-- `src/routes/play.tsx` — fullscreen wrapper, hide overlay during fight.
-- `src/components/game/GameCanvas.tsx` — viewport tracking, DPR resize, HUD scale variable, safe-area layout, dynamic stage metrics.
-- `src/game/engine.ts` — dynamic W, HiDPI transform, glow/particle caching, vignette, adaptive lowPower, frame-time guard, expose `getStageMetrics()`.
-- `src/styles.css` — small additions: `html,body { height:100%; overscroll-behavior:none; }`, `--hud-scale` default, fade-in keyframe reuse.
+New tier between "hit flash only" and "full tumble":
 
-## Out of scope
-No gameplay/balance changes, no new characters, no asset additions.
+- In `applyMeleeHit`, when `m.ragdollT === 0` OR `target.ragdollImmuneT > 0` (anti-chain active) → instead of doing nothing, call `applyImpulse(target.wobble, f.facing, -0.5, mag)` with `mag = clamp(m.damage / 20, 0.4, 1)` and set `target.wobble.staggerT = 0.28`, `staggerDir = f.facing`.
+- Same for projectile hits (`fire`, `batarang`, `web`) at lower magnitude (0.5×).
+- Full ragdoll path (`m.ragdollT > 0` and not chain-immune) ALSO calls `applyImpulse` for the first-frame snap, so the transition into tumble looks continuous.
+- Recovery: `staggerT` decays naturally; while >0, `MOVE_SPEED` is multiplied by `0.65` and `ACCEL` by `0.7` (soft control loss, not a lockout). No new attacks can start while `staggerT > 0.18` (first ~100ms only).
+
+### 4. Anti-spam tuning
+
+- New constant `STAGGER_IMMUNE = 0.25s` — after a stagger ends, ignore further stagger impulses for this window (full hits still register damage). Prevents jitter when two fast hits land back-to-back.
+- Existing `iframeT` and `ragdollImmuneT` already prevent ragdoll spam; stagger inherits the same checks (no stagger during iframe/downed/getup).
+
+### 5. Cross-system safety
+
+- Full ragdoll path: zero out `wobble.limb` velocities on entry so springs don't fight tumble physics.
+- On `getUpT → 0` (rise complete): reset wobble state.
+- Flying: wobble runs but with halved magnitudes (flight already has hover bob).
+
+### 6. Performance
+
+- Per fighter per frame: ~20 multiplies + 16 adds for springs, no allocations (Float32Array). Negligible at 60 FPS for 2 fighters.
+- `lowPower` flag: clamp limb offsets at ±3px and skip stagger limb spread (body+tilt only). Keeps the look on weak phones without branching the code path.
+
+## Files Touched
+
+- `src/game/wobble.ts` — new module (~140 lines).
+- `src/game/engine.ts`:
+  - `Fighter` interface + `makeFighter` (init wobble).
+  - Update loop: call `stepWobble`, gate stagger against existing immune timers, apply soft control penalty.
+  - `applyMeleeHit` + projectile hit blocks: trigger `applyImpulse` / stagger.
+  - `poseFor`: wrap final pose with `applyWobble`.
+- `src/game/animation.ts` — no changes (wobble is a pure post-process on `Pose`).
+
+## Out of Scope
+
+- No changes to maps, skins, HUD, audio, or the existing full-ragdoll tumble physics.
+- No new gameplay timers exposed to UI; everything is internal state.
+- No verlet rope / true soft-body — overkill for the feel target and a perf risk on mobile.

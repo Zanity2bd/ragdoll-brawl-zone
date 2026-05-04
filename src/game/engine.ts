@@ -6,6 +6,7 @@ import { getMap, type MapId } from "./maps";
 import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
 import { Sfx } from "./sfx";
+import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, type WobbleState } from "./wobble";
 import { CpuController, type Difficulty } from "./ai";
 
 export type PlayerId = "p1" | "p2";
@@ -81,8 +82,10 @@ interface Fighter {
   hoverPhase: number;
   superCd: number;
   // ledge / drop-through state
-  dropT: number;            // ignore one-way platforms while > 0
-  ledgeFlash: number;       // brief glow on auto-grab landing
+  dropT: number;
+  ledgeFlash: number;
+  // soft-body wobble + partial ragdoll (stagger)
+  wobble: WobbleState;
   // super-dash
   dash: null | {
     t: number;
@@ -343,6 +346,7 @@ export class GameEngine {
       trail: [],
       canFly, flying: canFly, hoverPhase: 0, superCd: 0,
       dropT: 0, ledgeFlash: 0,
+      wobble: createWobble(),
       dash: null,
     };
   }
@@ -673,6 +677,7 @@ export class GameEngine {
         f.iframeT = 1.0;            // 1s post-rise invulnerability
         f.ragdollImmuneT = 2.0;     // additional anti-chain window (no re-ragdoll)
         f.ragdollAng = 0; f.ragdollAV = 0; f.ragdollEnergy = 0;
+        resetWobble(f.wobble);
       }
       return;
     }
@@ -785,7 +790,7 @@ export class GameEngine {
       if (!f.meleeKind) {
         const canFire = f.skin.id === "heatwave";
         if (canFire && intent.fire && f.fireCd <= 0) this.fire(f);
-        if (intent.melee && f.meleeCd <= 0) this.startMelee(f);
+        if (intent.melee && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) this.startMelee(f);
       }
       f.walkPhase += ldt * 1.4;
       f.x += f.vx * ldt;
@@ -881,9 +886,13 @@ export class GameEngine {
         if (intent.left) move -= 1;
         if (intent.right) move += 1;
       }
+      // Soft control penalty during stagger (partial-ragdoll window)
+      const staggered = f.wobble.staggerT > 0;
+      const moveMul = staggered ? 0.65 : 1;
+      const accelMul = staggered ? 0.7 : 1;
       if (move !== 0) {
-        const target = move * MOVE_SPEED;
-        const a = ACCEL * ldt;
+        const target = move * MOVE_SPEED * moveMul;
+        const a = ACCEL * accelMul * ldt;
         if (f.vx < target) f.vx = Math.min(target, f.vx + a);
         else if (f.vx > target) f.vx = Math.max(target, f.vx - a);
       } else {
@@ -914,7 +923,7 @@ export class GameEngine {
           this.teleTargeting = f.id;
           this.slowmoT = 5; this.slowmoMode = "tele";
         }
-        if (intent.melee && f.meleeCd <= 0) this.startMelee(f);
+        if (intent.melee && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) this.startMelee(f);
       }
 
       if (f.onGround) {
@@ -992,6 +1001,10 @@ export class GameEngine {
         }
       }
     }
+
+    // Soft-body wobble (secondary motion). Skipped during full ragdoll/downed/getup
+    // because those branches return early above and own the body completely.
+    stepWobble(f.wobble, dt, f.vx, f.vy, f.onGround, f.flying, this.lowPower);
 
     // Maintain afterimage trail for fast skins
     const fast = f.skin.id === "flash" || f.skin.id === "atrain";
