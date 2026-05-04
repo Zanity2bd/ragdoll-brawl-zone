@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { BlkdomBadge } from "@/components/BlkdomBadge";
 
 export const Route = createFileRoute("/")({
   component: Landing,
   head: () => ({
     meta: [
-      { title: "Stickman Neon Duel — Offline 1v1 Fighting Game" },
-      { name: "description", content: "A neon stickman fighting game for two players on one device. Movement, fire blasts, teleport, and more." },
+      { title: "OgunArena — Offline 1v1 Stickman Fighting Game" },
+      { name: "description", content: "OgunArena (Yoruba: Ogun = war). Offline 1v1 stickman fighting arena for two players on one device. A Blkdom production." },
     ],
   }),
 });
@@ -34,21 +35,24 @@ function Landing() {
         <h1
           className="text-6xl md:text-8xl font-black tracking-tight leading-none mb-2"
           style={{
-            background: "linear-gradient(135deg, oklch(0.85 0.18 210), oklch(0.72 0.28 340))",
+            background: "linear-gradient(135deg, oklch(0.92 0.18 60), oklch(0.65 0.28 25))",
             WebkitBackgroundClip: "text",
             backgroundClip: "text",
             color: "transparent",
-            filter: "drop-shadow(0 0 30px oklch(0.6 0.2 280 / 0.5))",
+            filter: "drop-shadow(0 0 30px oklch(0.65 0.25 30 / 0.55))",
           }}
         >
-          STICKMAN
+          OGUN
         </h1>
         <h2
-          className="text-4xl md:text-6xl font-black tracking-[0.2em] mb-10"
-          style={{ color: "oklch(0.95 0.05 250)" }}
+          className="text-4xl md:text-6xl font-black tracking-[0.25em] mb-3"
+          style={{ color: "oklch(0.95 0.04 60)" }}
         >
-          NEON DUEL
+          ARENA
         </h2>
+        <div className="font-mono text-[10px] tracking-[0.4em] uppercase text-foreground/50 mb-10">
+          Ogun · war in Yoruba
+        </div>
 
         <p className="text-foreground/70 mb-10 font-mono text-sm leading-relaxed">
           Two stickmen. One arena. No mercy.
@@ -93,6 +97,10 @@ function Landing() {
 
         <div className="mt-8 font-mono text-[10px] tracking-widest uppercase text-foreground/40">
           On mobile? On-screen buttons appear automatically.
+        </div>
+
+        <div className="mt-10 flex justify-center">
+          <BlkdomBadge />
         </div>
       </div>
     </main>

@@ -1,6 +1,7 @@
 import { MAPS, type MapId, type BattleMap } from "@/game/maps";
 import { SKINS, type Skin, type Universe } from "@/game/skins";
 import { useEffect, useRef, useState } from "react";
+import { BlkdomBadge } from "@/components/BlkdomBadge";
 
 type Tab = "maps" | "skins";
 
@@ -11,11 +12,14 @@ export function Lobby({ onPickMap }: { onPickMap: (id: MapId) => void }) {
     <div className="absolute inset-0 z-20 bg-background/95 backdrop-blur-md overflow-auto">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 pt-6 pb-16">
         {/* Header */}
-        <div className="text-center mb-6 sm:mb-8">
+        <div className="text-center mb-6 sm:mb-8 relative">
           <div className="font-mono text-[10px] sm:text-xs tracking-[0.4em] text-foreground/50 uppercase">Arena Lobby</div>
           <h1 className="mt-1 text-2xl sm:text-4xl md:text-5xl font-black tracking-widest text-foreground">
-            STICKMAN <span className="text-foreground/60">DUEL</span>
+            OGUN <span className="text-foreground/60">ARENA</span>
           </h1>
+          <div className="mt-3 flex justify-center">
+            <BlkdomBadge />
+          </div>
         </div>
 
         {/* Tabs */}

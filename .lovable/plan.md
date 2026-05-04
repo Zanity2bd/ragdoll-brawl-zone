@@ -1,47 +1,76 @@
-# Add 10 Animated Dark (Non-Neon) Maps
+# Rebrand to OgunArena + Blkdom credit + Premium Loading Screen
 
-Extend the map roster with 10 new gritty, realistic locations. Each is procedurally drawn on the existing canvas with a muted/dark palette (no neon glows, minimal `shadowBlur`) so they stay mobile-friendly and visually distinct from the existing 3 neon maps.
+## 1. Rebrand: Stickman Neon Duel → OgunArena
 
-## New maps (all dark, animated, low-GPU)
+- **Memory**: save `mem://brand.md` (OgunArena = Yoruba "Ogun"/war, produced by Blkdom, always credit with logo + blkdom.com link). Update `mem://index.md` core rules.
+- **Meta / titles** — replace "Stickman Neon Duel" everywhere:
+  - `src/routes/__root.tsx` — title, og:title, og:description, description.
+  - `src/routes/index.tsx` — head meta + landing hero ("OGUN" big / "ARENA" subtitle, with a small italic "ogun · war in Yoruba" caption).
+  - `src/routes/play.tsx` — title + the small top bar text becomes "◇ OgunArena ◇".
+  - `src/components/game/Lobby.tsx` — header "OGUN ARENA".
+  - `src/game/engine.ts` — top comment.
 
-1. **Backstreet Town** — brick wall, flickering streetlamp, drifting trash, distant rain.
-2. **Underground Car Park** — concrete pillars, parked car silhouettes, swinging fluorescent tube, slow fog band.
-3. **Forgotten Temple** — stone columns, hanging vines swaying, dust motes in shafts of light, cracked floor.
-4. **Suburban Living Room** — sofa + lamp + TV with animated static glow, ceiling fan rotating shadow, framed pictures.
-5. **Derelict Spaceship Corridor** — riveted metal walls, blinking red alert strip, sparks from broken panel, slow flicker.
-6. **Open Space (Zero-G)** — starfield parallax, slow-rotating planet on horizon, drifting debris, no ground line (thin energy plate instead).
-7. **Rooftop at Dusk** — air-con units, antenna, slow cloud parallax, pigeons crossing, muted orange/grey gradient.
-8. **Warehouse** — stacked crates, hanging chain hook swaying, dusty light shaft, forklift silhouette.
-9. **Subway Platform** — tiled wall, yellow safety line, train light approaching every ~8s, fluorescent flicker.
-10. **Foggy Forest Clearing** — layered tree silhouettes parallax, drifting fog ribbons, falling leaves, moonless overcast sky.
+## 2. Blkdom credit component
 
-## Technical details
+- **Asset**: copy uploaded logo to `src/assets/blkdom-logo.png` (already done).
+- New reusable `src/components/BlkdomBadge.tsx`:
+  ```tsx
+  <a href="https://blkdom.com" target="_blank" rel="noreferrer noopener"
+     className="inline-flex items-center gap-2 ...">
+    <img src={logo} alt="Blkdom" className="h-5 w-5 rounded" />
+    <span className="font-mono text-[10px] tracking-[0.3em] uppercase">
+      A Blkdom production
+    </span>
+  </a>
+  ```
+  - Two size variants: `sm` (footer/HUD) and `md` (splash).
+  - Always opens blkdom.com in a new tab.
+- Mount it in:
+  - Landing page footer (`/`)
+  - Lobby header (top-right corner of the lobby panel)
+  - New loading/splash screen (large variant, centered under the title)
 
-- File: `src/game/maps.ts`
-  - Extend `MapId` union with 10 new ids (`backstreet`, `car-park`, `temple`, `living-room`, `spaceship`, `space`, `rooftop-dusk`, `warehouse`, `subway`, `forest`).
-  - Add a `drawXxx(ctx, t, W, H, GROUND_Y)` per map. All use:
-    - Muted gradients (greys, browns, deep blues, slate) — no oklch chroma > ~0.08 except small accent lights.
-    - `shadowBlur` only for 1 small element per map (or none); rely on solid shapes + alpha for atmosphere.
-    - ≤ ~20 animated particles per map; reuse `t` for sin-based sway/flicker.
-    - Cheap shapes: `fillRect`, `quadraticCurveTo`, simple `arc`. No per-frame gradient creation inside loops.
-  - Add a `tone: "neon" | "dark"` field to `BattleMap` so the selector can group/style them.
-  - Append all 10 entries to `MAPS` after the existing 3.
+## 3. Premium animated loading / splash screen
 
-- File: `src/components/game/MapSelect.tsx`
-  - Render two sections: **Neon** and **Dark / Realistic**, grouped via `tone`.
-  - Keep existing lazy-mounted preview canvases; the same `drawBackground` runner works unchanged.
-  - Mobile-first: stays in single-column stacked grid on narrow viewports; tap targets ≥ 60px; only the in-view preview animates (already implemented via IntersectionObserver pattern).
+New `src/components/game/Splash.tsx` mounted **before** the Lobby on `/play`. User must tap **PLAY** to enter. Mobile-first, runs at full perf even on low-end phones.
 
-- File: `src/game/engine.ts`
-  - No engine changes needed — it already calls `getMap(id).drawBackground(...)`. Verify GROUND_Y handling for the **Space** map (no visible ground): draw a thin metallic plate at `GROUND_Y` so collisions still read naturally.
+### Layout (single full-screen canvas + overlaid HTML)
+- Black background with subtle vignette + drifting particles.
+- Top: tiny "◇ OFFLINE 1V1 ◇" eyebrow.
+- Center title: **OGUN** (huge, bold) with **ARENA** beneath, gradient + soft glow. Caption: "Ogun · war in Yoruba".
+- Bottom-center: glowing **PLAY** button (≥ 64px tap target, pulsing border).
+- Bottom: Blkdom badge (logo + link).
+- Behind everything: the animated scene (see below).
 
-## Performance guardrails (per existing core rule)
+### Animation (Canvas 2D, the flashy bit)
+A looping ~6-second cinematic cell:
 
-- Total draw cost per frame for any new map must stay under the existing Hell's Arena budget (currently the heaviest).
-- Honor the `lowPower` flag from engine: when true, halve particle counts (leaves, sparks, debris, fog ribbons) and skip the one optional `shadowBlur` accent.
-- No new image assets, no new fonts, no extra `requestAnimationFrame` loops.
+```text
+   [Homelander stickman running right →]   ← fires red laser eyes →   [Subway train approaching from right]
+                  trail of motion streaks                                    sparks + smoke where laser hits
+```
 
-## Out of scope
+Loop:
+1. Homelander enters from left, runs across the lower third with the existing stickman walk-cycle (reuse skin draw from `Lobby` / `SkinSelect`).
+2. Mid-screen, head turns slightly back; **two red laser beams** project from his eyes diagonally toward the train.
+3. Train (silhouette of subway car with bright headlight, reusing the Subway map's train-light idea) rolls in from the right and gets hit — sparks, smoke puff, headlight flicker.
+4. Homelander keeps running off-screen left; train recedes; loop restarts seamlessly.
+5. Background: dark tunnel/road with parallax tiles + faint scanlines (no expensive shadowBlur loops).
 
-- No new gameplay mechanics tied to maps (e.g. hazards) — visual only for now.
+### Performance rules (per Core memory)
+- Single `requestAnimationFrame` loop, throttled to ~30fps on `lowPower` devices (touch / ≤4 cores / small screen — same heuristic as `GameCanvas`).
+- DPR capped at 1.5.
+- Only **2** elements use `shadowBlur` (laser beams + train headlight); everything else is solid fills / 1-2px strokes.
+- ≤ 24 particles total (motion streaks + sparks combined).
+- Pause loop on `visibilitychange` hidden.
+- No external assets beyond the already-imported Blkdom logo.
+
+### Wiring
+- `src/components/game/GameCanvas.tsx`:
+  - Add a `"splash"` screen state, default to it.
+  - On PLAY tap → `setScreen("map")` → existing Lobby flow.
+- The splash unmounts cleanly (cancelAnimationFrame, removes resize/visibility listeners).
+
+## 4. Out of scope
 - No audio.
+- Pricing / paywall UI for upcoming locked skins (already noted on the Skins panel as "more coming soon").
