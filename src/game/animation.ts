@@ -191,12 +191,11 @@ export function computeWalkPose(
     };
   }
 
-  // Smoothstep amp ramp — eliminates the hard idle/walk snap when vx crosses threshold
-  const ampLin = Math.min(1, speed / 160);
-  const amp = ampLin * ampLin * (3 - 2 * ampLin);
-  // Speed-shaped stride/lift/swing — non-linear so sprint reads as sprint
-  const stride = 15 * amp;
-  const lift = 16 * amp + 8 * amp * amp;
+  // ---- High-knee run cycle (matches the reference run video) ----
+  // Sharper, taller knee lift, deeper stride, body lean forward, hips bob big.
+  // Stride / lift scale with amp so a slow walk still reads as a walk.
+  const stride = 14 * amp + 10 * amp * amp;          // up to ~24 at sprint
+  const lift = 18 * amp + 18 * amp * amp;            // knees punch up to hip line
 
   // Phase-delayed body bobs: hips lead, shoulders & head lag (~80–140ms).
   // The spine "follows" the pelvis instead of moving in lockstep.
