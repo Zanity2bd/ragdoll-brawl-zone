@@ -1532,6 +1532,7 @@ export class GameEngine {
       sw.life -= dt; sw.r += (sw.rMax - sw.r) * Math.min(1, dt * 4);
     }
     this.shockwaves = this.shockwaves.filter(s => s.life > 0);
+    tickFx(this.attackFx, dt);
     for (const b of this.beams) {
       if (freezeActive && b.owner !== this.timeFreezer) continue;
       b.life -= dt;
