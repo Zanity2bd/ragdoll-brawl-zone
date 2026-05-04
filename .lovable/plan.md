@@ -1,55 +1,47 @@
-## Mobile-First Optimization Pass + De-Brand
+# Add 10 Animated Dark (Non-Neon) Maps
 
-Two non-negotiable rules going forward, plus the cleanup pass to bring the current build in line with them.
+Extend the map roster with 10 new gritty, realistic locations. Each is procedurally drawn on the existing canvas with a muted/dark palette (no neon glows, minimal `shadowBlur`) so they stay mobile-friendly and visually distinct from the existing 3 neon maps.
 
-### Rule 1 — Save to project memory
+## New maps (all dark, animated, low-GPU)
 
-Write `mem://index.md` with these always-on rules so every future change respects them automatically:
+1. **Backstreet Town** — brick wall, flickering streetlamp, drifting trash, distant rain.
+2. **Underground Car Park** — concrete pillars, parked car silhouettes, swinging fluorescent tube, slow fog band.
+3. **Forgotten Temple** — stone columns, hanging vines swaying, dust motes in shafts of light, cracked floor.
+4. **Suburban Living Room** — sofa + lamp + TV with animated static glow, ceiling fan rotating shadow, framed pictures.
+5. **Derelict Spaceship Corridor** — riveted metal walls, blinking red alert strip, sparks from broken panel, slow flicker.
+6. **Open Space (Zero-G)** — starfield parallax, slow-rotating planet on horizon, drifting debris, no ground line (thin energy plate instead).
+7. **Rooftop at Dusk** — air-con units, antenna, slow cloud parallax, pigeons crossing, muted orange/grey gradient.
+8. **Warehouse** — stacked crates, hanging chain hook swaying, dusty light shaft, forklift silhouette.
+9. **Subway Platform** — tiled wall, yellow safety line, train light approaching every ~8s, fluorescent flicker.
+10. **Foggy Forest Clearing** — layered tree silhouettes parallax, drifting fog ribbons, falling leaves, moonless overcast sky.
 
-- **Mobile-first**: every feature must be designed for touch + small screens + low-end GPUs from the start. No "desktop pass first, mobile later".
-- **No Lovable / vibe-code traces**: zero "Lovable", "vibe coded", placeholder, or AI-author strings in UI, meta tags, or visible comments. Lovable badge hidden on publish.
+## Technical details
 
-### Rule 2 — De-brand the current app
+- File: `src/game/maps.ts`
+  - Extend `MapId` union with 10 new ids (`backstreet`, `car-park`, `temple`, `living-room`, `spaceship`, `space`, `rooftop-dusk`, `warehouse`, `subway`, `forest`).
+  - Add a `drawXxx(ctx, t, W, H, GROUND_Y)` per map. All use:
+    - Muted gradients (greys, browns, deep blues, slate) — no oklch chroma > ~0.08 except small accent lights.
+    - `shadowBlur` only for 1 small element per map (or none); rely on solid shapes + alpha for atmosphere.
+    - ≤ ~20 animated particles per map; reuse `t` for sin-based sway/flicker.
+    - Cheap shapes: `fillRect`, `quadraticCurveTo`, simple `arc`. No per-frame gradient creation inside loops.
+  - Add a `tone: "neon" | "dark"` field to `BattleMap` so the selector can group/style them.
+  - Append all 10 entries to `MAPS` after the existing 3.
 
-- `src/routes/__root.tsx` — replace all `Lovable App` / `Lovable Generated Project` / `author: Lovable` / `twitter:site: @Lovable` meta tags with proper game branding (title: "Stickman Neon Duel", description about offline 1v1 fighting, og tags matching).
-- Hide the "Edit with Lovable" badge on published builds via the publish settings tool.
-- `index.html` title/meta if any traces remain.
-- Sweep `rg -i 'lovable|vibe'` over `src/` and `index.html`, fix anything that ships to the user.
+- File: `src/components/game/MapSelect.tsx`
+  - Render two sections: **Neon** and **Dark / Realistic**, grouped via `tone`.
+  - Keep existing lazy-mounted preview canvases; the same `drawBackground` runner works unchanged.
+  - Mobile-first: stays in single-column stacked grid on narrow viewports; tap targets ≥ 60px; only the in-view preview animates (already implemented via IntersectionObserver pattern).
 
-### Rule 3 — Mobile optimization pass on what's already built
+- File: `src/game/engine.ts`
+  - No engine changes needed — it already calls `getMap(id).drawBackground(...)`. Verify GROUND_Y handling for the **Space** map (no visible ground): draw a thin metallic plate at `GROUND_Y` so collisions still read naturally.
 
-**Performance (engine + rendering)**
-- Cap `devicePixelRatio` used for canvas backing-store at `1.5` (not raw DPR which is often 2–3 on phones). Massive fill-rate win on mobile with no visible quality loss.
-- Detect a `lowPower` flag (touch device OR `navigator.hardwareConcurrency <= 4` OR small screen) and pass it into the engine + map renderers. When set:
-  - reduce ambient particle spawn rate (~0.4 → ~0.1 per frame) and cap max particles (200).
-  - reduce `shadowBlur` values across map backgrounds (`shadowBlur` is the single biggest mobile cost). Roughly halve the values used in `maps.ts`.
-  - in **Neon City** map: fewer skyline buildings (skip back row), no per-window flicker math (precompute a static lit pattern), no lightning flash math.
-  - in **Cyber Dojo** map: fewer petals (30 → 10), no per-frame `ellipse` rotation per petal (use small rect).
-  - in **Hell's Arena** map: fewer ember particles (50 → 15), fireball arc only every 6s.
-- Cache the radial/linear gradients per-map instead of re-creating them every frame.
-- Throttle `onSnapshot` React updates to ~10 Hz (not every frame) — HUD doesn't need 60 Hz.
-- Pause the `requestAnimationFrame` loop when the canvas isn't visible (`document.visibilitychange`) to save battery in background.
+## Performance guardrails (per existing core rule)
 
-**Touch UX (Map / Skin select + HUD + controls)**
-- Map select grid: stack to a single column under 640px, full-width cards, larger tap targets (min 44px), preview canvases lazy-mount (`IntersectionObserver`) so off-screen previews don't render.
-- Skin select: stack the two player columns vertically on mobile; universe tabs and skin buttons sized to `min-h-11` for thumb taps; preview canvas size scales down to ~140×170 on small screens.
-- Touch fight controls: bigger pads (60×60), tighter gap, anchored to safe-area insets (`env(safe-area-inset-bottom)`), prevent overlap with HP bars by reducing top HUD padding on portrait.
-- HP bars: stack vertically on portrait, cooldown pills wrap below.
-- Disable hover-only animations (`hover:scale-*`) on touch devices to avoid stuck states after tap.
-- Add `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">` and prevent pinch/double-tap-zoom inside the game canvas.
+- Total draw cost per frame for any new map must stay under the existing Hell's Arena budget (currently the heaviest).
+- Honor the `lowPower` flag from engine: when true, halve particle counts (leaves, sparks, debris, fog ribbons) and skip the one optional `shadowBlur` accent.
+- No new image assets, no new fonts, no extra `requestAnimationFrame` loops.
 
-**Files touched**
-- `mem://index.md` (new)
-- `src/routes/__root.tsx` (de-brand meta + viewport)
-- `src/components/game/GameCanvas.tsx` (DPR cap, throttled snapshots, visibility pause, mobile HUD/touch layout, hover-on-touch fix)
-- `src/game/engine.ts` (lowPower flag, particle caps, snapshot throttle hook)
-- `src/game/maps.ts` (cached gradients, halved shadowBlur, mobile-tuned counts)
-- `src/components/game/MapSelect.tsx` (responsive grid, lazy preview, touch sizing)
-- `src/components/game/SkinSelect.tsx` (stacked layout, larger tap targets, smaller preview on mobile)
-- `index.html` (if any Lovable traces / viewport meta)
-- Publish settings: hide Lovable badge.
+## Out of scope
 
-### Out of scope for this pass
-- New gameplay features
-- Sound
-- Online multiplayer
+- No new gameplay mechanics tied to maps (e.g. hazards) — visual only for now.
+- No audio.
