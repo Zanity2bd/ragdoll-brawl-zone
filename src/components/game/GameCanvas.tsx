@@ -33,10 +33,13 @@ export function GameCanvas() {
   const [mapId, setMapId] = useState<MapId>("neon-city");
   const [p1Skin, setP1Skin] = useState<SkinId>("spiderman");
   const [p2Skin, setP2Skin] = useState<SkinId>("homelander");
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     setIsTouch(window.matchMedia("(hover: none) and (pointer: coarse)").matches);
   }, []);
+
+  useEffect(() => { Sfx.setMuted(muted); }, [muted]);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
