@@ -147,7 +147,7 @@ export function Splash({ onPlay }: { onPlay: () => void }) {
             ARENA
           </h2>
           <div className="mt-3 font-mono text-[10px] sm:text-xs tracking-[0.4em] uppercase text-foreground/50">
-            Ogun · war in Yoruba
+            Offline Arena
           </div>
         </div>
 
