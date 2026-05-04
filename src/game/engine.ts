@@ -2917,6 +2917,14 @@ export class GameEngine {
       const ap = m.active / f.meleeDur;
       const prog = f.meleeT / f.meleeDur;
       posed = computeAttackPose(base, f.meleeKind, prog, { wp, ap }, renderFacing);
+    } else if (f.heatVisionT > 0 || f.unibeamFireT > 0 || f.unibeamChargeT > 0) {
+      // Superman heat vision and Iron Man unibeam don't use meleeKind, but they
+      // deserve the same menacing beam stance. Synthesize a laserSweep timing
+      // so the pose ramps in (wind-up) and sustains during fire.
+      const isCharge = f.unibeamChargeT > 0;
+      const wp = 0.25, ap = 0.7;
+      const prog = isCharge ? wp * 0.6 : wp + ap * 0.5;
+      posed = computeAttackPose(base, "laserSweep", prog, { wp, ap }, renderFacing);
     } else {
       posed = base;
     }
