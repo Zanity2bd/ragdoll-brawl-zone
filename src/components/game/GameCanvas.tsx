@@ -299,9 +299,13 @@ function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
         />
       </div>
       <div className={`flex gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
-        <CdPill label={isP1 ? "F · Fire" : "K · Fire"} cd={p.fireCd} max={p.fireCdMax} color={color} />
+        {p.name === "Heatwave" && (
+          <CdPill label={isP1 ? "F · Fire" : "K · Fire"} cd={p.fireCd} max={p.fireCdMax} color={color} />
+        )}
+        {p.name === "Nightcrawler" && (
+          <CdPill label={isP1 ? "G · Tele" : "L · Tele"} cd={p.teleCd} max={p.teleCdMax} color={color} />
+        )}
         <CdPill label={`${isP1 ? "J" : ";"} · ${p.meleeName}`} cd={p.meleeCd} max={p.meleeCdMax} color={color} />
-        <CdPill label={isP1 ? "G · Tele" : "L · Tele"} cd={p.teleCd} max={p.teleCdMax} color={color} />
       </div>
     </div>
   );
