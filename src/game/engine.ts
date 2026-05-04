@@ -1962,14 +1962,32 @@ export class GameEngine {
           size: 2 + Math.random() * 3,
         });
       }
-      // Leading-edge glow particle (front of fist)
+      // Leading-edge glow particle (front of fist) — bigger during the active
+      // strike phase to sell the foreshortened punch coming at the camera.
       if (!this.lowPower) {
+        const u = Math.min(1, d.t / Math.max(0.001, d.dur));
+        const punchGlow = u > 0.35 ? Math.sin(Math.min(1, (u - 0.35) / 0.65) * Math.PI) : 0;
+        const glowSize = 5 + Math.random() * 3 + punchGlow * 10;
+        // Position glow at the projected fist tip
+        const fistX = f.x + f.facing * (24 + punchGlow * 22);
+        const fistY = f.y + FIGHTER_H * 0.42 - punchGlow * 4;
         this.particles.push({
-          x: f.x + f.facing * 22, y: f.y + FIGHTER_H * 0.42,
+          x: fistX, y: fistY,
           vx: f.vx * 0.15, vy: f.vy * 0.15,
           life: 0.25, maxLife: 0.25,
-          color: "oklch(0.98 0.05 80)", size: 5 + Math.random() * 3,
+          color: punchGlow > 0.4 ? "oklch(0.99 0.10 75)" : "oklch(0.98 0.05 80)",
+          size: glowSize,
         });
+        // Concentric "shockwave-in-air" puff while accelerating
+        if (punchGlow > 0.5 && Math.random() < 0.5) {
+          this.particles.push({
+            x: fistX - f.facing * 8, y: fistY,
+            vx: -f.vx * 0.05, vy: 0,
+            life: 0.35, maxLife: 0.35,
+            color: "oklch(0.92 0.04 230)",
+            size: 8 + Math.random() * 6,
+          });
+        }
       }
       if (u >= 1 && !d.landed) {
         d.landed = true;
