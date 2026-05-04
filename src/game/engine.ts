@@ -4948,63 +4948,6 @@ export class GameEngine {
       ctx.restore();
     }
 
-    if (skin.streaks && Math.abs(f.vx) > 80 && f.onGround) {
-      ctx.save();
-      ctx.strokeStyle = skin.streaks;
-      ctx.lineWidth = 1.5;
-      for (let i = 0; i < 4; i++) {
-        ctx.globalAlpha = 0.5 - i * 0.12;
-        ctx.beginPath();
-        const sx = -f.facing * (10 + i * 8);
-        const ey = 30 + i * 12;
-        ctx.moveTo(sx, ey);
-        ctx.lineTo(sx - f.facing * 26, ey);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-
-    // ---- Nightcrawler tail: long whippy curl behind the hip ----
-    if (skin.id === "nightcrawler" && !ghost) {
-      ctx.save();
-      const t = this.elapsed + (f.id === "p1" ? 0 : 1.3);
-      const back = -f.facing;
-      const moving = Math.min(1, Math.abs(f.vx) / 240);
-      const sway = Math.sin(t * 3.2) * (4 + moving * 6) + back * (8 + moving * 6);
-      const sway2 = Math.sin(t * 4.6 + 1.1) * (3 + moving * 4);
-      // Anchor at lower spine just above the hip.
-      const ax = back * 2;
-      const ay = pose.hipY - 2;
-      // Three control points for a snake-like curl.
-      const c1x = back * 14 + sway * 0.4;
-      const c1y = pose.hipY + 14;
-      const c2x = back * 26 + sway;
-      const c2y = pose.hipY + 26 + sway2 * 0.3;
-      const tipX = back * 36 + sway * 1.4;
-      const tipY = pose.hipY + 12 + sway2;     // tip curls back upward
-      // Outline pass
-      ctx.strokeStyle = "oklch(0.10 0.02 250)";
-      ctx.lineCap = "round";
-      ctx.lineWidth = 5.5;
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY);
-      ctx.stroke();
-      // Main stroke
-      ctx.strokeStyle = skin.body;
-      ctx.lineWidth = 3.6;
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY);
-      ctx.stroke();
-      // Spade tip
-      ctx.fillStyle = skin.body;
-      ctx.beginPath();
-      ctx.ellipse(tipX + back * 2, tipY, 4.5, 2.6, Math.atan2(tipY - c2y, tipX - c2x), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
