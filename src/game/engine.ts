@@ -3078,7 +3078,16 @@ export class GameEngine {
       ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, renderFacing, FIGHTER_H)
       : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, renderFacing, FIGHTER_H);
     let posed: Pose;
-    if (f.meleeKind) {
+    if (f.dash) {
+      // Cinematic super-punch pose during the dash. Superman = 1-hand cross,
+      // Homelander = 2-hand wedge. Use the dash progress as the timing so
+      // the wind-up coils early and the foreshortened strike peaks at impact.
+      const kind = f.skin.id === "homelander" ? "homelanderPunch" : "supermanPunch";
+      const u = Math.min(1, f.dash.t / Math.max(0.001, f.dash.dur));
+      // Heavily front-loaded: most of the dash is the swing toward the camera.
+      const wp = 0.35, ap = 0.55;
+      posed = computeAttackPose(base, kind, u, { wp, ap }, renderFacing);
+    } else if (f.meleeKind) {
       const m = f.move;
       const wp = m.windup / f.meleeDur;
       const ap = m.active / f.meleeDur;
