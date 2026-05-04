@@ -2354,54 +2354,58 @@ export class GameEngine {
       }
     }
 
-    // ---- Universal basic kick ----
-    f.kickCd = Math.max(0, f.kickCd - dt);
-    if (f.kickT > 0) {
-      f.kickT += dt;
-      const kt = f.kickT;
-      const inActive = kt >= KICK_WINDUP && kt < KICK_WINDUP + KICK_ACTIVE;
-      if (inActive && !f.kickHit) {
+    // ---- Universal basic punch (sprite-driven, frames 11–14 + recovery 15) ----
+    f.punchCd = Math.max(0, f.punchCd - dt);
+    if (f.recoverT > 0) f.recoverT = Math.max(0, f.recoverT - dt);
+    if (f.punchT > 0) {
+      f.punchT += dt;
+      const pt = f.punchT;
+      // Hit window = frames 12–13 (after windup, before follow-through)
+      const hitStart = PUNCH_F11;
+      const hitEnd = PUNCH_F11 + PUNCH_F12 + PUNCH_F13;
+      const inActive = pt >= hitStart && pt < hitEnd;
+      if (inActive && !f.punchHit) {
         const target = f.id === "p1" ? this.p2 : this.p1;
         const dx = (target.x - f.x) * f.facing;
-        if (dx > -10 && dx < KICK_RANGE && Math.abs(target.y - f.y) < FIGHTER_H) {
-          // Cover blocks the kick (and takes a tiny chip of damage)
-          if (this.meleeBlockedByProp(f, KICK_RANGE, KICK_DMG)) {
-            f.kickHit = true;
+        if (dx > -10 && dx < PUNCH_RANGE && Math.abs(target.y - f.y) < FIGHTER_H) {
+          if (this.meleeBlockedByProp(f, PUNCH_RANGE, PUNCH_DMG)) {
+            f.punchHit = true;
             this.shake = Math.max(this.shake, 3);
             Sfx.play("thud", 0.35);
           } else if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
-            f.kickHit = true;
-            target.hp = Math.max(0, target.hp - KICK_DMG);
+            f.punchHit = true;
+            target.hp = Math.max(0, target.hp - PUNCH_DMG);
             target.hitFlash = 0.22;
             target.vx += f.facing * 90;
             target.vy -= 30;
-            // Snappy impact frames — ring + sparks at the foot height
+            // Chest-height impact for a punch
             const ix = target.x;
-            const iy = target.y + 56;
+            const iy = target.y + 36;
             this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 38, life: 0.18, maxLife: 0.18, color: "oklch(0.95 0.04 80)" });
             this.shockwaves.push({ x: ix, y: iy, r: 2, rMax: 22, life: 0.12, maxLife: 0.12, color: "oklch(0.99 0.02 250)" });
             this.burst(ix, iy, "oklch(0.95 0.06 80)", 8);
             this.shake = Math.max(this.shake, 6);
-            this.hitstopT = Math.max(this.hitstopT, 0.05);
+            this.hitstopT = Math.max(this.hitstopT, 0.06); // slight pause on hit
             this.impactFlash = Math.max(this.impactFlash, 0.22);
-            Sfx.play("jab", 0.7); Sfx.play("punch", 0.35);
+            Sfx.play("punch", 0.8);
             if (target.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
           }
         }
       }
-      if (kt >= KICK_DUR) {
-        f.kickT = 0;
-        f.kickHit = false;
+      if (pt >= PUNCH_DUR) {
+        f.punchT = 0;
+        f.punchHit = false;
+        f.recoverT = PUNCH_RECOVERY;
       }
     }
-    if (intent.kick && f.kickT === 0 && f.kickCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
-      f.kickT = 0.0001;
-      f.kickHit = false;
-      f.kickCd = KICK_CD;
-      f.attackAnim = Math.max(f.attackAnim, KICK_WINDUP + KICK_ACTIVE);
-      Sfx.play("whoosh", 0.4);
+    if (intent.punch && f.punchT === 0 && f.recoverT === 0 && f.punchCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
+      f.punchT = 0.0001;
+      f.punchHit = false;
+      f.punchCd = PUNCH_CD;
+      f.attackAnim = Math.max(f.attackAnim, PUNCH_DUR);
+      Sfx.play("whoosh", 0.35);
     }
-    intent.kick = false;
+    intent.punch = false;
     if (f.canFly) f.flying = true;
 
     if (f.flying && f.canFly) {
