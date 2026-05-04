@@ -2275,6 +2275,7 @@ export class GameEngine {
       } else { f.onGround = false; }
 
       for (const pl of this.platforms) {
+        if (pl.destroyed) continue;
         const feet = f.y + FIGHTER_H;
         const prevFeet = prevY + FIGHTER_H;
         const hw = FIGHTER_W / 2;
