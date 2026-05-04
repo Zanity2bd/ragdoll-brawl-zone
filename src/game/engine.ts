@@ -261,7 +261,7 @@ const FIGHTER_H = 90;
 const FIGHTER_W = 30;
 
 const FIRE_CD = 0.8;
-const TELE_CD = 2.0;
+const TELE_CD = 0.9;
 const FIRE_DAMAGE = 12;
 const FIRE_KNOCKBACK = 320;
 
@@ -1059,9 +1059,9 @@ export class GameEngine {
         this.magmas.push({
           owner: a.id,
           x: a.x + dir * 16, y: a.y + 28,
-          vx: dir * Math.min(520, Math.abs(dx) * 1.4 + 200),
-          vy: -260,
-          life: 2.5, maxLife: 2.5, phase: 0,
+          vx: dir * 380,
+          vy: -120,
+          life: 3.0, maxLife: 3.0, phase: 0,
           exploded: false, explosionT: 0,
         });
         // void unused
@@ -1521,24 +1521,38 @@ export class GameEngine {
         if (!lo.hit) {
           lo.hit = true;
           tgt.hp = Math.max(0, tgt.hp - LIGHTNING_DMG);
-          tgt.hitFlash = 0.3;
-          tgt.vx += Math.sign(lo.vx || 1) * 220;
-          tgt.vy = -180; tgt.onGround = false;
-          this.shake = Math.max(this.shake, 14);
-          this.impactFlash = Math.max(this.impactFlash, 0.7);
-          this.burst(lo.x, lo.y, "oklch(0.95 0.18 95)", 22);
-          this.shockwaves.push({ x: lo.x, y: lo.y, r: 6, rMax: 110, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.18 95)" });
-          Sfx.play("punch", 0.7);
-          if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
-        } else {
-          // Latched: tick chip damage
-          lo.tickAcc += dt;
-          if (lo.tickAcc >= 0.25) {
-            lo.tickAcc = 0;
-            tgt.hp = Math.max(0, tgt.hp - LIGHTNING_TICK_DMG);
-            tgt.hitFlash = 0.18;
-            if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
+          tgt.hitFlash = 0.45;
+          tgt.vx += Math.sign(lo.vx || 1) * 320;
+          tgt.vy = -260; tgt.onGround = false;
+          if (tgt.ragdollImmuneT <= 0) {
+            tgt.ragdollT = 0.5;
+            tgt.ragdollEnergy = 1;
+            tgt.ragdollAV = Math.sign(lo.vx || 1) * 5;
           }
+          this.shake = Math.max(this.shake, 22);
+          this.impactFlash = Math.max(this.impactFlash, 0.85);
+          this.hitstopT = Math.max(this.hitstopT, 0.07);
+          // Multi-ring electric explosion
+          this.shockwaves.push({ x: lo.x, y: lo.y, r: 6, rMax: 160, life: 0.45, maxLife: 0.45, color: "oklch(0.98 0.18 95)" });
+          this.shockwaves.push({ x: lo.x, y: lo.y, r: 14, rMax: 220, life: 0.6, maxLife: 0.6, color: "oklch(0.85 0.22 260)" });
+          this.burst(lo.x, lo.y, "oklch(0.98 0.18 95)", 36);
+          this.burst(lo.x, lo.y, "oklch(0.78 0.22 260)", 22);
+          // Crackling arc particles outward
+          for (let i = 0; i < 18; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const sp = 220 + Math.random() * 240;
+            this.particles.push({
+              x: lo.x, y: lo.y,
+              vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
+              life: 0.5, maxLife: 0.5,
+              color: Math.random() < 0.5 ? "oklch(0.98 0.18 95)" : "oklch(0.85 0.22 260)",
+              size: 2 + Math.random() * 2.5,
+            });
+          }
+          Sfx.play("boom", 0.7); Sfx.play("blip", 0.8);
+          // Lightning consumed in the explosion
+          lo.life = 0;
+          if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
         }
       }
     }
@@ -1557,7 +1571,7 @@ export class GameEngine {
         const tx = tgt.x; const ty = tgt.y + 30;
         const dxh = tx - sx; const dyh = ty - sy;
         const desired = Math.atan2(dyh, dxh);
-        const beamMaxLen = 520;
+        const beamMaxLen = overload ? 4000 : 520;
         const blockHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
         const beamLen = blockHit ? blockHit.dist : beamMaxLen;
         this.beams.push({
@@ -1849,19 +1863,49 @@ export class GameEngine {
       mb.phase += dt * 10;
       if (!mb.exploded) {
         mb.life -= dt;
-        mb.vy += GRAVITY * 0.7 * sdt;
-        mb.x += mb.vx * sdt; mb.y += mb.vy * sdt;
-        // Trail
-        if (!this.lowPower) {
-          this.particles.push({
-            x: mb.x, y: mb.y,
-            vx: (Math.random() - 0.5) * 50, vy: 40 + Math.random() * 50,
-            life: 0.45, maxLife: 0.45,
-            color: Math.random() < 0.5 ? "oklch(0.96 0.18 80)" : "oklch(0.78 0.22 40)",
-            size: 3 + Math.random() * 2,
-          });
-        }
         const tgt = mb.owner === "p1" ? this.p2 : this.p1;
+        // Homing steer toward target (chases through the air)
+        const tcx = tgt.x;
+        const tcy = tgt.y + 30;
+        const hdx = tcx - mb.x, hdy = tcy - mb.y;
+        const hd = Math.hypot(hdx, hdy) || 1;
+        const speed = Math.hypot(mb.vx, mb.vy) || 1;
+        const desiredSpeed = Math.max(540, speed);
+        const dvx = (hdx / hd) * desiredSpeed;
+        const dvy = (hdy / hd) * desiredSpeed;
+        const turn = Math.min(1, sdt * 3.2);
+        mb.vx += (dvx - mb.vx) * turn;
+        mb.vy += (dvy - mb.vy) * turn;
+        // Light gravity so it still arcs subtly
+        mb.vy += GRAVITY * 0.18 * sdt;
+        mb.x += mb.vx * sdt; mb.y += mb.vy * sdt;
+        // Flame trail — multi-layer (core white, mid yellow, outer orange smoke)
+        if (!this.lowPower) {
+          const ang = Math.atan2(mb.vy, mb.vx);
+          const back = ang + Math.PI;
+          for (let i = 0; i < 3; i++) {
+            const off = i * 6;
+            const px = mb.x + Math.cos(back) * off + (Math.random() - 0.5) * 4;
+            const py = mb.y + Math.sin(back) * off + (Math.random() - 0.5) * 4;
+            const pal = i === 0 ? "oklch(0.98 0.16 95)" : i === 1 ? "oklch(0.88 0.22 60)" : "oklch(0.62 0.20 35)";
+            this.particles.push({
+              x: px, y: py,
+              vx: -Math.cos(ang) * (40 + Math.random() * 60) + (Math.random() - 0.5) * 30,
+              vy: -Math.sin(ang) * (40 + Math.random() * 60) + (Math.random() - 0.5) * 30 - 20,
+              life: 0.4 + Math.random() * 0.25, maxLife: 0.6,
+              color: pal, size: 4 - i + Math.random() * 2.5,
+            });
+          }
+          // Dark smoke puff
+          if (Math.random() < 0.4) {
+            this.particles.push({
+              x: mb.x + (Math.random() - 0.5) * 8, y: mb.y + (Math.random() - 0.5) * 8,
+              vx: -Math.cos(ang) * 30, vy: -Math.sin(ang) * 30 - 30 - Math.random() * 30,
+              life: 0.6, maxLife: 0.6,
+              color: "oklch(0.30 0.04 40)", size: 5 + Math.random() * 3,
+            });
+          }
+        }
         const groundHit = mb.y >= GROUND_Y - 4;
         const directHit = Math.abs(mb.x - tgt.x) < FIGHTER_W && mb.y > tgt.y && mb.y < tgt.y + FIGHTER_H;
         if (groundHit || directHit || mb.life <= 0) {
@@ -2906,7 +2950,7 @@ export class GameEngine {
             const angle = desired;
             // Normal beam: blocked by cover AND props (whichever is closer).
             // Overload: pierces everything (chain-shatter handled below).
-            const beamMaxLen = m.range;
+            const beamMaxLen = overload ? 4000 : m.range;
             const platHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
             let beamLen = platHit ? platHit.dist : beamMaxLen;
             let blockedProp: Prop | null = null;
