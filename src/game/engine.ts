@@ -279,7 +279,13 @@ export class GameEngine {
     this.particles = this.particles.filter(p => p.life > 0);
 
     this.shake = Math.max(0, this.shake - dt * 40);
-    this.emit();
+
+    // Throttle React HUD updates to ~10 Hz
+    this.snapAccum += dt;
+    if (this.snapAccum >= 0.1 || this.phase !== "fight") {
+      this.snapAccum = 0;
+      this.emit();
+    }
 
     for (const id of ["p1", "p2"] as PlayerId[]) {
       this.intents[id].fire = false;
