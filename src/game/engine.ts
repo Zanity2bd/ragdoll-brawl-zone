@@ -2422,10 +2422,15 @@ export class GameEngine {
     const hipWorldY = a.y + 56;
     const limbTipY = (s.kind === "bamfPunch" ? shoulderWorldY : hipWorldY) - 4;
     // Hit only if depth-aware hitbox actually overlaps the target body
+    // Hit only if depth-aware hitbox actually overlaps the target body.
+    // Use a generous box for the overhead punch (step 0) since the attacker is
+    // directly above the target and the limb-tip projection is mostly vertical.
+    const horizPad = step === 0 ? 50 : 38;
+    const vertPad = step === 0 ? FIGHTER_H + 40 : FIGHTER_H + 8;
     const hitsTarget =
-      Math.abs(limbTipX - t.x) < 38 &&
+      Math.abs(limbTipX - t.x) < horizPad &&
       limbTipY > t.y - 8 &&
-      limbTipY < t.y + FIGHTER_H + 8;
+      limbTipY < t.y + vertPad;
 
     if (hitsTarget && t.iframeT <= 0 && t.downedT <= 0 && t.getUpT <= 0) {
       t.ragdollImmuneT = 0;
