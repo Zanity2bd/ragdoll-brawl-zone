@@ -132,15 +132,8 @@ export function GameCanvas() {
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
 
-    // Convert CSS coords -> stage coords (cover-fit, mirrors engine.render).
-    const toStage = (cx: number, cy: number) => {
-      const r = canvas.getBoundingClientRect();
-      const W = 1280, H = 720;
-      const scale = Math.max(r.width / W, r.height / H);
-      const offX = (r.width - W * scale) / 2;
-      const offY = (r.height - H * scale) / 2;
-      return { sx: (cx - r.left - offX) / scale, sy: (cy - r.top - offY) / scale };
-    };
+    // Convert CSS coords -> stage coords using the engine's live camera.
+    const toStage = (cx: number, cy: number) => engine.cssToStage(cx, cy);
 
     // Tap on opponent fighter triggers P1's special.
     const tryTapOpponent = (cx: number, cy: number) => {
