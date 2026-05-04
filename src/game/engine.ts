@@ -4832,12 +4832,11 @@ export class GameEngine {
     // / kicks) — the procedural attack pose draws on top so arms still swing
     // but the legs stay visible from the sprite. Disabled only for ragdoll,
     // KO, get-up, and flight where the procedural rig owns the full body.
-    // Sprite renderer covers walk, punch, jump, down/get-up, and hurt frames.
-    // Procedural rig still owns: ragdoll tumble, flight, and special melee arms.
+    // Sprite renderer covers walk, punch, jump, ragdoll, down/get-up, and hurt.
+    // Procedural rig still owns: flight and special melee arms.
     const spriteReady = !ghost && isWalkSheetReady();
     const useSpriteWalk =
       spriteReady &&
-      f.ragdollT <= 0 &&
       !f.flying;
 
     if (useSpriteWalk) {
