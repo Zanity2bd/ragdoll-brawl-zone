@@ -3500,8 +3500,15 @@ export class GameEngine {
       const wob = Math.sin(t * 6.2) * wobAmp;
       const breath = 1 + Math.sin(t * 2.4) * 0.012;
       const squash = 1 + Math.sin(t * 5.5) * (0.018 + hit * 0.04);
+      // Subtle motion-driven squash & stretch (anchored at the feet).
+      const moveStretch = 1 + moving * 0.04;
+      const moveSquash = 1 / moveStretch;
+      const hitSquash = 1 + hit * 0.18;
+      const hitStretch = 1 / hitSquash;
+      const ssX = moveSquash * hitSquash;
+      const ssY = moveStretch * hitStretch;
       ctx.translate(0, FIGHTER_H);
-      ctx.scale(squash, 2 - squash);
+      ctx.scale(squash * ssX, (2 - squash) * ssY);
       ctx.scale(breath, breath);
       ctx.rotate(wob);
       ctx.translate(0, -FIGHTER_H);
@@ -3588,40 +3595,77 @@ export class GameEngine {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    // ---- Outer glow pass (one-time, cheap) ----
-    // A single soft stroke beneath the main limbs gives a premium neon read.
-    const baseW = skin.thickBody ? 5 : 4;
+    // ---- Size-driven dimensions ----
+    const baseW = skin.thickBody ? 7.0 : 5.5;
+    const lowerW = baseW * 0.62;                                     // taper contrast
+    const torsoW = skin.thickBody ? 7 : 5.5;
+    const outlineW = Math.max(1.8, Math.min(3.4, baseW * 0.42));
+    const torsoOutlineW = Math.max(1.8, Math.min(3.0, torsoW * 0.38));
+    const overlap = baseW * 0.45;
+    const outlineColor = "oklch(0.10 0.02 250)";
+
+    // ---- Curvature: facing-anchored sign, velocity / state amplitude ----
+    const speedNorm = Math.min(1, Math.abs(f.vx) / 210);
+    const flexAmt = 0.35
+      + 0.45 * speedNorm
+      + (f.attackAnim > 0 ? 0.35 : 0)
+      + (f.flying ? 0.25 : 0);
+    const flexBase = baseW * 0.30 * flexAmt;
+    const fSign = f.facingT >= 0 ? 1 : -1;
+    // arms bow outward, legs bow inward — sign anchored to facing, never to limb vector
+    const dirArmL = -1 * fSign;
+    const dirArmR =  1 * fSign;
+    const dirLegL =  1 * fSign;
+    const dirLegR = -1 * fSign;
+
+    const drawAllLimbs = (uW: number, lW: number, withFlex: boolean) => {
+      const m = withFlex ? flexBase : 0;
+      drawLimb(ctx, pose.legL, uW, lW, dirLegL, m, overlap);
+      drawLimb(ctx, pose.legR, uW, lW, dirLegR, m, overlap);
+      drawLimb(ctx, pose.armL, uW, lW, dirArmL, m, overlap);
+      drawLimb(ctx, pose.armR, uW, lW, dirArmR, m, overlap);
+    };
+
+    // ---- 1. Dark outline pass (limbs + torso, NO head) ----
+    if (!ghost) {
+      ctx.save();
+      ctx.strokeStyle = outlineColor;
+      const outerLimbW = baseW + outlineW * 2;
+      const outerLowerW = lowerW + outlineW * 2;
+      drawAllLimbs(outerLimbW, outerLowerW, true);
+      // Torso outline
+      ctx.lineWidth = torsoW + torsoOutlineW * 2;
+      ctx.beginPath(); ctx.moveTo(0, shoulderY - overlap * 0.4); ctx.lineTo(0, hipY + overlap * 0.4); ctx.stroke();
+      ctx.restore();
+    }
+
+    // ---- 2. Outer glow pass ----
     if (!this.lowPower && !ghost) {
       ctx.save();
       ctx.shadowBlur = 12;
       ctx.shadowColor = skin.glow;
       ctx.strokeStyle = `color-mix(in oklab, ${skin.glow} 70%, transparent)`;
-      ctx.lineWidth = baseW + 2.5;
       ctx.globalAlpha = 0.55;
-      drawLimb(ctx, pose.legL); drawLimb(ctx, pose.legR);
-      drawLimb(ctx, pose.armL); drawLimb(ctx, pose.armR);
+      const gW = baseW + 2.5;
+      drawAllLimbs(gW, gW, true);
       ctx.beginPath(); ctx.moveTo(0, shoulderY); ctx.lineTo(0, hipY); ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
       ctx.restore();
     }
 
-    // ---- Main limb stroke ----
+    // ---- 3. Main limb stroke (tapered) ----
     ctx.strokeStyle = limbColor;
-    ctx.lineWidth = baseW;
-    drawLimb(ctx, pose.legL);
-    drawLimb(ctx, pose.legR);
-    drawLimb(ctx, pose.armL);
-    drawLimb(ctx, pose.armR);
+    drawAllLimbs(baseW, lowerW, true);
 
-    // ---- Inner highlight: slim brighter core gives volume ----
+    // ---- 4. Inner highlight (mirrors taper) ----
     if (!ghost) {
       ctx.save();
       ctx.strokeStyle = `color-mix(in oklab, ${limbColor} 40%, white)`;
-      ctx.lineWidth = Math.max(1, baseW - 2.4);
       ctx.globalAlpha = 0.38;
-      drawLimb(ctx, pose.legL); drawLimb(ctx, pose.legR);
-      drawLimb(ctx, pose.armL); drawLimb(ctx, pose.armR);
+      const hUp = Math.max(1, baseW - 2.4);
+      const hLo = Math.max(0.8, lowerW - 2.0);
+      drawAllLimbs(hUp, hLo, true);
       ctx.restore();
     }
 
@@ -3697,9 +3741,9 @@ export class GameEngine {
       drawFist(ctx, pose.handR, skin.gloves);
     }
 
-    // Torso
+    // Torso (uses sized torsoW)
     ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = skin.thickBody ? 6.5 : 5;
+    ctx.lineWidth = torsoW;
     ctx.beginPath();
     ctx.moveTo(0, shoulderY);
     ctx.lineTo(0, hipY);
@@ -3713,12 +3757,11 @@ export class GameEngine {
       ctx.restore();
     }
 
-    // Joints
-    ctx.fillStyle = bodyColor;
-    const jr = skin.thickBody ? 3.2 : 2.8;
+    // Tiny shoulder caps (hidden under outline). Hip cap removed — overlap covers it.
+    ctx.fillStyle = limbColor;
+    const jr = baseW * 0.32;
     ctx.beginPath(); ctx.arc(-4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(0, hipY, jr, 0, Math.PI * 2); ctx.fill();
 
     if (skin.emblem) {
       const ey = (shoulderY + hipY) / 2;
@@ -3727,8 +3770,15 @@ export class GameEngine {
       drawEmblem(ctx, skin.emblem, ey, shoulderY, hipY);
     }
 
+    // Head: fill disc first, then proportional rim. Highlight follows below.
     ctx.fillStyle = headColor;
     ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
+    if (!ghost) {
+      const headRimOffset = outlineW * 0.5;
+      ctx.strokeStyle = outlineColor;
+      ctx.lineWidth = outlineW;
+      ctx.beginPath(); ctx.arc(0, headY, headR + headRimOffset, 0, Math.PI * 2); ctx.stroke();
+    }
     if (!ghost) {
       ctx.save();
       const hg = ctx.createRadialGradient(
@@ -3929,10 +3979,72 @@ function getPowerSpec(id: SkinId): PowerSpec {
   }
 }
 
-function drawLimb(ctx: CanvasRenderingContext2D, j: [number, number, number, number, number, number]) {
+// Draw a limb as two tapered segments with optional torso-overlap and a perpendicular
+// curvature nudge applied to the elbow. Pass upperW=lowerW for a uniform stroke
+// (used by the outline pass with a wider width). When upperW===lowerW we draw a
+// single quadratic so the rim has no width discontinuity.
+function drawLimb(
+  ctx: CanvasRenderingContext2D,
+  j: [number, number, number, number, number, number],
+  upperW?: number,
+  lowerW?: number,
+  flexDir = 0,
+  flexMag = 0,
+  overlap = 0,
+) {
+  let sx = j[0], sy = j[1];
+  const ex = j[2], ey = j[3];
+  const hx = j[4], hy = j[5];
+
+  // Overlap into the torso along the start->elbow direction.
+  if (overlap > 0) {
+    const dx = ex - sx, dy = ey - sy;
+    const len = Math.hypot(dx, dy) || 1;
+    sx -= (dx / len) * overlap;
+    sy -= (dy / len) * overlap;
+  }
+
+  // Perpendicular nudge to elbow control point. Direction sign comes from caller
+  // (facing-anchored), magnitude is velocity/state-modulated. Perp is taken from
+  // the start->hand vector so the curve always bows along the limb's axis.
+  let cx = ex, cy = ey;
+  if (flexMag !== 0 && flexDir !== 0) {
+    const vx = hx - sx, vy = hy - sy;
+    const vlen = Math.hypot(vx, vy) || 1;
+    const px = -vy / vlen, py = vx / vlen;
+    cx = ex + px * flexMag * flexDir;
+    cy = ey + py * flexMag * flexDir;
+  }
+
+  if (upperW == null || lowerW == null || Math.abs(upperW - lowerW) < 0.05) {
+    // Uniform stroke (outline / glow / highlight passes use this).
+    if (upperW != null) ctx.lineWidth = upperW;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.quadraticCurveTo(cx, cy, hx, hy);
+    ctx.stroke();
+    return;
+  }
+
+  // Tapered: split at elbow, stroke upper segment full width, lower thinner.
+  // We approximate by re-using the same quadratic but stopping/starting at the
+  // midpoint of the curve (the point on the curve at t=0.5).
+  const t = 0.5;
+  const midX = (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * cx + t * t * hx;
+  const midY = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * cy + t * t * hy;
+
+  // Upper half: start -> mid, with elbow control.
+  ctx.lineWidth = upperW;
   ctx.beginPath();
-  ctx.moveTo(j[0], j[1]);
-  ctx.quadraticCurveTo(j[2], j[3], j[4], j[5]);
+  ctx.moveTo(sx, sy);
+  ctx.quadraticCurveTo(cx, cy, midX, midY);
+  ctx.stroke();
+
+  // Lower half: mid -> hand, same elbow control gives a continuous tangent.
+  ctx.lineWidth = lowerW;
+  ctx.beginPath();
+  ctx.moveTo(midX, midY);
+  ctx.quadraticCurveTo(cx, cy, hx, hy);
   ctx.stroke();
 }
 
