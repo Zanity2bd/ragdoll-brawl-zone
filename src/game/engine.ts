@@ -162,6 +162,7 @@ interface Fighter {
   bamfCombo: null | { step: number; t: number; nextAt: number; targetId: PlayerId };
   // Spider-Man Web Swing — pendulum physics
   swing: null | { ax: number; ay: number; len: number; angle: number; angV: number; t: number };
+  justLandedT: number;  // brief squash on touchdown
   // Universal basic punch — sprite-driven (frames 11–14 + recovery 15)
   punchT: number;       // 0 = idle, otherwise progress through PUNCH_DUR
   punchCd: number;
