@@ -184,6 +184,70 @@ export function computeWalkPose(
   const elbowRX = (sxR + handRX) / 2 - facing * 1.5 + (handRX > sxR ? 1 : -1) - facing * backR * 3 * amp;
   const elbowRY = (shoulderY + handRY) / 2 + 5 + backR * 4 * amp;
 
+  // Idle fighting stance — feet planted wide, knees bent, fists up in guard.
+  // Subtle breathing keeps it from feeling frozen. Activates when not moving
+  // and not attacking.
+  if (!moving && !attacking) {
+    const idleBreath = Math.sin(phase * 1.4) * 0.6;
+    const sway = Math.sin(phase * 0.9) * 0.4;
+    const stanceHipY = hipY + idleBreath * 0.5;
+    const stanceShoulderY = shoulderY + idleBreath * 0.3;
+
+    // Stance: lead foot forward (in facing direction), back foot planted behind.
+    const leadHipX = facing * 1;
+    const backHipX = -facing * 3;
+    const leadFootX = facing * 6;
+    const leadFootY = H;
+    const backFootX = -facing * 10;
+    const backFootY = H;
+    const leadKneeX = facing * 4;
+    const leadKneeY = stanceHipY + 20;
+    const backKneeX = -facing * 7;
+    const backKneeY = stanceHipY + 18;
+
+    // Front arm (toward opponent): elbow tucked, fist raised at chin level.
+    const frontHandX = facing * 8 + sway;
+    const frontHandY = stanceShoulderY - 6;
+    const frontElbowX = facing * 10;
+    const frontElbowY = stanceShoulderY + 8;
+    // Back arm: elbow drawn back, fist tucked near jaw on the back side.
+    const rearHandX = -facing * 2 + sway * 0.5;
+    const rearHandY = stanceShoulderY - 2;
+    const rearElbowX = -facing * 9;
+    const rearElbowY = stanceShoulderY + 10;
+
+    const sxLead = facing * 3;
+    const sxRear = -facing * 4;
+
+    // Map lead/rear back to L/R based on facing
+    const legLead: [number, number, number, number, number, number] =
+      [leadHipX, stanceHipY, leadKneeX, leadKneeY, leadFootX, leadFootY];
+    const legBack: [number, number, number, number, number, number] =
+      [backHipX, stanceHipY, backKneeX, backKneeY, backFootX, backFootY];
+    const armFront: [number, number, number, number, number, number] =
+      [sxLead, stanceShoulderY, frontElbowX, frontElbowY, frontHandX, frontHandY];
+    const armRear: [number, number, number, number, number, number] =
+      [sxRear, stanceShoulderY, rearElbowX, rearElbowY, rearHandX, rearHandY];
+
+    // facing > 0: lead is the right-side limb; facing < 0: lead is the left-side.
+    const isRightLead = facing > 0;
+    return {
+      headOffsetY: headOffsetY - 1,
+      shoulderY: stanceShoulderY,
+      hipY: stanceHipY,
+      legL: isRightLead ? legBack : legLead,
+      legR: isRightLead ? legLead : legBack,
+      armL: isRightLead ? armRear : armFront,
+      armR: isRightLead ? armFront : armRear,
+      handL: isRightLead ? [rearHandX, rearHandY] : [frontHandX, frontHandY],
+      handR: isRightLead ? [frontHandX, frontHandY] : [rearHandX, rearHandY],
+      footL: isRightLead ? [backFootX, backFootY] : [leadFootX, leadFootY],
+      footR: isRightLead ? [leadFootX, leadFootY] : [backFootX, backFootY],
+      lean: facing * 0.06,
+      shoulderRoll: -facing * 0.08,
+    };
+  }
+
   if (attacking) {
     const ahx = facing * 28;
     const ahy = shoulderY + 4;
