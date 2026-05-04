@@ -2311,12 +2311,11 @@ export class GameEngine {
           // Keyboard teleport: blink toward the opponent instantly (no aim, no slow-mo).
           const opp = f.id === "p1" ? this.p2 : this.p1;
           const side = opp.x >= f.x ? -1 : 1;
-          const tx = Math.max(40, Math.min(W - 40, opp.x + side * 80));
-          const ty = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, opp.y));
+          const dest = this.resolveTeleportTarget(opp.x + side * 80, opp.y + FIGHTER_H / 2);
           f.teleCd = TELE_CD;
           this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
           Sfx.play("bamf", 0.95);
-          f.x = tx; f.y = ty;
+          f.x = dest.x; f.y = dest.y;
           f.facing = opp.x >= f.x ? 1 : -1;
           f.vx = 0; f.vy = 0;
           this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
