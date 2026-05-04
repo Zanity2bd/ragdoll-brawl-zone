@@ -1405,6 +1405,18 @@ export class GameEngine {
 
     ctx.fillStyle = headColor;
     ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
+    if (!ghost) {
+      ctx.save();
+      const hg = ctx.createRadialGradient(
+        f.facing * -2.5, headY - headR * 0.55, 0.5,
+        f.facing * -2.5, headY - headR * 0.55, headR * 1.1,
+      );
+      hg.addColorStop(0, "rgba(255,255,255,0.32)");
+      hg.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = hg;
+      ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
 
     if (skin.skinTone) {
       ctx.fillStyle = skin.skinTone;
