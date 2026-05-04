@@ -2793,13 +2793,19 @@ export class GameEngine {
     // Afterimage ghosts (drawn under main fighters)
     for (const f of [this.p1, this.p2]) {
       if (f.trail.length === 0) continue;
+      const bamf = f.meleeKind === "bamfPunch" || f.meleeKind === "bamfKick";
+      if (bamf) {
+        // Additive purple tint for depth-implying motion smear
+        ctx.globalCompositeOperation = "lighter";
+      }
       for (let i = 0; i < f.trail.length; i++) {
-        const a = (i + 1) / (f.trail.length + 1) * 0.4;
+        const a = (i + 1) / (f.trail.length + 1) * (bamf ? 0.55 : 0.4);
         ctx.globalAlpha = a;
         const t = f.trail[i];
         this.drawFighterAt(f, t.x, t.y, t.pose, true);
       }
       ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
     }
 
     // Hide attacker (and target) during frenzy — replaced by video clip below.
