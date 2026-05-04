@@ -886,9 +886,13 @@ export class GameEngine {
         if (intent.left) move -= 1;
         if (intent.right) move += 1;
       }
+      // Soft control penalty during stagger (partial-ragdoll window)
+      const staggered = f.wobble.staggerT > 0;
+      const moveMul = staggered ? 0.65 : 1;
+      const accelMul = staggered ? 0.7 : 1;
       if (move !== 0) {
-        const target = move * MOVE_SPEED;
-        const a = ACCEL * ldt;
+        const target = move * MOVE_SPEED * moveMul;
+        const a = ACCEL * accelMul * ldt;
         if (f.vx < target) f.vx = Math.min(target, f.vx + a);
         else if (f.vx > target) f.vx = Math.max(target, f.vx - a);
       } else {
