@@ -102,6 +102,8 @@ export class GameEngine {
   private raf = 0;
   private running = false;
   private elapsed = 0;
+  private lowPower = false;
+  private snapAccum = 0;
 
   private mapId: MapId = "neon-city";
   private p1Skin: SkinId = "spiderman";
@@ -210,6 +212,8 @@ export class GameEngine {
 
   isTeleTargeting() { return this.teleTargeting; }
 
+  setLowPower(v: boolean) { this.lowPower = v; }
+
   private update(dt: number) {
     this.elapsed += dt;
     const timeScale = this.slowmoT > 0 ? 0.15 : 1;
@@ -221,7 +225,9 @@ export class GameEngine {
       if (this.introT <= 0) this.phase = "fight";
     }
 
-    if (Math.random() < 0.4) {
+    const ambientRate = this.lowPower ? 0.1 : 0.4;
+    const maxParticles = this.lowPower ? 120 : 400;
+    if (Math.random() < ambientRate && this.particles.length < maxParticles) {
       this.particles.push({
         x: Math.random() * W, y: H,
         vx: (Math.random() - 0.5) * 10, vy: -20 - Math.random() * 30,
