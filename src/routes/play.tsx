@@ -13,13 +13,22 @@ export const Route = createFileRoute("/play")({
 
 function PlayPage() {
   return (
-    <div className="fixed inset-0 bg-background overflow-hidden">
+    <div
+      className="fixed inset-0 bg-background overflow-hidden overscroll-none touch-none"
+      style={{ width: "100dvw", height: "100dvh" }}
+    >
       <GameCanvas />
       <Link
         to="/"
-        className="absolute top-4 left-1/2 -translate-x-1/2 font-mono text-[10px] tracking-widest uppercase text-foreground/40 hover:text-foreground/80 transition-colors"
+        aria-label="Home"
+        className="absolute z-40 font-mono text-[10px] tracking-widest uppercase text-foreground/30 hover:text-foreground/80 transition-colors"
+        style={{
+          top: "calc(env(safe-area-inset-top, 0px) + 6px)",
+          left: "50%",
+          transform: "translateX(-50%)",
+        }}
       >
-        ◇ OgunArena ◇
+        ◇
       </Link>
     </div>
   );
