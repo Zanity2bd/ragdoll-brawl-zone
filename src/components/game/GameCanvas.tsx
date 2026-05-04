@@ -583,6 +583,8 @@ function Joystick({
       className="relative rounded-full pointer-events-auto touch-none"
       // size scales with viewport so it never feels too small or too big
       style={{
+        width: "clamp(110px, 28vw, 160px)",
+        height: "clamp(110px, 28vw, 160px)",
         background: `radial-gradient(circle at 50% 45%, color-mix(in oklab, ${color} 55%, transparent) 0%, color-mix(in oklab, ${color} 28%, transparent) 60%, color-mix(in oklab, ${color} 12%, transparent) 100%)`,
         border: `3px solid color-mix(in oklab, ${color} 75%, transparent)`,
         boxShadow: `0 6px 20px color-mix(in oklab, ${color} 35%, transparent), inset 0 -4px 12px rgba(0,0,0,0.25), inset 0 2px 6px rgba(255,255,255,0.15)`,
