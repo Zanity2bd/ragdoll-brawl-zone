@@ -720,6 +720,7 @@ export class GameEngine {
       unibeamFireT: 0,
       invisT: 0, webSnareT: 0, speedBoostT: 0,
       bamfCombo: null,
+      swing: null,
     };
   }
 
