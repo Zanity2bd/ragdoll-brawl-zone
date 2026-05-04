@@ -2903,16 +2903,20 @@ export class GameEngine {
       const lean = targetAng * (1 - ease);
       return blendPose(flat, stand, ease, lean);
     }
+    // Use the rendered facing (sign of facingT) so pose direction stays in sync
+    // with the yaw scale we apply at draw time. Both flip at the same instant
+    // (when facingT crosses zero), avoiding any pose/render desync.
+    const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
     const base = f.flying
-      ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, f.facing, FIGHTER_H)
-      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, f.facing, FIGHTER_H);
+      ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, renderFacing, FIGHTER_H)
+      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, renderFacing, FIGHTER_H);
     let posed: Pose;
     if (f.meleeKind) {
       const m = f.move;
       const wp = m.windup / f.meleeDur;
       const ap = m.active / f.meleeDur;
       const prog = f.meleeT / f.meleeDur;
-      posed = computeAttackPose(base, f.meleeKind, prog, { wp, ap }, f.facing);
+      posed = computeAttackPose(base, f.meleeKind, prog, { wp, ap }, renderFacing);
     } else {
       posed = base;
     }
