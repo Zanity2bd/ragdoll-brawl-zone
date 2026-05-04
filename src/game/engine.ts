@@ -3573,12 +3573,20 @@ export class GameEngine {
     for (const b of this.beams) {
       const ex = b.x + Math.cos(b.angle) * b.length;
       const ey = b.y + Math.sin(b.angle) * b.length;
-      if (!this.lowPower) { ctx.shadowBlur = 22; ctx.shadowColor = "oklch(0.85 0.20 60)"; }
-      ctx.strokeStyle = "oklch(0.92 0.20 60)";
-      ctx.lineWidth = 5;
+      // Red palette for Superman heat vision; gold/orange for Homelander/Iron Man.
+      const isRed = !!b.red;
+      const outerColor = isRed
+        ? (b.overload ? "oklch(0.55 0.30 25)" : "oklch(0.70 0.28 25)")
+        : (b.overload ? "oklch(0.78 0.28 28)" : "oklch(0.92 0.20 60)");
+      const coreColor = isRed ? "oklch(0.92 0.18 22)" : "oklch(0.99 0.05 80)";
+      const glowColor = isRed ? "oklch(0.65 0.28 25)" : "oklch(0.85 0.20 60)";
+      const widthMul = b.overload ? 1.8 : 1;
+      if (!this.lowPower) { ctx.shadowBlur = 22 * widthMul; ctx.shadowColor = glowColor; }
+      ctx.strokeStyle = outerColor;
+      ctx.lineWidth = 5 * widthMul;
       ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(ex, ey); ctx.stroke();
-      ctx.strokeStyle = "oklch(0.99 0.05 80)";
-      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = coreColor;
+      ctx.lineWidth = 1.6 * widthMul;
       ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(ex, ey); ctx.stroke();
       ctx.shadowBlur = 0;
     }
