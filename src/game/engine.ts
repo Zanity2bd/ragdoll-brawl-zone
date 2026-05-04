@@ -2820,7 +2820,10 @@ export class GameEngine {
       }
 
       // Landing impact: squash + dust scaled by impact velocity
+      // Decay landing-squash sprite timer every frame
+      f.justLandedT = Math.max(0, f.justLandedT - dt);
       if (landedOn && wasAirborne) {
+        f.justLandedT = 0.10;
         const impact = Math.max(0, Math.min(1, landingVy / 800));
         f.wobble.squashV -= 4 + impact * 7;     // squash on land
         f.wobble.bvy += 80 * impact;             // body dips
