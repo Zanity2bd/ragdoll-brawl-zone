@@ -1103,14 +1103,20 @@ export class GameEngine {
   private resolveSuperPunch(attacker: Fighter, targetId: PlayerId) {
     const t = targetId === "p1" ? this.p1 : this.p2;
     if (t.id === attacker.id) return;
+    if (t.iframeT > 0) return;
     t.hp = Math.max(0, t.hp - SUPER_DAMAGE);
     t.hitFlash = 0.55;
     const dir = Math.sign(t.x - attacker.x) || attacker.facing;
-    t.vx = dir * SUPER_KB_X;
-    t.vy = SUPER_KB_Y;
+    const kbScale = t.ragdollImmuneT > 0 ? 0.6 : 1;
+    t.vx = dir * SUPER_KB_X * kbScale;
+    t.vy = SUPER_KB_Y * kbScale;
     t.onGround = false;
-    t.ragdollT = SUPER_RAGDOLL;
+    // Super always ragdolls (cinematic), but slightly shorter if anti-chain active
+    t.ragdollT = t.ragdollImmuneT > 0 ? SUPER_RAGDOLL * 0.6 : SUPER_RAGDOLL;
     t.ragdollPhase = 0;
+    t.ragdollAng = 0;
+    t.ragdollAV = dir * 6 + (Math.random() - 0.5) * 3;
+    t.ragdollEnergy = 1;
     this.shake = Math.max(this.shake, SUPER_SHAKE);
     this.hitstopT = SUPER_HITSTOP;
     this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
