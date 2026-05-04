@@ -562,13 +562,14 @@ function PlayerControls({
   const isHeatwave = p.name === "Heatwave";
   const isNightcrawler = p.name === "Nightcrawler";
   const isFlash = p.name === "The Flash";
-  // Flash: HOLD activates Time Freeze (power1) instead of basic melee.
-  const onSpecial = isFlash && onPower1
-    ? onPower1
+  // HOLD joystick = signature setup ability for characters that have a power1.
+  const useHoldPower1 = !!onPower1 && p.hasPower1 && (isFlash || p.name === "Superman" || p.name === "Iron Man" || isHeatwave);
+  const onSpecial = useHoldPower1
+    ? onPower1!
     : (isHeatwave ? onFire : isNightcrawler ? onTele : onPunch);
-  const cd = isFlash ? p.power1Cd : isHeatwave ? p.fireCd : isNightcrawler ? p.teleCd : p.meleeCd;
-  const max = isFlash ? p.power1CdMax : isHeatwave ? p.fireCdMax : isNightcrawler ? p.teleCdMax : p.meleeCdMax;
-  const label = isFlash ? "Time Freeze" : isHeatwave ? "Fire" : isNightcrawler ? "Teleport" : p.meleeName;
+  const cd = useHoldPower1 ? p.power1Cd : isHeatwave ? p.fireCd : isNightcrawler ? p.teleCd : p.meleeCd;
+  const max = useHoldPower1 ? p.power1CdMax : isHeatwave ? p.fireCdMax : isNightcrawler ? p.teleCdMax : p.meleeCdMax;
+  const label = useHoldPower1 ? p.power1Name : isHeatwave ? "Fire" : isNightcrawler ? "Teleport" : p.meleeName;
   return (
     <div className={`flex items-end ${side === "right" ? "flex-row-reverse" : ""}`}>
       <Joystick
