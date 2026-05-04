@@ -803,8 +803,64 @@ export class GameEngine {
       sw.life -= dt; sw.r += (sw.rMax - sw.r) * Math.min(1, dt * 4);
     }
     this.shockwaves = this.shockwaves.filter(s => s.life > 0);
-    for (const b of this.beams) b.life -= dt;
+    for (const b of this.beams) {
+      if (freezeActive && b.owner !== this.timeFreezer) continue;
+      b.life -= dt;
+    }
     this.beams = this.beams.filter(b => b.life > 0);
+
+    // ---- Lightning orbs (Flash power 2): chase target, deal damage on contact ----
+    for (const lo of this.lightnings) {
+      if (freezeActive && lo.owner !== this.timeFreezer) continue;
+      const tgt = lo.target === "p1" ? this.p1 : this.p2;
+      lo.life -= dt;
+      lo.phase += dt * 14;
+      // Steer toward target
+      const dx = tgt.x - lo.x, dy = (tgt.y + 40) - lo.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const desiredVx = (dx / d) * LIGHTNING_SPEED;
+      const desiredVy = (dy / d) * LIGHTNING_SPEED;
+      const k = Math.min(1, sdt * LIGHTNING_TURN);
+      lo.vx += (desiredVx - lo.vx) * k;
+      lo.vy += (desiredVy - lo.vy) * k;
+      lo.x += lo.vx * sdt; lo.y += lo.vy * sdt;
+      // Trail particles
+      if (!this.lowPower && Math.random() < 0.7) {
+        this.particles.push({
+          x: lo.x + (Math.random() - 0.5) * 6, y: lo.y + (Math.random() - 0.5) * 6,
+          vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40,
+          life: 0.35, maxLife: 0.35,
+          color: "oklch(0.95 0.18 95)", size: 2 + Math.random() * 1.5,
+        });
+      }
+      // Collision with target
+      const hit = Math.abs(dx) < FIGHTER_W && lo.y > tgt.y && lo.y < tgt.y + FIGHTER_H;
+      if (hit && tgt.iframeT <= 0 && tgt.downedT <= 0 && tgt.getUpT <= 0) {
+        if (!lo.hit) {
+          lo.hit = true;
+          tgt.hp = Math.max(0, tgt.hp - LIGHTNING_DMG);
+          tgt.hitFlash = 0.3;
+          tgt.vx += Math.sign(lo.vx || 1) * 220;
+          tgt.vy = -180; tgt.onGround = false;
+          this.shake = Math.max(this.shake, 14);
+          this.impactFlash = Math.max(this.impactFlash, 0.7);
+          this.burst(lo.x, lo.y, "oklch(0.95 0.18 95)", 22);
+          this.shockwaves.push({ x: lo.x, y: lo.y, r: 6, rMax: 110, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.18 95)" });
+          Sfx.play("punch", 0.7);
+          if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
+        } else {
+          // Latched: tick chip damage
+          lo.tickAcc += dt;
+          if (lo.tickAcc >= 0.25) {
+            lo.tickAcc = 0;
+            tgt.hp = Math.max(0, tgt.hp - LIGHTNING_TICK_DMG);
+            tgt.hitFlash = 0.18;
+            if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
+          }
+        }
+      }
+    }
+    this.lightnings = this.lightnings.filter(lo => lo.life > 0 && lo.x > -100 && lo.x < W + 100 && lo.y > -100 && lo.y < H + 100);
 
     this.shake = Math.max(0, this.shake - dt * 40);
 
