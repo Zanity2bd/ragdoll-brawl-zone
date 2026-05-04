@@ -265,14 +265,17 @@ const COYOTE_T = 0.10;             // post-leave grace
 const JUMP_BUFFER_T = 0.13;        // press buffer
 const MAX_AIR_JUMPS = 1;            // double-jump for non-flyers
 const FIGHTER_H = 90;
-// Universal basic kick — light, snappy melee available to all ground fighters.
-const KICK_WINDUP = 0.07;
-const KICK_ACTIVE = 0.09;
-const KICK_RECOVER = 0.18;
-const KICK_DUR = KICK_WINDUP + KICK_ACTIVE + KICK_RECOVER;
-const KICK_CD = 0.55;
-const KICK_RANGE = 56;
-const KICK_DMG = 1;
+// Universal basic punch — sprite-driven (frames 11–14 + recovery 15).
+// Speed up frames 12–13 (impact window) for snap.
+const PUNCH_F11 = 0.10;  // windup    -> frame 10
+const PUNCH_F12 = 0.05;  // impact 1  -> frame 11 (hit active)
+const PUNCH_F13 = 0.05;  // impact 2  -> frame 12 (hit active)
+const PUNCH_F14 = 0.10;  // followthr -> frame 13
+const PUNCH_DUR = PUNCH_F11 + PUNCH_F12 + PUNCH_F13 + PUNCH_F14;
+const PUNCH_RECOVERY = 0.10;  // frame 14, no hit
+const PUNCH_CD = 0.55;
+const PUNCH_RANGE = 60;
+const PUNCH_DMG = 1;
 const FIGHTER_W = 30;
 
 const FIRE_CD = 0.8;
