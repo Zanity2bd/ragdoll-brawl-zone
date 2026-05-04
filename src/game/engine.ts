@@ -397,6 +397,8 @@ export class GameEngine {
   private smokeClouds: SmokeCloud[] = [];
   // One-shot VO flags — reset each match.
   private homelanderVoPlayed = false;
+  // Deferred SFX cues — fire at engine-time T (survives pause; cleared on reset).
+  private pendingSfx: Array<{ at: number; name: import("./sfx").SfxName; vol: number }> = [];
   // Global time-freeze (Flash power 1): freezes everything except the freezer.
   private timeFreezeT = 0;
   private timeFreezer: PlayerId | null = null;
@@ -630,6 +632,7 @@ export class GameEngine {
     this.magmas = [];
     this.smokeClouds = [];
     this.homelanderVoPlayed = false;
+    this.pendingSfx = [];
     this.timeFreezeT = 0; this.timeFreezer = null;
     this.teleTargeting = null;
     this.slowmoT = 0; this.slowmoMode = null;
@@ -1094,6 +1097,14 @@ export class GameEngine {
 
   private update(dt: number) {
     this.elapsed += dt;
+    // Fire any deferred SFX whose scheduled engine-time has passed.
+    if (this.pendingSfx.length) {
+      const due = this.pendingSfx.filter(p => p.at <= this.elapsed);
+      if (due.length) {
+        for (const p of due) Sfx.play(p.name, p.vol);
+        this.pendingSfx = this.pendingSfx.filter(p => p.at > this.elapsed);
+      }
+    }
     this.impactFlash = Math.max(0, this.impactFlash - dt * 4);
 
     // Hitstop freezes simulation for a few frames (render still runs)
@@ -2266,10 +2277,11 @@ export class GameEngine {
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
-    // Homelander laser SFX — plays once per match, on his first laser cast.
+    // Homelander laser SFX — plays once per match, synced to the beam's first
+    // active frame (after the windup) so the audio onset matches the visual.
     if (m.kind === "laserSweep" && f.skin.id === "homelander" && !this.homelanderVoPlayed) {
       this.homelanderVoPlayed = true;
-      Sfx.play("homelanderLaser", 1.0);
+      this.pendingSfx.push({ at: this.elapsed + m.windup, name: "homelanderLaser", vol: 1.0 });
     }
     // Flash blink: instantly teleport behind opponent
     if (m.kind === "phaseStrike") {
