@@ -131,6 +131,13 @@ interface Fighter {
   power2Cd: number;
   // Time-freeze status (set by Flash's Time Freeze power on opponent)
   freezeT: number;
+  // Generic stun (Solar Flare etc.) — locks input but body stays upright
+  stunT: number;
+  // Superman Heat-Vision: sustained beam time remaining
+  heatVisionT: number;
+  // Iron Man Unibeam: charge → fire phases
+  unibeamChargeT: number;
+  unibeamFireT: number;
 }
 
 interface Projectile {
