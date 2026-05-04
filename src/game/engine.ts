@@ -2508,6 +2508,23 @@ export class GameEngine {
         }
       }
 
+      // Top-land on solid props (cars, crates, vending, etc.) — buildings too,
+      // unless the fighter is dropping into the doorway.
+      if (!f.flying) {
+        for (const p of this.props) {
+          if (p.destroyed) continue;
+          const feet = f.y + FIGHTER_H;
+          const prevFeet = prevY + FIGHTER_H;
+          const hw = FIGHTER_W / 2;
+          const overX = f.x + hw > p.x && f.x - hw < p.x + p.w;
+          if (!overX) continue;
+          if (f.vy >= 0 && prevFeet <= p.y + 2 && feet >= p.y && f.dropT <= 0) {
+            f.y = p.y - FIGHTER_H; f.vy = 0; f.onGround = true;
+            landedOn = { x: p.x, y: p.y, w: p.w, h: p.h, kind: "cover" };
+          }
+        }
+      }
+
       // Landing impact: squash + dust scaled by impact velocity
       if (landedOn && wasAirborne) {
         const impact = Math.max(0, Math.min(1, landingVy / 800));
