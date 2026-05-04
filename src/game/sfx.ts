@@ -3,11 +3,12 @@
 
 import bamfUrl from "@/assets/sfx/bamf.mp3";
 import homelanderLaserUrl from "@/assets/audio/homelander-laser-sfx.mp3";
+import attackImpactUrl from "@/assets/sfx/attack-impact.mp3";
 
 export type SfxName =
   | "punch" | "heavy" | "boom" | "laser" | "shock"
   | "whoosh" | "chirp" | "thud" | "jab" | "blip"
-  | "bamf" | "homelanderLaser";
+  | "bamf" | "homelanderLaser" | "attackImpact";
 
 class SfxEngine {
   private ctx: AudioContext | null = null;
@@ -43,6 +44,7 @@ class SfxEngine {
       // Lazy-load sample assets
       this.loadSample("bamf", bamfUrl);
       this.loadSample("homelanderLaser", homelanderLaserUrl);
+      this.loadSample("attackImpact", attackImpactUrl);
     } catch { /* no audio */ }
   }
 
@@ -230,6 +232,21 @@ class SfxEngine {
         src.connect(g); g.connect(this.sfxGain);
         src.start(t);
         setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch { /* */ } }, (sample.duration + 0.1) * 1000);
+        break;
+      }
+      case "attackImpact": {
+        const sample = this.samples["attackImpact"];
+        if (!sample) break;
+        const src = ctx.createBufferSource();
+        src.buffer = sample;
+        // Random pitch variation so repeated combo hits don't sound identical.
+        src.playbackRate.value = 0.92 + Math.random() * 0.18;
+        const g = ctx.createGain(); g.gain.value = 0.85 * vol;
+        src.connect(g); g.connect(this.sfxGain);
+        src.start(t);
+        // Cut after 0.45s so it stays a snappy impact, not a long sustained note.
+        try { src.stop(t + 0.45); } catch { /* */ }
+        setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch { /* */ } }, 500);
         break;
       }
     }
