@@ -499,7 +499,8 @@ export class GameEngine {
   private introT = 1.5;
   private phase: "intro" | "fight" | "ko" = "intro";
   private winner: PlayerId | null = null;
-
+  private koCinematicT = 0;
+  private koFocus: { x: number; y: number } | null = null;
   // Smoothed camera that frames both fighters and zooms in for closeups.
   private camX = W / 2;
   private camY = GROUND_Y - 180;
