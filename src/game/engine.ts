@@ -173,11 +173,71 @@ export class GameEngine {
     this.reset();
   }
 
-  configure(mapId: MapId, p1Skin: SkinId, p2Skin: SkinId) {
+  configure(mapId: MapId, p1Skin: SkinId, p2Skin: SkinId, opts?: { cpu?: boolean; difficulty?: import("./ai").Difficulty }) {
     this.mapId = mapId;
     this.p1Skin = p1Skin;
     this.p2Skin = p2Skin;
+    if (opts) {
+      this.cpuEnabled = !!opts.cpu;
+      this.cpuDifficulty = opts.difficulty ?? this.cpuDifficulty;
+    }
     this.reset();
+    if (this.cpuEnabled) {
+      // Lazy import to avoid circular type issues at top-level.
+      const { CpuController } = require("./ai") as typeof import("./ai");
+      this.cpu = new CpuController(this, "p2", this.cpuDifficulty);
+    } else {
+      this.cpu = null;
+    }
+  }
+
+  setDifficulty(d: import("./ai").Difficulty) {
+    this.cpuDifficulty = d;
+    this.cpu?.setDifficulty(d);
+  }
+
+  isCpuEnabled() { return this.cpuEnabled; }
+
+  // ---- AI helpers ----
+  getFighterRect(id: PlayerId) {
+    const f = id === "p1" ? this.p1 : this.p2;
+    return {
+      x: f.x, y: f.y, vx: f.vx, vy: f.vy,
+      onGround: f.onGround, facing: f.facing,
+      meleeKind: f.meleeKind, hp: f.hp,
+    };
+  }
+
+  getSkinIdFor(id: PlayerId): SkinId {
+    return (id === "p1" ? this.p1 : this.p2).skin.id;
+  }
+
+  // Returns horizontal distance to nearest hostile projectile heading at `id`,
+  // or null if none.
+  nearestProjectileTowards(id: PlayerId): number | null {
+    const f = id === "p1" ? this.p1 : this.p2;
+    let best: number | null = null;
+    for (const pr of this.projectiles) {
+      if (pr.owner === id) continue;
+      const dx = f.x - pr.x;
+      // Only count projectiles moving toward us
+      if (Math.sign(pr.vx) !== Math.sign(dx) && pr.vx !== 0) continue;
+      const ad = Math.abs(dx);
+      if (best == null || ad < best) best = ad;
+    }
+    return best;
+  }
+
+  // AI-driven teleport: skip the slow-mo aim flow.
+  aiTeleportTo(id: PlayerId, sx: number, sy: number) {
+    const f = id === "p1" ? this.p1 : this.p2;
+    if (f.teleCd > 0 || f.teleporting) return;
+    f.teleCd = TELE_CD;
+    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
+    f.x = Math.max(40, Math.min(W - 40, sx));
+    f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy));
+    f.vx = 0; f.vy = 0; f.teleporting = false;
+    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 32);
   }
 
   reset() {
