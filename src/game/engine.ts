@@ -2374,6 +2374,7 @@ export class GameEngine {
       // ---- Spider-Man Web Swing: pendulum physics ----
       const sw = f.swing;
       sw.t += ldt;
+      if (f.jumpBufferT > 0) f.jumpBufferT = Math.max(0, f.jumpBufferT - ldt);
       // Steering: left/right input pumps the pendulum (like a child on a swing)
       let pump = 0;
       if (intent.left) pump -= 1;
