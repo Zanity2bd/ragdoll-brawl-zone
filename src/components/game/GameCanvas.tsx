@@ -104,12 +104,14 @@ export function GameCanvas() {
     const down = (e: KeyboardEvent) => {
       const m = KEY_MAP[e.code];
       if (!m) return;
+      if (m.p === "p2" && cpuEnabledRef.current) return;
       e.preventDefault();
       engine.setIntent(m.p, { [m.action]: true });
     };
     const up = (e: KeyboardEvent) => {
       const m = KEY_MAP[e.code];
       if (!m) return;
+      if (m.p === "p2" && cpuEnabledRef.current) return;
       if (m.action === "left" || m.action === "right") {
         engine.setIntent(m.p, { [m.action]: false });
       }
@@ -117,17 +119,53 @@ export function GameCanvas() {
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
 
+    // Convert CSS coords -> stage coords (cover-fit, mirrors engine.render).
+    const toStage = (cx: number, cy: number) => {
+      const r = canvas.getBoundingClientRect();
+      const W = 1280, H = 720;
+      const scale = Math.max(r.width / W, r.height / H);
+      const offX = (r.width - W * scale) / 2;
+      const offY = (r.height - H * scale) / 2;
+      return { sx: (cx - r.left - offX) / scale, sy: (cy - r.top - offY) / scale };
+    };
+
+    // Tap on opponent fighter triggers P1's special.
+    const tryTapOpponent = (cx: number, cy: number) => {
+      if (!cpuEnabledRef.current) return false;
+      if (engine.isTeleTargeting()) return false;
+      const opp = engine.getFighterRect("p2");
+      if (!opp) return false;
+      const { sx, sy } = toStage(cx, cy);
+      // Generous hitbox around the stickman (W=30, H=90).
+      const hitW = 70, hitH = 120;
+      if (Math.abs(sx - opp.x) < hitW / 2 && sy > opp.y - 15 && sy < opp.y + hitH) {
+        const p1Name = engine.getSkinIdFor("p1");
+        if (p1Name === "heatwave") engine.pressFire("p1");
+        else if (p1Name === "nightcrawler") engine.pressTeleport("p1");
+        else engine.pressMelee("p1");
+        return true;
+      }
+      return false;
+    };
+
     const click = (e: MouseEvent) => {
       const r = canvas.getBoundingClientRect();
-      engine.handlePointer(e.clientX - r.left, e.clientY - r.top);
+      if (engine.isTeleTargeting()) {
+        engine.handlePointer(e.clientX - r.left, e.clientY - r.top);
+        return;
+      }
+      tryTapOpponent(e.clientX, e.clientY);
     };
     const touch = (e: TouchEvent) => {
-      if (!engine.isTeleTargeting()) return;
       const t = e.touches[0] || e.changedTouches[0];
       if (!t) return;
-      e.preventDefault();
-      const r = canvas.getBoundingClientRect();
-      engine.handlePointer(t.clientX - r.left, t.clientY - r.top);
+      if (engine.isTeleTargeting()) {
+        e.preventDefault();
+        const r = canvas.getBoundingClientRect();
+        engine.handlePointer(t.clientX - r.left, t.clientY - r.top);
+        return;
+      }
+      if (tryTapOpponent(t.clientX, t.clientY)) e.preventDefault();
     };
     canvas.addEventListener("click", click);
     canvas.addEventListener("touchstart", touch, { passive: false });
