@@ -463,6 +463,116 @@ export function computeAttackPose(
       out.headOffsetY -= 1;
       break;
     }
+    case "supermanPunch": {
+      // Single-arm hero punch — lead arm fully extended toward camera with
+      // exaggerated foreshortening, body torqued behind it for power. Trail
+      // arm whipped back along the body for streamline silhouette.
+      const hipY = walk.hipY;
+      // Wind-up: cock the lead fist back behind the head; sweep into a forward
+      // straight cross during active; settle slightly forward in recovery.
+      let stretch = 1, reach = 30, height = -2;
+      if (inWind) {
+        // arm pulled back & up — body coiled like a spring
+        const k = wt;
+        const handX = -facing * (10 + 6 * k);
+        const handY = sy - 2 - 6 * k;
+        const elbowX = -facing * (12 + 4 * k);
+        const elbowY = sy - 2 - 2 * k;
+        if (facing > 0) { out.armR = [sxF, sy, elbowX, elbowY, handX, handY]; out.handR = [handX, handY]; }
+        else { out.armL = [sxF, sy, elbowX, elbowY, handX, handY]; out.handL = [handX, handY]; }
+      } else if (inActive) {
+        // Foreshortened: as `at` goes 0→1, the arm appears to extend toward
+        // the camera. Elbow pushed forward so segment lengths compress.
+        stretch = 1 + at * 0.85;       // up to 1.85x
+        reach = (32 + 18 * at) * stretch;
+        height = -3 + at * 4;
+        const handX = facing * reach;
+        const handY = sy + height;
+        const elbowX = facing * (reach * 0.55);
+        const elbowY = sy + height * 0.4 + 2;
+        if (facing > 0) { out.armR = [sxF, sy, elbowX, elbowY, handX, handY]; out.handR = [handX, handY]; }
+        else { out.armL = [sxF, sy, elbowX, elbowY, handX, handY]; out.handL = [handX, handY]; }
+      } else {
+        setStrike(34, 4);
+      }
+      // Trail arm pinned along the spine for aerodynamic silhouette
+      const trailHandX = -facing * (14 + (inActive ? at * 8 : 0));
+      const trailHandY = sy + 18;
+      if (facing > 0) {
+        out.armL = [-sxF, sy, -facing * 6, sy + 8, trailHandX, trailHandY];
+        out.handL = [trailHandX, trailHandY];
+      } else {
+        out.armR = [-sxF, sy, -facing * 6, sy + 8, trailHandX, trailHandY];
+        out.handR = [trailHandX, trailHandY];
+      }
+      // Legs trailed straight back like a missile
+      const back = -facing;
+      const trailReach = 30 + (inActive ? at * 10 : 0);
+      const legY = hipY + 20;
+      const footL: [number, number] = [back * trailReach - 4, legY + 2];
+      const footR: [number, number] = [back * trailReach + 4, legY - 2];
+      out.legL = [-3, hipY, back * 14 - 3, hipY + 10, footL[0], footL[1]];
+      out.legR = [3, hipY, back * 14 + 3, hipY + 10, footR[0], footR[1]];
+      out.footL = footL; out.footR = footR;
+      // Body torque: lean strongly into the punch; head pushed forward of shoulders.
+      const torque = inActive ? 0.32 + at * 0.12 : (inWind ? -0.10 * wt : 0.32);
+      out.lean = (walk.lean ?? 0) + facing * torque;
+      out.shoulderRoll = (walk.shoulderRoll ?? 0) + facing * 0.18;
+      out.headOffsetY = walk.headOffsetY - 2 + (inActive ? at * 1.5 : 0);
+      break;
+    }
+    case "homelanderPunch": {
+      // Two-fist superman dive: BOTH arms locked together out front in a
+      // wedge formation. Heavier, thicker silhouette. Body tucked tight.
+      const hipY = walk.hipY;
+      let reach = 28;
+      if (inWind) {
+        // Both fists drawn back to chest, elbows flared
+        const k = wt;
+        const cx1 = -facing * (4 + 4 * k);
+        const cy1 = sy + 2;
+        out.armL = [-4, sy, -facing * 8, sy + 4, cx1 - 4, cy1];
+        out.armR = [4, sy, -facing * 8, sy + 4, cx1 + 4, cy1];
+        out.handL = [cx1 - 4, cy1];
+        out.handR = [cx1 + 4, cy1];
+      } else if (inActive) {
+        // BOTH arms thrust forward together, foreshortened toward the camera.
+        const stretch = 1 + at * 0.9;
+        reach = (32 + 20 * at) * stretch;
+        const handY = sy - 2;
+        const elbowReach = reach * 0.55;
+        // Fists side-by-side (slight vertical stagger reads as 3D depth)
+        const handAX = facing * reach;
+        const handAY = handY - 2;
+        const handBX = facing * (reach - 4);
+        const handBY = handY + 4;
+        out.armR = [4, sy, facing * elbowReach + 2, sy + 1, handAX, handAY];
+        out.armL = [-4, sy, facing * elbowReach - 2, sy + 3, handBX, handBY];
+        out.handR = [handAX, handAY];
+        out.handL = [handBX, handBY];
+      } else {
+        const handY = sy + 2;
+        out.armR = [4, sy, facing * 14, sy + 2, facing * 28, handY - 2];
+        out.armL = [-4, sy, facing * 14, sy + 4, facing * 24, handY + 4];
+        out.handR = [facing * 28, handY - 2];
+        out.handL = [facing * 24, handY + 4];
+      }
+      // Legs streamed straight back, tight together
+      const back = -facing;
+      const trailReach = 32 + (inActive ? at * 12 : 0);
+      const legY = hipY + 18;
+      const footL: [number, number] = [back * trailReach - 3, legY + 2];
+      const footR: [number, number] = [back * trailReach + 3, legY - 2];
+      out.legL = [-3, hipY, back * 16 - 2, hipY + 8, footL[0], footL[1]];
+      out.legR = [3, hipY, back * 16 + 2, hipY + 8, footR[0], footR[1]];
+      out.footL = footL; out.footR = footR;
+      // Heavier forward lean — committing his whole body weight
+      const torque = inActive ? 0.40 + at * 0.10 : (inWind ? -0.06 * wt : 0.40);
+      out.lean = (walk.lean ?? 0) + facing * torque;
+      out.shoulderRoll = (walk.shoulderRoll ?? 0) + facing * 0.06;
+      out.headOffsetY = walk.headOffsetY - 1 + (inActive ? at * 1 : 0);
+      break;
+    }
   }
   return out;
 }

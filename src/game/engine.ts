@@ -250,13 +250,13 @@ const HOVER_RATE = 1.6;          // hover frequency (Hz-ish)
 
 // Super-Punch
 const SUPER_CD = 4.5;
-const SUPER_DAMAGE = 46;
-const SUPER_KB_X = 1280;
-const SUPER_KB_Y = -460;
-const SUPER_HITSTOP = 0.34;
-const SUPER_SLOWMO = 0.7;
-const SUPER_RAGDOLL = 1.3;
-const SUPER_SHAKE = 52;
+const SUPER_DAMAGE = 26;          // nerfed from 46 — was a near one-shot
+const SUPER_KB_X = 1180;
+const SUPER_KB_Y = -440;
+const SUPER_HITSTOP = 0.30;
+const SUPER_SLOWMO = 0.55;
+const SUPER_RAGDOLL = 1.15;
+const SUPER_SHAKE = 46;
 
 // Hulk Rage Frenzy (cinematic video special)
 const FRENZY_CD = 18;          // long cooldown — high impact special
@@ -1962,14 +1962,32 @@ export class GameEngine {
           size: 2 + Math.random() * 3,
         });
       }
-      // Leading-edge glow particle (front of fist)
+      // Leading-edge glow particle (front of fist) — bigger during the active
+      // strike phase to sell the foreshortened punch coming at the camera.
       if (!this.lowPower) {
+        const u = Math.min(1, d.t / Math.max(0.001, d.dur));
+        const punchGlow = u > 0.35 ? Math.sin(Math.min(1, (u - 0.35) / 0.65) * Math.PI) : 0;
+        const glowSize = 5 + Math.random() * 3 + punchGlow * 10;
+        // Position glow at the projected fist tip
+        const fistX = f.x + f.facing * (24 + punchGlow * 22);
+        const fistY = f.y + FIGHTER_H * 0.42 - punchGlow * 4;
         this.particles.push({
-          x: f.x + f.facing * 22, y: f.y + FIGHTER_H * 0.42,
+          x: fistX, y: fistY,
           vx: f.vx * 0.15, vy: f.vy * 0.15,
           life: 0.25, maxLife: 0.25,
-          color: "oklch(0.98 0.05 80)", size: 5 + Math.random() * 3,
+          color: punchGlow > 0.4 ? "oklch(0.99 0.10 75)" : "oklch(0.98 0.05 80)",
+          size: glowSize,
         });
+        // Concentric "shockwave-in-air" puff while accelerating
+        if (punchGlow > 0.5 && Math.random() < 0.5) {
+          this.particles.push({
+            x: fistX - f.facing * 8, y: fistY,
+            vx: -f.vx * 0.05, vy: 0,
+            life: 0.35, maxLife: 0.35,
+            color: "oklch(0.92 0.04 230)",
+            size: 8 + Math.random() * 6,
+          });
+        }
       }
       if (u >= 1 && !d.landed) {
         d.landed = true;
@@ -3078,7 +3096,16 @@ export class GameEngine {
       ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, renderFacing, FIGHTER_H)
       : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, renderFacing, FIGHTER_H);
     let posed: Pose;
-    if (f.meleeKind) {
+    if (f.dash) {
+      // Cinematic super-punch pose during the dash. Superman = 1-hand cross,
+      // Homelander = 2-hand wedge. Use the dash progress as the timing so
+      // the wind-up coils early and the foreshortened strike peaks at impact.
+      const kind = f.skin.id === "homelander" ? "homelanderPunch" : "supermanPunch";
+      const u = Math.min(1, f.dash.t / Math.max(0.001, f.dash.dur));
+      // Heavily front-loaded: most of the dash is the swing toward the camera.
+      const wp = 0.35, ap = 0.55;
+      posed = computeAttackPose(base, kind, u, { wp, ap }, renderFacing);
+    } else if (f.meleeKind) {
       const m = f.move;
       const wp = m.windup / f.meleeDur;
       const ap = m.active / f.meleeDur;
@@ -3534,6 +3561,64 @@ export class GameEngine {
 
     // Switch to screen space for full-screen overlays
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+    // Speed lines: dense radial streaks during a super-punch dash to convey
+    // the camera tearing through the air with the fighter. Centered on the
+    // attacker's screen-space position, fading at the edges.
+    const dasher = this.p1.dash ? this.p1 : (this.p2.dash ? this.p2 : null);
+    if (dasher && dasher.dash) {
+      const u = Math.min(1, dasher.dash.t / Math.max(0.001, dasher.dash.dur));
+      // Ramp in fast, peak through mid-dash, fade just before impact
+      const intensity = Math.sin(Math.min(1, u * 1.15) * Math.PI);
+      const cxS = (dasher.x - this.camX) * worldScale + cw / 2;
+      const cyS = (dasher.y + FIGHTER_H * 0.45 - this.camY) * worldScale + ch / 2;
+      const facing = dasher.facing;
+      const maxR = Math.hypot(cw, ch) * 0.65;
+      // Tinted black wash from the edges inward (vignette darken to focus eye)
+      const wash = ctx.createRadialGradient(cxS, cyS, maxR * 0.18, cxS, cyS, maxR);
+      wash.addColorStop(0, "rgba(0,0,0,0)");
+      wash.addColorStop(1, `rgba(0,0,0,${(0.45 * intensity).toFixed(3)})`);
+      ctx.fillStyle = wash;
+      ctx.fillRect(0, 0, cw, ch);
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const lineCount = this.lowPower ? 36 : 90;
+      const seed = Math.floor(this.elapsed * 60);
+      for (let i = 0; i < lineCount; i++) {
+        // Pseudo-random but stable per-frame angle around the attacker
+        const r = ((i * 9301 + 49297 + seed * 73) % 233280) / 233280;
+        // Bias angles toward the direction of travel: clamp around facing
+        const spread = 1.05;
+        const ang = (r - 0.5) * Math.PI * spread + (facing > 0 ? 0 : Math.PI);
+        // Distance from center: start near the fighter, extend past the edge
+        const r0 = 90 + ((i * 7919) % 220);
+        const len = 80 + ((i * 6151) % 260) + intensity * 180;
+        const sx = cxS + Math.cos(ang) * r0;
+        const sy = cyS + Math.sin(ang) * r0;
+        const ex = sx + Math.cos(ang) * len;
+        const ey = sy + Math.sin(ang) * len;
+        const a = (0.18 + 0.55 * intensity) * (0.4 + 0.6 * (1 - r0 / 320));
+        ctx.strokeStyle = i % 7 === 0
+          ? `rgba(255,235,170,${a.toFixed(3)})`
+          : `rgba(235,240,255,${(a * 0.7).toFixed(3)})`;
+        ctx.lineWidth = i % 11 === 0 ? 2.2 : 1.1;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Chromatic-aberration tinted ring around the focal point for "punch-in" feel
+      if (!this.lowPower) {
+        const ring = ctx.createRadialGradient(cxS, cyS, 30, cxS, cyS, 200);
+        ring.addColorStop(0, `rgba(255,210,140,${(0.18 * intensity).toFixed(3)})`);
+        ring.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = ring;
+        ctx.fillRect(0, 0, cw, ch);
+      }
+    }
 
     // Impact flash vignette
     if (this.impactFlash > 0) {
