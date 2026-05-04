@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GameEngine, type GameSnapshot, type PlayerId } from "@/game/engine";
 import { type MapId } from "@/game/maps";
 import { type SkinId } from "@/game/skins";
-import { MapSelect } from "./MapSelect";
+import { Lobby } from "./Lobby";
 import { SkinSelect } from "./SkinSelect";
 
 const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" }> = {
