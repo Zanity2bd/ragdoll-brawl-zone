@@ -458,11 +458,14 @@ export function computeFlightPose(
   const goingDown = vy > 40;
   const cruising = horiz > 0.4;
 
-  // Pitch: at full cruise the body lays nearly horizontal forward.
-  // Vertical motion adds nose-up / nose-down lean.
-  const cruisePitch = horiz * 0.85;
-  const verticalPitch = (goingUp ? -0.22 : 0) + (goingDown ? 0.28 : 0);
-  const pitch = facing * (0.04 + cruisePitch) + verticalPitch * facing;
+  // Pitch: gentle forward lean that grows with speed. Capped well below
+  // horizontal — a fully flat body reads as ragdoll, not flight. Vertical
+  // motion adds a small nose-up / nose-down tilt on top.
+  const cruisePitch = horiz * 0.32;             // max ~18° from cruise
+  const verticalPitch = (goingUp ? -0.10 : 0) + (goingDown ? 0.14 : 0);
+  // Single facing multiplier — do NOT add a baseline lean (was 0.04 baked in).
+  const rawPitch = (cruisePitch + verticalPitch) * facing;
+  const pitch = Math.max(-0.5, Math.min(0.5, rawPitch)); // hard clamp ~28°
 
   // Idle hover bob (disabled when flying fast).
   const bobAmp = (1 - horiz) * 2.2;

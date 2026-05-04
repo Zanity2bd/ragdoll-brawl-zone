@@ -1666,46 +1666,56 @@ export class GameEngine {
     f.hoverPhase += dt * HOVER_RATE * Math.PI * 2;
 
     // ---- Cape & body secondary motion (spring-mass) ----
-    // Drives a heavier, more grounded feel during turns, accel changes, and impacts.
+    // Heavier feel: lower stiffness + higher damping → slower, weightier swing.
+    // Bigger turn whip & impact kicks so direction changes read clearly.
     {
       const turn = f.facing !== f.prevFacing ? 1 : 0;
       f.prevFacing = f.facing;
-      // New impact this frame? (hitFlash spikes upward on hit)
+      // Detect a fresh impact this frame (hitFlash jumps upward on hit).
       const impact = f.hitFlash > f.prevHitFlash + 0.05 ? Math.min(1, f.hitFlash) : 0;
       f.prevHitFlash = f.hitFlash;
 
-      // Cape horizontal swing — wind drag + spring back to rest, plus turn whip & impact kick
-      const windTarget = -f.facing * Math.min(18, Math.abs(f.vx) * 0.045) + (f.flying ? -f.facing * 6 : 0);
-      const k = 42;     // stiffness
-      const c = 6.5;    // damping
+      // ---- Cape horizontal swing ----
+      // Wind drag target: trails opposite the velocity direction. Stronger
+      // weighting to vx so the cape lags behind during sprints / flight.
+      const windTarget = -Math.sign(f.vx || f.facing) * Math.min(22, Math.abs(f.vx) * 0.06)
+                       + (f.flying ? -f.facing * 7 : 0);
+      const k = 26;     // softer stiffness → slower, heavier swing (~0.8s period)
+      const c = 4.2;    // underdamped so it overshoots & settles (visible weight)
       const accel = (windTarget - f.capeSwingX) * k - f.capeSwingV * c;
       f.capeSwingV += accel * dt;
-      // Turn whip: snap a strong impulse opposite the new facing
-      if (turn) f.capeSwingV += -f.facing * 38;
-      // Impact: shove cape back from impact direction
-      if (impact > 0) f.capeSwingV += -f.facing * 26 * impact;
+      // Turn whip — fires opposite the NEW facing for that "snap & trail" moment.
+      if (turn) f.capeSwingV += -f.facing * 56;
+      // Impact kick — heavier shove + a small lift jolt (handled below via capeLift).
+      if (impact > 0) f.capeSwingV += -f.facing * 38 * impact;
       f.capeSwingX += f.capeSwingV * dt;
-      f.capeSwingX = Math.max(-26, Math.min(26, f.capeSwingX));
+      f.capeSwingX = Math.max(-30, Math.min(30, f.capeSwingX));
 
-      // Cape lift (flares up under fast horizontal motion / flight)
-      const liftTarget = Math.min(1, Math.abs(f.vx) / 360 + (f.flying ? 0.35 : 0));
-      f.capeLift += (liftTarget - f.capeLift) * Math.min(1, dt * 5);
+      // ---- Cape lift (flares up under fast motion / flight / impact) ----
+      const liftTarget = Math.min(1, Math.abs(f.vx) / 320 + (f.flying ? 0.4 : 0));
+      // Asymmetric lerp: rises fast, settles slowly → cape "puffs" then sinks
+      const liftRate = liftTarget > f.capeLift ? 6 : 2.2;
+      f.capeLift += (liftTarget - f.capeLift) * Math.min(1, dt * liftRate);
+      if (impact > 0) f.capeLift = Math.min(1, f.capeLift + 0.35 * impact);
 
-      // Body translation lag (impacts only, decays fast)
-      const bk = 80, bc = 11;
+      // ---- Body translation lag (impacts only) ----
+      // Heavier mass: lower k, more damping → small but slow recoil shove.
+      const bk = 55, bc = 9;
       const ba = (0 - f.bodyLagX) * bk - f.bodyLagV * bc;
       f.bodyLagV += ba * dt;
-      if (impact > 0) f.bodyLagV += -f.facing * 90 * impact;
+      if (impact > 0) f.bodyLagV += -f.facing * 130 * impact;
       f.bodyLagX += f.bodyLagV * dt;
+      f.bodyLagX = Math.max(-12, Math.min(12, f.bodyLagX));
 
-      // Body roll from turn whip & impact (radians)
-      const rk = 60, rc = 9;
+      // ---- Body roll from turn whip & impact ----
+      // Underdamped so the torso visibly rocks, then settles.
+      const rk = 38, rc = 6.5;
       const ra = (0 - f.bodyRoll) * rk - f.bodyRollV * rc;
       f.bodyRollV += ra * dt;
-      if (turn) f.bodyRollV += f.facing * 5.5;
-      if (impact > 0) f.bodyRollV += -f.facing * 4.2 * impact;
+      if (turn) f.bodyRollV += f.facing * 7.5;
+      if (impact > 0) f.bodyRollV += -f.facing * 6.0 * impact;
       f.bodyRoll += f.bodyRollV * dt;
-      f.bodyRoll = Math.max(-0.55, Math.min(0.55, f.bodyRoll));
+      f.bodyRoll = Math.max(-0.45, Math.min(0.45, f.bodyRoll));
     }
 
 
@@ -3504,8 +3514,19 @@ export class GameEngine {
 
     if (skin.cape) {
       ctx.save();
+      // Counter-rotate the cape so it hangs/trails in WORLD space (gravity + wind),
+      // not perpendicular to a pitched body. We pivot at the shoulders.
+      const bodyAngle = pose.lean + (ghost ? 0 : f.bodyRoll);
+      ctx.translate(0, shoulderY - 2);
+      ctx.rotate(-bodyAngle);
+      // Cape's own hang angle in world space: gravity pulls down, wind pushes
+      // opposite the facing direction proportional to speed.
+      const windAngle = -f.facing * Math.min(0.9, Math.abs(f.vx) / 520) + (f.flying ? -f.facing * 0.15 : 0);
+      ctx.rotate(windAngle);
+      ctx.translate(0, -(shoulderY - 2));
+
       const wobble = Math.sin(f.walkPhase * 0.6) * 2;
-      const sw = f.capeSwingX + wobble;        // bottom horizontal sway
+      const sw = f.capeSwingX + wobble;        // bottom horizontal sway (spring)
       const swMid = sw * 0.55;                 // anchored near shoulders
       const lift = f.capeLift * 14;            // raises bottom edge in flight/sprints
       const curl = -Math.sign(sw) * Math.min(6, Math.abs(sw) * 0.35); // trailing whip curl
