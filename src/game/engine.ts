@@ -673,6 +673,24 @@ export class GameEngine {
     this.slowmoT = Math.max(0, this.slowmoT - dt);
     if (this.slowmoT <= 0) this.slowmoMode = null;
 
+    // ---- Time Freeze (Flash power 1): freezer ticks normally; everything else paused ----
+    this.timeFreezeT = Math.max(0, this.timeFreezeT - dt);
+    if (this.timeFreezeT <= 0) this.timeFreezer = null;
+    const freezeActive = this.timeFreezeT > 0 && this.timeFreezer !== null;
+    const isFrozenFor = (id: PlayerId): boolean => {
+      const f = id === "p1" ? this.p1 : this.p2;
+      return freezeActive && id !== this.timeFreezer && f.freezeT > 0;
+    };
+    // Decay per-fighter freeze when global freeze ends (or freezer changes)
+    if (!freezeActive) {
+      this.p1.freezeT = 0;
+      this.p2.freezeT = 0;
+    } else {
+      // freezeT mirrors timeFreezeT for the affected fighter
+      const victim = this.timeFreezer === "p1" ? this.p2 : this.p1;
+      victim.freezeT = this.timeFreezeT;
+    }
+
     if (this.phase === "intro") {
       this.introT -= dt;
       if (this.introT <= 0) this.phase = "fight";
@@ -681,18 +699,25 @@ export class GameEngine {
     // Ambient floor bubbles removed — kept the screen too busy.
     const maxParticles = this.lowPower ? 120 : 400;
 
-    if (this.cpu && this.phase === "fight") {
+    if (this.cpu && this.phase === "fight" && !isFrozenFor("p2")) {
       this.cpu.update(dt, this.buildSnapshot());
     }
 
     if (this.phase === "fight") {
-      this.updateFighter(this.p1, sdt);
-      this.updateFighter(this.p2, sdt);
-      if (!this.p1.ragdollT && !this.p1.downedT && !this.p1.getUpT) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
-      if (!this.p2.ragdollT && !this.p2.downedT && !this.p2.getUpT) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
+      // Power cooldowns ALWAYS tick (so even frozen fighters' cooldowns recover normally — but realistically only the freezer is acting).
+      this.p1.power1Cd = Math.max(0, this.p1.power1Cd - dt);
+      this.p1.power2Cd = Math.max(0, this.p1.power2Cd - dt);
+      this.p2.power1Cd = Math.max(0, this.p2.power1Cd - dt);
+      this.p2.power2Cd = Math.max(0, this.p2.power2Cd - dt);
+
+      if (!isFrozenFor("p1")) this.updateFighter(this.p1, sdt);
+      if (!isFrozenFor("p2")) this.updateFighter(this.p2, sdt);
+      if (!this.p1.ragdollT && !this.p1.downedT && !this.p1.getUpT && !isFrozenFor("p1")) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
+      if (!this.p2.ragdollT && !this.p2.downedT && !this.p2.getUpT && !isFrozenFor("p2")) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
       this.resolveMelees();
     }
     for (const f of [this.p1, this.p2]) {
+      if (freezeActive && f.id !== this.timeFreezer) continue;
       f.facingT += (f.facing - f.facingT) * Math.min(1, dt * 8);
     }
 
