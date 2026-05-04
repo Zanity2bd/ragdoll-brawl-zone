@@ -317,6 +317,39 @@ export class GameEngine {
   pressTeleport(p: PlayerId) { this.intents[p].teleport = true; }
   pressJump(p: PlayerId) { this.intents[p].jump = true; }
   pressMelee(p: PlayerId) { this.intents[p].melee = true; }
+  setAirSteering(p: PlayerId, ax: number, ay: number) {
+    this.intents[p].ax = Math.max(-1, Math.min(1, ax));
+    this.intents[p].ay = Math.max(-1, Math.min(1, ay));
+  }
+  pressToggleFlight(p: PlayerId) { this.intents[p].toggleFlight = true; }
+
+  /** Returns true if the fighter can fly. */
+  canFly(p: PlayerId) { return (p === "p1" ? this.p1 : this.p2).canFly; }
+  isFlying(p: PlayerId) { return (p === "p1" ? this.p1 : this.p2).flying; }
+
+  /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
+  pressSuperDash(attacker: PlayerId): boolean {
+    const a = attacker === "p1" ? this.p1 : this.p2;
+    const t = attacker === "p1" ? this.p2 : this.p1;
+    if (!a.canFly || !a.flying) return false;
+    if (a.dash || a.meleeKind || a.ragdollT > 0) return false;
+    if (a.superCd > 0) return false;
+    a.superCd = SUPER_CD;
+    const x0 = a.x, y0 = a.y + FIGHTER_H * 0.4;
+    const tx = t.x, ty = t.y + FIGHTER_H * 0.4;
+    // Curved path: control point offset perpendicular to (dx,dy) for arc.
+    const dx = tx - x0, dy = ty - y0;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const arc = Math.min(220, len * 0.35) * (a.id === "p1" ? -1 : 1);
+    const cx = (x0 + tx) / 2 + nx * arc;
+    const cy = (y0 + ty) / 2 + ny * arc - 60; // bias upward for cinematic arc
+    const dur = Math.max(0.32, Math.min(0.7, len / 1500));
+    a.dash = { t: 0, dur, x0, y0, cx, cy, tx, ty, target: t.id, landed: false };
+    a.facing = dx >= 0 ? 1 : -1;
+    Sfx.play("whoosh", 0.9);
+    return true;
+  }
 
   handlePointer(canvasX: number, canvasY: number) {
     if (!this.teleTargeting) return;
