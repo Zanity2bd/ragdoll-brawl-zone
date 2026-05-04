@@ -250,13 +250,13 @@ const HOVER_RATE = 1.6;          // hover frequency (Hz-ish)
 
 // Super-Punch
 const SUPER_CD = 4.5;
-const SUPER_DAMAGE = 46;
-const SUPER_KB_X = 1280;
-const SUPER_KB_Y = -460;
-const SUPER_HITSTOP = 0.34;
-const SUPER_SLOWMO = 0.7;
-const SUPER_RAGDOLL = 1.3;
-const SUPER_SHAKE = 52;
+const SUPER_DAMAGE = 26;          // nerfed from 46 — was a near one-shot
+const SUPER_KB_X = 1180;
+const SUPER_KB_Y = -440;
+const SUPER_HITSTOP = 0.30;
+const SUPER_SLOWMO = 0.55;
+const SUPER_RAGDOLL = 1.15;
+const SUPER_SHAKE = 46;
 
 // Hulk Rage Frenzy (cinematic video special)
 const FRENZY_CD = 18;          // long cooldown — high impact special
