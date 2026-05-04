@@ -375,6 +375,8 @@ export class GameEngine {
       coyoteT: 0, jumpBufferT: 0, jumpHeldT: 0, airJumps: 0,
       wobble: createWobble(),
       dash: null,
+      frenzy: null,
+      frenzyCd: 0,
     };
   }
 
