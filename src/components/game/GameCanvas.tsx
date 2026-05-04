@@ -189,6 +189,9 @@ export function GameCanvas() {
     return () => {
       engine.stop();
       window.removeEventListener("resize", resize);
+      window.removeEventListener("orientationchange", resize);
+      vv?.removeEventListener("resize", resize);
+      vv?.removeEventListener("scroll", resize);
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       document.removeEventListener("visibilitychange", onVis);
