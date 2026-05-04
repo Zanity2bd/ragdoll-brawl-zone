@@ -4134,7 +4134,7 @@ export class GameEngine {
    */
   private getEyeWorldPos(f: Fighter): { x: number; y: number } {
     const pose = this.poseFor(f);
-    const headR = 10;
+    const headR = 12;
     const headY = headR + 2 + pose.headOffsetY;
     const ex = f.facingT * 3;
     const ey = headY;
