@@ -2216,7 +2216,7 @@ export class GameEngine {
     }
   }
 
-  private resolveMelees() {
+  private resolveMelees(dt: number = 1 / 60) {
     for (const f of [this.p1, this.p2]) {
       if (!f.meleeKind || f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) continue;
       // Bamf Combo drives its own scripted hits; skip standard melee resolution.
