@@ -202,6 +202,11 @@ export class GameEngine {
   private phase: "intro" | "fight" | "ko" = "intro";
   private winner: PlayerId | null = null;
 
+  // Smoothed camera that frames both fighters and zooms in for closeups.
+  private camX = W / 2;
+  private camY = GROUND_Y - 180;
+  private camZoom = 1.6;
+
   public onSnapshot: ((s: GameSnapshot) => void) | null = null;
 
   private cpuEnabled = false;
