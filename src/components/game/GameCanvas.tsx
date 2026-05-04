@@ -139,6 +139,9 @@ export function GameCanvas() {
       // Generous hitbox around the stickman (W=30, H=90).
       const hitW = 70, hitH = 120;
       if (Math.abs(sx - opp.x) < hitW / 2 && sy > opp.y - 15 && sy < opp.y + hitH) {
+        if (engine.canFly("p1") && engine.isFlying("p1")) {
+          if (engine.pressSuperDash("p1")) return true;
+        }
         const p1Name = engine.getSkinIdFor("p1");
         if (p1Name === "heatwave") engine.pressFire("p1");
         else if (p1Name === "nightcrawler") engine.pressTeleport("p1");
@@ -206,6 +209,20 @@ export function GameCanvas() {
           onOpenAudio={() => setAudioOpen(o => !o)}
           muted={muted}
         />
+      )}
+      {screen === "fight" && engine && engine.canFly("p1") && (
+        <button
+          onPointerDown={(e) => { e.preventDefault(); engine.pressToggleFlight("p1"); }}
+          className="absolute left-2 bottom-36 z-30 w-14 h-14 rounded-full border-2 backdrop-blur-md bg-background/40 font-mono text-xl flex items-center justify-center pointer-events-auto active:scale-95 transition-transform"
+          style={{
+            borderColor: "oklch(0.85 0.18 210)",
+            color: "oklch(0.85 0.18 210)",
+            boxShadow: `0 0 18px -4px oklch(0.85 0.18 210)`,
+          }}
+          aria-label="Toggle flight"
+        >
+          ✈
+        </button>
       )}
       <AudioPanel
         open={audioOpen && screen === "fight"}

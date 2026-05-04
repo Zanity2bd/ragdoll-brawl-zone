@@ -66,6 +66,21 @@ interface Fighter {
   // afterimage trail
   trail: Array<{ x: number; y: number; phase: number; vx: number; onGround: boolean; vy: number; facing: 1 | -1; pose: Pose }>;
   skin: Skin;
+  // flight
+  canFly: boolean;
+  flying: boolean;
+  hoverPhase: number;
+  superCd: number;
+  // super-dash
+  dash: null | {
+    t: number;
+    dur: number;
+    x0: number; y0: number;
+    cx: number; cy: number;       // bezier control
+    tx: number; ty: number;       // target
+    target: PlayerId;
+    landed: boolean;
+  };
 }
 
 interface Projectile {
@@ -105,6 +120,11 @@ export interface Intents {
   fire: boolean;
   teleport: boolean;
   melee: boolean;
+  // Analog flight steering, -1..1. When flying, replaces ground walk input.
+  ax: number;
+  ay: number;
+  // Toggle flight on/off (edge-triggered)
+  toggleFlight: boolean;
 }
 
 const W = 1280;
@@ -122,6 +142,23 @@ const FIRE_CD = 0.8;
 const TELE_CD = 4.0;
 const FIRE_DAMAGE = 12;
 const FIRE_KNOCKBACK = 320;
+
+// Flight tuning
+const FLY_ACCEL = 1300;          // px/s^2 toward target velocity
+const FLY_MAX = 360;             // top airspeed (px/s)
+const FLY_DAMP = 2.6;            // velocity damping per second when no input
+const HOVER_AMP = 4.5;           // pixels of idle hover bob
+const HOVER_RATE = 1.6;          // hover frequency (Hz-ish)
+
+// Super-Punch
+const SUPER_CD = 4.5;
+const SUPER_DAMAGE = 38;
+const SUPER_KB_X = 980;
+const SUPER_KB_Y = -380;
+const SUPER_HITSTOP = 0.26;
+const SUPER_SLOWMO = 0.45;
+const SUPER_RAGDOLL = 1.0;
+const SUPER_SHAKE = 36;
 
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
@@ -149,8 +186,8 @@ export class GameEngine {
   ];
 
   private intents: Record<PlayerId, Intents> = {
-    p1: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false },
-    p2: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false },
+    p1: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false, ax: 0, ay: 0, toggleFlight: false },
+    p2: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false, ax: 0, ay: 0, toggleFlight: false },
   };
 
   private teleTargeting: PlayerId | null = null;
@@ -259,6 +296,7 @@ export class GameEngine {
 
   private makeFighter(id: PlayerId, x: number, skin: Skin): Fighter {
     const move = MOVES[skin.id];
+    const canFly = skin.id === "homelander" || skin.id === "superman";
     return {
       id, x, y: GROUND_Y - FIGHTER_H,
       vx: 0, vy: 0, facing: 1, facingT: 1,
@@ -270,6 +308,8 @@ export class GameEngine {
       meleeHitMask: new Set(),
       ragdollT: 0, ragdollPhase: 0, slowedT: 0,
       trail: [],
+      canFly, flying: false, hoverPhase: 0, superCd: 0,
+      dash: null,
     };
   }
 
@@ -294,6 +334,39 @@ export class GameEngine {
   pressTeleport(p: PlayerId) { this.intents[p].teleport = true; }
   pressJump(p: PlayerId) { this.intents[p].jump = true; }
   pressMelee(p: PlayerId) { this.intents[p].melee = true; }
+  setAirSteering(p: PlayerId, ax: number, ay: number) {
+    this.intents[p].ax = Math.max(-1, Math.min(1, ax));
+    this.intents[p].ay = Math.max(-1, Math.min(1, ay));
+  }
+  pressToggleFlight(p: PlayerId) { this.intents[p].toggleFlight = true; }
+
+  /** Returns true if the fighter can fly. */
+  canFly(p: PlayerId) { return (p === "p1" ? this.p1 : this.p2).canFly; }
+  isFlying(p: PlayerId) { return (p === "p1" ? this.p1 : this.p2).flying; }
+
+  /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
+  pressSuperDash(attacker: PlayerId): boolean {
+    const a = attacker === "p1" ? this.p1 : this.p2;
+    const t = attacker === "p1" ? this.p2 : this.p1;
+    if (!a.canFly || !a.flying) return false;
+    if (a.dash || a.meleeKind || a.ragdollT > 0) return false;
+    if (a.superCd > 0) return false;
+    a.superCd = SUPER_CD;
+    const x0 = a.x, y0 = a.y + FIGHTER_H * 0.4;
+    const tx = t.x, ty = t.y + FIGHTER_H * 0.4;
+    // Curved path: control point offset perpendicular to (dx,dy) for arc.
+    const dx = tx - x0, dy = ty - y0;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;
+    const arc = Math.min(220, len * 0.35) * (a.id === "p1" ? -1 : 1);
+    const cx = (x0 + tx) / 2 + nx * arc;
+    const cy = (y0 + ty) / 2 + ny * arc - 60; // bias upward for cinematic arc
+    const dur = Math.max(0.32, Math.min(0.7, len / 1500));
+    a.dash = { t: 0, dur, x0, y0, cx, cy, tx, ty, target: t.id, landed: false };
+    a.facing = dx >= 0 ? 1 : -1;
+    Sfx.play("whoosh", 0.9);
+    return true;
+  }
 
   handlePointer(canvasX: number, canvasY: number) {
     if (!this.teleTargeting) return;
@@ -436,6 +509,7 @@ export class GameEngine {
       this.intents[id].teleport = false;
       this.intents[id].jump = false;
       this.intents[id].melee = false;
+      this.intents[id].toggleFlight = false;
     }
   }
 
@@ -443,9 +517,11 @@ export class GameEngine {
     f.fireCd = Math.max(0, f.fireCd - dt);
     f.teleCd = Math.max(0, f.teleCd - dt);
     f.meleeCd = Math.max(0, f.meleeCd - dt);
+    f.superCd = Math.max(0, f.superCd - dt);
     f.hitFlash = Math.max(0, f.hitFlash - dt);
     f.attackAnim = Math.max(0, f.attackAnim - dt);
     f.slowedT = Math.max(0, f.slowedT - dt);
+    f.hoverPhase += dt * HOVER_RATE * Math.PI * 2;
 
     // Per-fighter slow (a-train flurry victim)
     const localScale = f.slowedT > 0 ? 0.25 : 1;
@@ -469,6 +545,49 @@ export class GameEngine {
       return;
     }
 
+    // Cinematic super-dash takes over kinematics until it lands.
+    if (f.dash) {
+      const d = f.dash;
+      d.t += dt;
+      const u = Math.min(1, d.t / d.dur);
+      // Quadratic bezier, eased.
+      const e = u * u * (3 - 2 * u); // smoothstep for cinematic curve
+      const om = 1 - e;
+      const px = om * om * d.x0 + 2 * om * e * d.cx + e * e * d.tx;
+      const py = om * om * d.y0 + 2 * om * e * d.cy + e * e * d.ty;
+      // Velocity (derivative) for trail / facing
+      f.vx = (px - f.x) / Math.max(0.001, dt);
+      f.vy = (py - f.y) / Math.max(0.001, dt);
+      f.x = px; f.y = py;
+      f.facing = (d.tx - d.x0) >= 0 ? 1 : -1;
+      f.onGround = false;
+      // Drop a dense afterimage trail every frame.
+      f.trail.push({
+        x: f.x, y: f.y, phase: f.walkPhase, vx: f.vx, vy: f.vy,
+        onGround: false, facing: f.facing, pose: this.poseFor(f),
+      });
+      const cap = this.lowPower ? 6 : 12;
+      while (f.trail.length > cap) f.trail.shift();
+      // Burst sparks
+      if (!this.lowPower && Math.random() < 0.85) {
+        this.particles.push({
+          x: f.x + (Math.random() - 0.5) * 18,
+          y: f.y + FIGHTER_H * 0.5 + (Math.random() - 0.5) * 18,
+          vx: -f.vx * 0.05 + (Math.random() - 0.5) * 60,
+          vy: -f.vy * 0.05 + (Math.random() - 0.5) * 60,
+          life: 0.45, maxLife: 0.45,
+          color: f.skin.glow, size: 2 + Math.random() * 2,
+        });
+      }
+      if (u >= 1 && !d.landed) {
+        d.landed = true;
+        this.resolveSuperPunch(f, d.target);
+        f.dash = null;
+        f.flying = true; // remain airborne after impact
+      }
+      return;
+    }
+
     const intent = this.intents[f.id];
 
     // Active melee progresses regardless of input
@@ -487,66 +606,128 @@ export class GameEngine {
       }
     }
 
+    // Edge-triggered flight toggle for flyers.
+    if (f.canFly && intent.toggleFlight && !f.meleeKind) {
+      f.flying = !f.flying;
+      if (f.flying) {
+        // Liftoff impulse for cinematic launch.
+        f.vy = -260;
+        f.onGround = false;
+        if (f.y > GROUND_Y - FIGHTER_H - 20) f.y = GROUND_Y - FIGHTER_H - 20;
+        this.burst(f.x, f.y + FIGHTER_H, f.skin.glow, 16);
+        Sfx.play("whoosh", 0.7);
+      } else {
+        // Soft drop — gravity will resume below.
+        Sfx.play("blip", 0.4);
+      }
+    }
+
     let move = 0;
     const locked = f.meleeKind && f.meleeKind !== "laserSweep";
-    if (!locked) {
-      if (intent.left) move -= 1;
-      if (intent.right) move += 1;
-    }
 
-    if (move !== 0) {
-      const target = move * MOVE_SPEED;
-      const a = ACCEL * ldt;
-      if (f.vx < target) f.vx = Math.min(target, f.vx + a);
-      else if (f.vx > target) f.vx = Math.max(target, f.vx - a);
-    } else {
-      const fr = FRICTION * ldt;
-      if (f.vx > 0) f.vx = Math.max(0, f.vx - fr);
-      else if (f.vx < 0) f.vx = Math.min(0, f.vx + fr);
-    }
-
-    if (!locked && intent.jump && f.onGround) { f.vy = -JUMP_V; f.onGround = false; }
-    if (!f.meleeKind) {
-      const canFire = f.skin.id === "heatwave";
-      const canTele = f.skin.id === "nightcrawler";
-      if (canFire && intent.fire && f.fireCd <= 0 && !f.teleporting) this.fire(f);
-      if (canTele && intent.teleport && f.teleCd <= 0 && !f.teleporting && this.teleTargeting === null) {
-        f.teleporting = true; f.teleCd = TELE_CD;
-        this.teleTargeting = f.id;
-        this.slowmoT = 5; this.slowmoMode = "tele";
+    if (f.flying && f.canFly) {
+      // ---- Flight kinematics: smooth analog steering with damping ----
+      // Combine analog axes with discrete left/right + jump (=up).
+      let ax = intent.ax;
+      let ay = intent.ay;
+      if (intent.left) ax -= 1;
+      if (intent.right) ax += 1;
+      if (intent.jump) ay -= 1;
+      const mag = Math.hypot(ax, ay);
+      if (mag > 1) { ax /= mag; ay /= mag; }
+      const targetVx = ax * FLY_MAX;
+      const targetVy = ay * FLY_MAX * 0.85;
+      const accel = FLY_ACCEL * ldt;
+      // Move vx toward target
+      if (f.vx < targetVx) f.vx = Math.min(targetVx, f.vx + accel);
+      else if (f.vx > targetVx) f.vx = Math.max(targetVx, f.vx - accel);
+      if (f.vy < targetVy) f.vy = Math.min(targetVy, f.vy + accel);
+      else if (f.vy > targetVy) f.vy = Math.max(targetVy, f.vy - accel);
+      // No input → exponential damping back toward natural hover
+      if (mag < 0.05) {
+        const k = Math.exp(-FLY_DAMP * ldt);
+        f.vx *= k; f.vy *= k;
       }
-      if (intent.melee && f.meleeCd <= 0) this.startMelee(f);
-    }
-
-    if (f.onGround) {
-      f.walkPhase += ldt * (1.6 + Math.abs(f.vx) * 0.018);
+      // Specials still allowed during flight
+      if (!f.meleeKind) {
+        const canFire = f.skin.id === "heatwave";
+        if (canFire && intent.fire && f.fireCd <= 0) this.fire(f);
+        if (intent.melee && f.meleeCd <= 0) this.startMelee(f);
+      }
+      f.walkPhase += ldt * 1.4;
+      f.x += f.vx * ldt;
+      f.y += f.vy * ldt;
+      // Stage bounds + ceiling
+      if (f.x < 30) { f.x = 30; f.vx = 0; }
+      if (f.x > W - 30) { f.x = W - 30; f.vx = 0; }
+      if (f.y < 30) { f.y = 30; f.vy = 0; }
+      // If they fly into the ground, stop and resume ground physics.
+      if (f.y + FIGHTER_H >= GROUND_Y) {
+        f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
+        f.flying = false;
+      } else {
+        f.onGround = false;
+      }
     } else {
-      f.walkPhase += ldt * 1.2;
-    }
+      // ---- Ground / standard physics ----
+      if (!locked) {
+        if (intent.left) move -= 1;
+        if (intent.right) move += 1;
+      }
+      if (move !== 0) {
+        const target = move * MOVE_SPEED;
+        const a = ACCEL * ldt;
+        if (f.vx < target) f.vx = Math.min(target, f.vx + a);
+        else if (f.vx > target) f.vx = Math.max(target, f.vx - a);
+      } else {
+        const fr = FRICTION * ldt;
+        if (f.vx > 0) f.vx = Math.max(0, f.vx - fr);
+        else if (f.vx < 0) f.vx = Math.min(0, f.vx + fr);
+      }
 
-    f.vy += GRAVITY * ldt;
-    f.x += f.vx * ldt;
-    f.y += f.vy * ldt;
+      if (!locked && intent.jump && f.onGround) { f.vy = -JUMP_V; f.onGround = false; }
+      if (!f.meleeKind) {
+        const canFire = f.skin.id === "heatwave";
+        const canTele = f.skin.id === "nightcrawler";
+        if (canFire && intent.fire && f.fireCd <= 0 && !f.teleporting) this.fire(f);
+        if (canTele && intent.teleport && f.teleCd <= 0 && !f.teleporting && this.teleTargeting === null) {
+          f.teleporting = true; f.teleCd = TELE_CD;
+          this.teleTargeting = f.id;
+          this.slowmoT = 5; this.slowmoMode = "tele";
+        }
+        if (intent.melee && f.meleeCd <= 0) this.startMelee(f);
+      }
 
-    if (f.x < 30) { f.x = 30; f.vx = 0; }
-    if (f.x > W - 30) { f.x = W - 30; f.vx = 0; }
+      if (f.onGround) {
+        f.walkPhase += ldt * (1.6 + Math.abs(f.vx) * 0.018);
+      } else {
+        f.walkPhase += ldt * 1.2;
+      }
 
-    if (f.y + FIGHTER_H >= GROUND_Y) {
-      f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
-    } else { f.onGround = false; }
+      f.vy += GRAVITY * ldt;
+      f.x += f.vx * ldt;
+      f.y += f.vy * ldt;
 
-    for (const pl of this.platforms) {
-      const prevY = f.y - f.vy * ldt;
-      const feet = f.y + FIGHTER_H;
-      const prevFeet = prevY + FIGHTER_H;
-      if (
-        f.vy >= 0 &&
-        prevFeet <= pl.y + 2 &&
-        feet >= pl.y &&
-        f.x + FIGHTER_W / 2 > pl.x &&
-        f.x - FIGHTER_W / 2 < pl.x + pl.w
-      ) {
-        f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
+      if (f.x < 30) { f.x = 30; f.vx = 0; }
+      if (f.x > W - 30) { f.x = W - 30; f.vx = 0; }
+
+      if (f.y + FIGHTER_H >= GROUND_Y) {
+        f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
+      } else { f.onGround = false; }
+
+      for (const pl of this.platforms) {
+        const prevY = f.y - f.vy * ldt;
+        const feet = f.y + FIGHTER_H;
+        const prevFeet = prevY + FIGHTER_H;
+        if (
+          f.vy >= 0 &&
+          prevFeet <= pl.y + 2 &&
+          feet >= pl.y &&
+          f.x + FIGHTER_W / 2 > pl.x &&
+          f.x - FIGHTER_W / 2 < pl.x + pl.w
+        ) {
+          f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
+        }
       }
     }
 
@@ -730,6 +911,35 @@ export class GameEngine {
     Sfx.play(m.hitSfx, 1);
     if (target.hp <= 0 && this.phase === "fight") {
       this.phase = "ko"; this.winner = f.id;
+    }
+  }
+
+  private resolveSuperPunch(attacker: Fighter, targetId: PlayerId) {
+    const t = targetId === "p1" ? this.p1 : this.p2;
+    if (t.id === attacker.id) return;
+    t.hp = Math.max(0, t.hp - SUPER_DAMAGE);
+    t.hitFlash = 0.4;
+    const dir = Math.sign(t.x - attacker.x) || attacker.facing;
+    t.vx = dir * SUPER_KB_X;
+    t.vy = SUPER_KB_Y;
+    t.onGround = false;
+    t.ragdollT = SUPER_RAGDOLL;
+    t.ragdollPhase = 0;
+    this.shake = Math.max(this.shake, SUPER_SHAKE);
+    this.hitstopT = SUPER_HITSTOP;
+    this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
+    this.slowmoMode = "impact";
+    this.impactFlash = 1;
+    this.burst(t.x, t.y + FIGHTER_H * 0.5, attacker.skin.glow, 48);
+    this.burst(t.x, t.y + FIGHTER_H * 0.5, "oklch(0.95 0.08 80)", 28);
+    this.shockwaves.push({
+      x: t.x, y: t.y + FIGHTER_H * 0.5, r: 10, rMax: 220,
+      life: 0.55, maxLife: 0.55, color: attacker.skin.glow,
+    });
+    Sfx.play("boom", 0.9);
+    Sfx.play("heavy", 0.8);
+    if (t.hp <= 0 && this.phase === "fight") {
+      this.phase = "ko"; this.winner = attacker.id;
     }
   }
 
