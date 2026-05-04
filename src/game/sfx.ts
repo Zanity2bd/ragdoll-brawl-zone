@@ -42,6 +42,7 @@ class SfxEngine {
       this.noise = buf;
       // Lazy-load sample assets
       this.loadSample("bamf", bamfUrl);
+      this.loadSample("homelanderVO", homelanderVoUrl);
     } catch { /* no audio */ }
   }
 
