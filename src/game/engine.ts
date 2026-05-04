@@ -138,7 +138,13 @@ interface Fighter {
   // Iron Man Unibeam: charge → fire phases
   unibeamChargeT: number;
   unibeamFireT: number;
+  // Batch-2 status
+  invisT: number;        // Batman smoke bomb invisibility / iframes
+  webSnareT: number;     // Spider-Man web snare lock
+  speedBoostT: number;   // A-Train Sonic Sprint
 }
+
+interface SmokeCloud { x: number; y: number; r: number; rMax: number; life: number; maxLife: number; }
 
 interface Projectile {
   owner: PlayerId;
@@ -287,6 +293,34 @@ const MAGMA_BLAST_CD = 5;
 const MAGMA_BLAST_DMG = 22;
 const MAGMA_BLAST_RADIUS = 110;
 
+// ---- Batch-2 powers: Batman / Spider-Man / A-Train / Nightcrawler ----
+// Batman
+const SMOKE_BOMB_CD = 9;
+const SMOKE_BOMB_DUR = 1.2;     // visual cloud duration
+const SMOKE_INVIS_DUR = 0.7;    // self-invisibility window (iframes)
+const SMOKE_RADIUS = 140;
+const BATARANG_VOLLEY_CD = 6;
+const BATARANG_VOLLEY_COUNT = 3;
+const BATARANG_VOLLEY_DMG = 9;
+// Spider-Man
+const WEB_SNARE_CD = 8;
+const WEB_SNARE_DUR = 1.6;
+const WEB_SNARE_PULL = 0.32;     // fraction of distance pulled toward attacker
+const WEB_ZIP_CD = 5;
+const WEB_ZIP_DMG = 20;
+// A-Train
+const SONIC_SPRINT_CD = 9;
+const SONIC_SPRINT_DUR = 1.6;
+const SONIC_SPRINT_MULT = 1.85;
+const COMPOUND_V_CD = 10;
+const COMPOUND_V_DMG = 30;
+// Nightcrawler
+const BAMF_CLOUD_CD = 8;
+const BAMF_CLOUD_RADIUS = 130;
+const BAMF_CLOUD_DMG = 14;
+const SHADOW_STRIKE_CD = 5;
+const SHADOW_STRIKE_DMG = 18;
+
 interface Missile {
   owner: PlayerId; target: PlayerId;
   x: number; y: number; vx: number; vy: number;
@@ -339,6 +373,7 @@ export class GameEngine {
   private missiles: Missile[] = [];
   private fireWalls: FireWall[] = [];
   private magmas: MagmaBlast[] = [];
+  private smokeClouds: SmokeCloud[] = [];
   // Global time-freeze (Flash power 1): freezes everything except the freezer.
   private timeFreezeT = 0;
   private timeFreezer: PlayerId | null = null;
@@ -501,6 +536,7 @@ export class GameEngine {
     this.missiles = [];
     this.fireWalls = [];
     this.magmas = [];
+    this.smokeClouds = [];
     this.timeFreezeT = 0; this.timeFreezer = null;
     this.teleTargeting = null;
     this.slowmoT = 0; this.slowmoMode = null;
@@ -541,6 +577,7 @@ export class GameEngine {
       heatVisionT: 0,
       unibeamChargeT: 0,
       unibeamFireT: 0,
+      invisT: 0, webSnareT: 0, speedBoostT: 0,
     };
   }
 
@@ -715,6 +752,105 @@ export class GameEngine {
         this.impactFlash = Math.max(this.impactFlash, 0.6);
         this.shake = Math.max(this.shake, 14);
         Sfx.play("boom", 0.7); Sfx.play("whoosh", 0.6);
+        return true;
+      }
+      case "batman": {
+        // Smoke Bomb — vanish cloud, brief invisibility/iframes, knockback dust ring
+        a.power1Cd = SMOKE_BOMB_CD;
+        a.invisT = SMOKE_INVIS_DUR;
+        a.iframeT = Math.max(a.iframeT, SMOKE_INVIS_DUR);
+        a.stunT = 0;
+        const cx = a.x, cy = a.y + 36;
+        this.smokeClouds.push({ x: cx, y: cy, r: 18, rMax: SMOKE_RADIUS, life: SMOKE_BOMB_DUR, maxLife: SMOKE_BOMB_DUR });
+        this.shockwaves.push({ x: cx, y: cy, r: 8, rMax: SMOKE_RADIUS, life: 0.45, maxLife: 0.45, color: "oklch(0.55 0.04 270)" });
+        // Push opponent if close
+        const dx = t.x - cx; const adist = Math.abs(dx);
+        if (adist < SMOKE_RADIUS && t.iframeT <= 0 && t.downedT <= 0) {
+          const dir = Math.sign(dx) || a.facing;
+          t.vx = dir * 360; t.vy = -200; t.onGround = false;
+          t.hp = Math.max(0, t.hp - 6); t.hitFlash = 0.4;
+        }
+        // Re-position attacker slightly behind opponent for stealth feel
+        const behind = -Math.sign(t.x - a.x) || a.facing;
+        a.x = Math.max(40, Math.min(W - 40, t.x + behind * 70));
+        a.facing = (-behind) as 1 | -1;
+        for (let i = 0; i < 28; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const sp = 60 + Math.random() * 160;
+          this.particles.push({
+            x: cx, y: cy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 40,
+            life: 0.7 + Math.random() * 0.4, maxLife: 1.1,
+            color: i % 2 === 0 ? "oklch(0.45 0.03 270)" : "oklch(0.6 0.04 270)",
+            size: 2.5 + Math.random() * 3,
+          });
+        }
+        this.shake = Math.max(this.shake, 12);
+        Sfx.play("whoosh", 0.8); Sfx.play("thud", 0.5);
+        return true;
+      }
+      case "spiderman": {
+        // Web Snare — locks opponent + pulls toward attacker
+        a.power1Cd = WEB_SNARE_CD;
+        if (t.iframeT <= 0 && t.downedT <= 0 && t.invisT <= 0) {
+          t.webSnareT = Math.max(t.webSnareT, WEB_SNARE_DUR);
+          t.slowedT = Math.max(t.slowedT, WEB_SNARE_DUR);
+          const dx = a.x - t.x;
+          t.x += dx * WEB_SNARE_PULL;
+          t.vx = 0; t.vy = Math.min(0, t.vy);
+          t.hp = Math.max(0, t.hp - 5); t.hitFlash = 0.35;
+        }
+        // Web tether visual via particles
+        for (let i = 0; i < 14; i++) {
+          const tt = i / 14;
+          this.particles.push({
+            x: a.x + (t.x - a.x) * tt, y: a.y + 28 + (t.y - a.y) * tt,
+            vx: 0, vy: 0, life: 0.4, maxLife: 0.4,
+            color: "oklch(0.95 0.02 240)", size: 1.5,
+          });
+        }
+        this.burst(t.x, t.y + 30, "oklch(0.95 0.02 240)", 18);
+        Sfx.play("whoosh", 0.7);
+        return true;
+      }
+      case "atrain": {
+        // Sonic Sprint — self speed buff + cleanse
+        a.power1Cd = SONIC_SPRINT_CD;
+        a.speedBoostT = SONIC_SPRINT_DUR;
+        a.stunT = 0; a.webSnareT = 0; a.slowedT = 0;
+        a.iframeT = Math.max(a.iframeT, 0.25);
+        this.burst(a.x, a.y + 40, "oklch(0.92 0.18 60)", 28);
+        this.shockwaves.push({ x: a.x, y: a.y + 40, r: 6, rMax: 90, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.16 80)" });
+        Sfx.play("whoosh", 0.9);
+        return true;
+      }
+      case "nightcrawler": {
+        // Bamf Cloud — purple AoE around self that damages and stuns nearby enemy
+        a.power1Cd = BAMF_CLOUD_CD;
+        const cx = a.x, cy = a.y + 36;
+        this.smokeClouds.push({ x: cx, y: cy, r: 18, rMax: BAMF_CLOUD_RADIUS, life: 0.9, maxLife: 0.9 });
+        this.shockwaves.push({ x: cx, y: cy, r: 10, rMax: BAMF_CLOUD_RADIUS, life: 0.5, maxLife: 0.5, color: "oklch(0.55 0.20 305)" });
+        const dx = t.x - cx, dy = (t.y + 40) - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist < BAMF_CLOUD_RADIUS && t.iframeT <= 0 && t.downedT <= 0) {
+          t.hp = Math.max(0, t.hp - BAMF_CLOUD_DMG);
+          t.hitFlash = 0.45;
+          t.stunT = Math.max(t.stunT, 0.7);
+          const dir = Math.sign(dx) || a.facing;
+          t.vx = dir * 240; t.vy = -160; t.onGround = false;
+          if (t.hp <= 0) { this.phase = "ko"; this.winner = a.id; }
+        }
+        for (let i = 0; i < 30; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const sp = 80 + Math.random() * 200;
+          this.particles.push({
+            x: cx, y: cy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 30,
+            life: 0.6 + Math.random() * 0.4, maxLife: 1,
+            color: i % 3 === 0 ? "oklch(0.7 0.22 305)" : "oklch(0.45 0.18 295)",
+            size: 2 + Math.random() * 3,
+          });
+        }
+        this.shake = Math.max(this.shake, 16);
+        Sfx.play("whoosh", 0.9); Sfx.play("thud", 0.6);
         return true;
       }
     }
