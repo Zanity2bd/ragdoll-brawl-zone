@@ -204,17 +204,26 @@ interface Debris {
   life: number; maxLife: number; color: string;
 }
 
-// Foreground decorative props that can be shattered by laser overload.
-// Walk-through (no collision) — purely visual/destructible flavor for each map.
+// Foreground props are SOLID destructible cover. They block movement & attacks
+// for grounded fighters; flying fighters pass over freely. Buildings expose a
+// walkable door so ground fighters can move through them. High-power piercing
+// abilities (laser overload) chain-damage them in sequence.
 type PropKind = "car" | "building" | "barrel" | "crate" | "lamppost" | "trashcan" | "vending" | "pillar";
 interface Prop {
   x: number; y: number; w: number; h: number;
   kind: PropKind;
   destroyed?: boolean;
+  hp: number;            // current health
+  maxHp: number;         // for damage visualization (cracks/flash)
+  damageFlash: number;   // 0..1 white flash when hit, decays each tick
   hue?: number;          // primary hue for body color
   accent?: number;       // accent hue (glow / trim / door)
-  hasDoor?: boolean;     // glowing walkable door highlight
-  seed?: number;         // for deterministic detail (windows, panels)
+  hasDoor?: boolean;     // building only: walkable door at base
+  doorX?: number;        // computed door rect (world coords)
+  doorW?: number;
+  doorY?: number;
+  doorH?: number;
+  seed?: number;
 }
 
 export interface Intents {
