@@ -1608,7 +1608,34 @@ export class GameEngine {
     }
   }
 
-  private buildSnapshot(): GameSnapshot {
+  /** Raycast against blocking platforms (cover blocks fully; thin platforms also block lasers). Returns nearest hit or null. */
+  private raycastPlatforms(sx: number, sy: number, angle: number, maxLen: number): { dist: number } | null {
+    const dx = Math.cos(angle), dy = Math.sin(angle);
+    let best: number | null = null;
+    for (const pl of this.platforms) {
+      // Slab method: ray vs AABB
+      const minX = pl.x, maxX = pl.x + pl.w;
+      const minY = pl.y, maxY = pl.y + pl.h;
+      let tmin = 0, tmax = maxLen;
+      if (Math.abs(dx) < 1e-6) {
+        if (sx < minX || sx > maxX) continue;
+      } else {
+        let t1 = (minX - sx) / dx, t2 = (maxX - sx) / dx;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+        if (tmin > tmax) continue;
+      }
+      if (Math.abs(dy) < 1e-6) {
+        if (sy < minY || sy > maxY) continue;
+      } else {
+        let t1 = (minY - sy) / dy, t2 = (maxY - sy) / dy;
+        if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+        tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+        if (tmin > tmax) continue;
+      }
+      if (tmin >= 0 && tmin <= maxLen && (best === null || tmin < best)) best = tmin;
+    }
+    return best === null ? null : { dist: best };
     return {
       p1: this.snapPlayer(this.p1),
       p2: this.snapPlayer(this.p2),
