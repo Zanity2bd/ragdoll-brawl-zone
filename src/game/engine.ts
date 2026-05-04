@@ -96,6 +96,16 @@ interface Fighter {
   flying: boolean;
   hoverPhase: number;
   superCd: number;
+  // Cape & body secondary motion (spring-driven). All values are visual only.
+  capeSwingX: number;   // current horizontal cape offset (px)
+  capeSwingV: number;   // velocity of capeSwingX
+  capeLift: number;     // how much the cape bottom flares up (0..1)
+  bodyLagX: number;     // small body translation lag for impacts
+  bodyLagV: number;     // velocity of bodyLagX
+  bodyRoll: number;     // extra torso roll from turns/impacts (rad)
+  bodyRollV: number;    // velocity for bodyRoll
+  prevFacing: 1 | -1;   // to detect turns
+  prevHitFlash: number; // to detect new impacts
   // ledge / drop-through state
   dropT: number;
   ledgeFlash: number;
