@@ -1039,7 +1039,9 @@ export class GameEngine {
   // ---------------- POSE ----------------
   private poseFor(f: Fighter): Pose {
     if (f.ragdollT > 0) return computeRagdollPose(f.ragdollPhase, FIGHTER_H);
-    const base = computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, f.facing, FIGHTER_H);
+    const base = f.flying
+      ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, f.facing, FIGHTER_H)
+      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, f.facing, FIGHTER_H);
     if (f.meleeKind) {
       const m = f.move;
       const wp = m.windup / f.meleeDur;
