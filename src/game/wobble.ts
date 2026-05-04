@@ -76,6 +76,7 @@ export function stepWobble(
   vx: number, vy: number,
   onGround: boolean, flying: boolean,
   lowPower: boolean,
+  agile: boolean = false,
 ) {
   if (dt <= 0) return;
   const h = Math.min(dt, 1 / 30);
