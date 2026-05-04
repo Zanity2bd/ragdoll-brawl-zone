@@ -1,69 +1,78 @@
-## Stickman Neon Duel — v1 (MVP)
+## Stickman Neon Duel — v2: Animated Maps, Hero Skins, Better Movement
 
-A 2D offline 1v1 stickman fighting game running fully in the browser. Two players share one device. Built on HTML5 Canvas with a custom game loop.
+Three upgrades on top of the current MVP. Everything stays offline, single-device, Canvas 2D.
 
-### What's in v1
+### 1. Animated Battle Maps (3 maps, picker before fight)
 
-**Characters**
-- Player 1: Hero — cyan neon stickman with glowing limbs
-- Player 2: Villain — magenta neon stickman with glowing limbs
-- Smooth limb animation for idle, run, jump, attack, hit, KO
+Add a **Map Select** screen between the landing page and the fight. Each map is a hand-drawn animated background rendered every frame on the canvas — no images, all procedural so it stays crisp and lightweight.
 
-**Movement**
-- Left / Right walk
-- Jump (with gravity + ground collision)
-- Facing flips toward opponent automatically
+- **Neon City Rooftop** — parallax skyline, scrolling neon billboards, blinking antenna lights, drifting smog particles, distant lightning flashes
+- **Cyber Dojo** — paper-lantern glow that pulses, falling cherry-blossom petals, koi-pond ripples in the foreground, bamboo silhouettes swaying
+- **Hell's Arena** — molten lava cracks that pulse orange, rising ember particles, chains swinging slowly in the background, occasional fireball arc across the sky
 
-**Abilities (2 for v1)**
-1. **Fire Blast** — projectile launched forward; deals damage on hit; short cooldown
-2. **Teleport** — triggers a brief slow-motion freeze; player picks a destination point (click/tap on desktop, tap on touch); longer cooldown
+Each map keeps the same playable geometry (ground + two floating platforms) so balance is unchanged. Only visuals/ambience differ. Map is picked once per match; "Rematch" reuses it, "Change map" returns to the picker.
 
-**Arena (1 map)**
-- Single dark neon arena: deep navy gradient background, glowing horizon line, one flat ground plane, two small floating platforms for vertical play
-- Subtle particle ambience (drifting neon dust)
+### 2. Skins — Marvel / DC / The Boys (stickman style)
 
-**Combat & feel**
-- Health system: each player starts at 100 HP
-- Hit flash + knockback on damage
-- Screen shake on heavy hits
-- Glow trails on projectiles, soft bloom on impacts
-- Slow-mo time dilation during teleport targeting
+A **Skin Select** step for each player after map select. Stickmen stay stickmen — no bitmap art — but each skin adds a small set of signature touches drawn procedurally:
 
-**UI**
-- Top bar: two health bars (Hero left, Villain right) with names
-- Bottom bar per player: ability buttons showing cooldown sweep
-- Center round banner: "FIGHT!" intro, "K.O." on win
-- End screen: winner name + "Rematch" button (instant restart)
-- Pause button (Esc / on-screen)
+- **Marvel**
+  - Spider-Man: red body, blue limbs, white eye-patches on head, web pattern faintly on torso
+  - Iron Man: red+gold armor plates as thicker line segments, glowing arc-reactor circle on chest
+  - Hulk: green body, slightly thicker limbs, torn-pant zigzag at thighs
+- **DC**
+  - Batman: black body, grey cowl ears (two triangles on head), yellow oval on chest, cape line trailing behind
+  - Superman: blue body, red cape behind, yellow S-shield on chest
+  - The Flash: red body, yellow lightning-bolt earpieces, motion streaks behind when running
+- **The Boys**
+  - Homelander: navy body, red+white cape, glowing white eyes (laser dots that flicker)
+  - Butcher: black coat outline (wider torso silhouette), dark beard dots on head
+  - A-Train: red body with white stripe down chest, exaggerated speed streaks while moving
 
-**Controls**
-- Auto-detects device:
-  - **Desktop (keyboard):**
-    - P1 Hero: `A` / `D` move, `W` jump, `F` Fire Blast, `G` Teleport (then click target)
-    - P2 Villain: `←` / `→` move, `↑` jump, `K` Fire Blast, `L` Teleport (then click target)
-  - **Touch (mobile/tablet):** on-screen left/right/jump buttons + 2 ability buttons per side, mirrored for each player. Teleport target chosen by tapping arena.
-- Controls legend shown on the start screen
+Each skin is just: body color, glow color, optional cape (extra polyline behind torso), optional head accent (cowl/eyes/mask), optional chest emblem (small shape), and an optional movement-streak flag. The stickman skeleton + animation system is shared.
 
-**Flow**
-- Start screen → Fight (best of 1) → K.O. → Rematch button → back to Fight
+A simple two-column "P1 picks / P2 picks" screen with arrow buttons to cycle skins, preview rendered live.
 
-### Visual style
-- Neon stickmen on a dark gradient arena
-- Glow via canvas shadowBlur, additive blending for projectiles
-- Minimalist HUD: thin lines, monospace labels, neon accents matching each player's color
+### 3. Smoother, Slower Movement + Real Walk Cycle
 
-### Technical notes
-- New route `/play` with the canvas game; `/` becomes a landing screen with a "Start Fight" button and brief controls/credits
-- Pure client-side: one `GameEngine` class with fixed-timestep update loop + render; entity classes for `Fighter`, `Projectile`, `Particle`; `InputManager` abstracts keyboard + touch into per-player intents
-- All rendering via Canvas 2D (no external game engine needed); no backend, no Lovable Cloud
-- Code organized under `src/game/` (engine, entities, abilities, input, render) and `src/components/game/` (HUD, touch controls, start/end overlays)
+Replace the current "swing the legs" placeholder with a proper 4-joint walk cycle.
 
-### Explicitly out of scope for v1 (saved for follow-ups)
-- Ice Blast, Wind Blow, Rock Blast, Rock Spikes
-- Multiple skins and multiple maps
-- Ragdoll / jiggle physics (would add `matter.js` later)
-- Sound effects and music
-- Round timer, best-of-3 scoring
-- Online multiplayer (would require a backend)
+- **Speed**: lower max walk speed (~210 px/s, was 320). Acceleration/deceleration smoothing so fighters ease in and out of motion instead of snapping.
+- **Jump**: slightly lower jump (~620 px/s) and softer gravity to feel floatier and more readable.
+- **Walk cycle**: each leg has a hip and a knee joint. Phase-driven so the front leg lifts, knee bends, foot plants, back leg pushes — alternating naturally. Step rate scales with actual horizontal velocity (no walking-in-place when stationary).
+- **Arms**: opposite-phase swing to the legs, with a slight elbow bend.
+- **Idle**: subtle breathing bob (head + shoulders rise/fall ~2 px) when standing still.
+- **Air pose**: tucked-knee jump pose; falling pose extends the legs slightly.
+- **Turn**: when facing flips, brief 0.1s lean instead of an instant snap.
 
-After v1 ships and feels good, we layer abilities, maps, skins, then physics and sound in focused passes.
+All animation driven by a single phase value per fighter and the existing fixed-timestep loop — no new dependencies.
+
+### Flow after v2
+
+```
+Landing  →  Map Select  →  Skin Select (P1, P2)  →  FIGHT  →  K.O.
+                                                         ├─ Rematch (same map+skins)
+                                                         └─ Change setup (back to Map Select)
+```
+
+### Technical sketch
+
+- New files
+  - `src/game/maps.ts` — map definitions + per-map `drawBackground(ctx, t)` animation functions
+  - `src/game/skins.ts` — skin catalog (color, glow, cape, headAccent, chestEmblem, streaks)
+  - `src/game/animation.ts` — `computeWalkPose(phase, velocity, onGround)` returning joint angles for hips/knees/shoulders/elbows
+  - `src/components/game/MapSelect.tsx`
+  - `src/components/game/SkinSelect.tsx`
+- Edited
+  - `src/game/engine.ts` — accept `mapId` + `{p1Skin, p2Skin}` in constructor/reset; new movement constants; replace `drawFighter` with skeleton renderer that consumes `computeWalkPose` and skin
+  - `src/components/game/GameCanvas.tsx` — manage screens (map → skins → fight), pass selections to engine, "Change setup" button on K.O. screen
+  - `src/routes/play.tsx` — unchanged shell; GameCanvas owns the screen state machine
+
+No new npm packages. No backend. Existing controls and abilities (Fire Blast, Teleport) untouched.
+
+### Out of scope for this pass
+
+- New abilities (Ice/Wind/Rock) — still saved for a later pass
+- Sound effects
+- Online play
+- Real ragdoll physics (still planned for the matter.js pass)
