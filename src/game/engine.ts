@@ -1188,9 +1188,18 @@ export class GameEngine {
       target.ragdollAng = 0;
       target.ragdollAV = (Math.random() - 0.5) * 4 + f.facing * 3;
       target.ragdollEnergy = 1;
+      // Snap initial impulse so transition into tumble looks continuous
+      applyImpulse(target.wobble, f.facing, -0.4, 1.0);
+    } else if (target.wobble.staggerImmuneT <= 0) {
+      // Partial-ragdoll stagger for small/chain-immune hits
+      const mag = Math.max(0.4, Math.min(1, m.damage / 20));
+      target.wobble.staggerT = 0.28;
+      target.wobble.staggerDir = f.facing;
+      target.wobble.staggerMag = mag;
+      applyImpulse(target.wobble, f.facing, -0.45, mag);
     }
     this.shake = Math.max(this.shake, m.shake);
-    this.hitstopT = Math.max(this.hitstopT, m.hitstop);
+    this.hitstopT = Math.max(this.hitstopT, Math.max(m.hitstop, 0.025)); // 1–2 frame hit-freeze min
     if (m.slowmoT > 0) { this.slowmoT = Math.max(this.slowmoT, m.slowmoT); this.slowmoMode = "impact"; }
     this.impactFlash = 1;
     this.burst(fx, fy, f.skin.glow, 28);
