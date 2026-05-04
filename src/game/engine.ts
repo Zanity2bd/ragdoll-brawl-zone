@@ -740,7 +740,7 @@ export class GameEngine {
       invisT: 0, webSnareT: 0, speedBoostT: 0,
       bamfCombo: null,
       swing: null,
-      kickT: 0, kickCd: 0, kickHit: false,
+      punchT: 0, punchCd: 0, punchHit: false, recoverT: 0,
     };
   }
 
