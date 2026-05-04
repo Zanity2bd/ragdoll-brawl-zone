@@ -545,6 +545,49 @@ export class GameEngine {
       return;
     }
 
+    // Cinematic super-dash takes over kinematics until it lands.
+    if (f.dash) {
+      const d = f.dash;
+      d.t += dt;
+      const u = Math.min(1, d.t / d.dur);
+      // Quadratic bezier, eased.
+      const e = u * u * (3 - 2 * u); // smoothstep for cinematic curve
+      const om = 1 - e;
+      const px = om * om * d.x0 + 2 * om * e * d.cx + e * e * d.tx;
+      const py = om * om * d.y0 + 2 * om * e * d.cy + e * e * d.ty;
+      // Velocity (derivative) for trail / facing
+      f.vx = (px - f.x) / Math.max(0.001, dt);
+      f.vy = (py - f.y) / Math.max(0.001, dt);
+      f.x = px; f.y = py;
+      f.facing = (d.tx - d.x0) >= 0 ? 1 : -1;
+      f.onGround = false;
+      // Drop a dense afterimage trail every frame.
+      f.trail.push({
+        x: f.x, y: f.y, phase: f.walkPhase, vx: f.vx, vy: f.vy,
+        onGround: false, facing: f.facing, pose: this.poseFor(f),
+      });
+      const cap = this.lowPower ? 6 : 12;
+      while (f.trail.length > cap) f.trail.shift();
+      // Burst sparks
+      if (!this.lowPower && Math.random() < 0.85) {
+        this.particles.push({
+          x: f.x + (Math.random() - 0.5) * 18,
+          y: f.y + FIGHTER_H * 0.5 + (Math.random() - 0.5) * 18,
+          vx: -f.vx * 0.05 + (Math.random() - 0.5) * 60,
+          vy: -f.vy * 0.05 + (Math.random() - 0.5) * 60,
+          life: 0.45, maxLife: 0.45,
+          color: f.skin.glow, size: 2 + Math.random() * 2,
+        });
+      }
+      if (u >= 1 && !d.landed) {
+        d.landed = true;
+        this.resolveSuperPunch(f, d.target);
+        f.dash = null;
+        f.flying = true; // remain airborne after impact
+      }
+      return;
+    }
+
     const intent = this.intents[f.id];
 
     // Active melee progresses regardless of input
