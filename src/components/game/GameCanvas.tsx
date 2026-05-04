@@ -294,6 +294,7 @@ function TouchControls({ engine }: { engine: GameEngine }) {
         onRight={(d) => hold("p1", "right", d)}
         onJump={() => engine.pressJump("p1")}
         onFire={() => engine.pressFire("p1")}
+        onPunch={() => engine.pressMelee("p1")}
         onTele={() => engine.pressTeleport("p1")}
         color="oklch(0.85 0.18 210)"
       />
@@ -302,6 +303,7 @@ function TouchControls({ engine }: { engine: GameEngine }) {
         onRight={(d) => hold("p2", "right", d)}
         onJump={() => engine.pressJump("p2")}
         onFire={() => engine.pressFire("p2")}
+        onPunch={() => engine.pressMelee("p2")}
         onTele={() => engine.pressTeleport("p2")}
         color="oklch(0.72 0.28 340)"
         mirror
@@ -311,17 +313,18 @@ function TouchControls({ engine }: { engine: GameEngine }) {
 }
 
 function Pad({
-  onLeft, onRight, onJump, onFire, onTele, color, mirror,
+  onLeft, onRight, onJump, onFire, onPunch, onTele, color, mirror,
 }: {
   onLeft: (d: boolean) => void;
   onRight: (d: boolean) => void;
   onJump: () => void;
   onFire: () => void;
+  onPunch: () => void;
   onTele: () => void;
   color: string;
   mirror?: boolean;
 }) {
-  const btn = "w-[60px] h-[60px] rounded-full border-2 font-mono text-[11px] flex items-center justify-center backdrop-blur-sm bg-background/40 active:bg-foreground/30 pointer-events-auto select-none touch-manipulation";
+  const btn = "w-[56px] h-[56px] rounded-full border-2 font-mono text-[10px] flex items-center justify-center backdrop-blur-sm bg-background/40 active:bg-foreground/30 pointer-events-auto select-none touch-manipulation";
   const style = { borderColor: color, color };
   return (
     <div className={`flex gap-3 ${mirror ? "flex-row-reverse" : ""}`}>
