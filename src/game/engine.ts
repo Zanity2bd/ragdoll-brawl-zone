@@ -274,6 +274,7 @@ export class GameEngine {
 
   private makeFighter(id: PlayerId, x: number, skin: Skin): Fighter {
     const move = MOVES[skin.id];
+    const canFly = skin.id === "homelander" || skin.id === "superman";
     return {
       id, x, y: GROUND_Y - FIGHTER_H,
       vx: 0, vy: 0, facing: 1, facingT: 1,
@@ -285,6 +286,8 @@ export class GameEngine {
       meleeHitMask: new Set(),
       ragdollT: 0, ragdollPhase: 0, slowedT: 0,
       trail: [],
+      canFly, flying: false, hoverPhase: 0, superCd: 0,
+      dash: null,
     };
   }
 
