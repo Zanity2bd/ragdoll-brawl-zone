@@ -602,10 +602,10 @@ export function computeRagdollPose(t: number, H: number): Pose {
 }
 
 // ----- Flight pose -----
-// Superman-style glide: body pitches forward into a horizontal streak when fast,
-// upright with a gentle hover bob when idle. One arm punches forward (lead fist),
-// the other tucks tight to the hip. Legs extend straight back with a subtle
-// flutter and bank to sell the speed.
+// Menacing hover stance — mirrors the Homelander laser stance: chin up, chest
+// pushed forward, lead fist clenched at the side, trail fist tucked to the hip,
+// power-stance legs (rear planted back, lead leg forward & slightly bent).
+// A subtle hover bob + faint bank are layered on so it reads as airborne.
 export function computeFlightPose(
   phase: number,
   vx: number,
@@ -614,114 +614,62 @@ export function computeFlightPose(
   facing: 1 | -1,
   _H: number,
 ): Pose {
-  const speed = Math.hypot(vx, vy);
-  // Always read as a forward-streaking flyer (image 1 silhouette) — never the
-  // upright idle stance. Floor `horiz` high so the cruise pose is the baseline.
-  const horiz = Math.max(0.78, Math.min(1, speed / 320));
-  const goingUp = vy < -40;
-  const goingDown = vy > 40;
-  const cruising = true;
-
-  // Pitch: forward lean baked in so the body reads horizontal even at rest.
-  const cruisePitch = horiz * 0.26;
-  const verticalPitch = (goingUp ? -0.08 : 0) + (goingDown ? 0.10 : 0);
-  const rawPitch = (cruisePitch + verticalPitch) * facing;
-  const pitch = Math.max(-0.4, Math.min(0.4, rawPitch));
-
-  // Subtle hover bob even at rest, but small so the streak silhouette holds.
-  const bobAmp = 0.8;
-  const bob = bobAmp * Math.sin(hoverPhase);
-  // Bank/roll into lateral motion.
-  const bank = Math.max(-0.42, Math.min(0.42, vx / 520));
-  const sway = bank * 1.4;
+  // Hover bob (vertical) + faint side sway with motion
+  const bob = Math.sin(hoverPhase) * 1.2;
+  const tremor = Math.sin(phase * 4) * 0.4; // tiny chest tremor for life
+  const bank = Math.max(-0.32, Math.min(0.32, vx / 620));
 
   const shoulderY = 28 + bob;
   const hipY = 56 + bob * 0.5;
-  const headOffsetY = -2 + bob * 0.3 - horiz * 0.4;
+  // Chin tipped up, head pushed slightly forward
+  const headOffsetY = -2 + bob * 0.3 - 3.5;
 
-  // ---- Legs: striding silhouette — one leg leads forward, one trails back ----
-  // Like a runner frozen mid-stride. Both legs distinguishable, never parallel.
-  const back = -facing;
-  const fwd = facing;
-  // Subtle stride cycle so the legs feel alive, not pinned.
-  const strideCycle = Math.sin(phase * 1.8) * 0.25 + 0.75; // 0.5..1.0
-  const flutter = Math.sin(phase * 2.6) * (0.6 + 0.4 * horiz);
+  // Body leans subtly backward (into the menace) with vertical motion influence.
+  const verticalLean = vy < -40 ? -0.05 : (vy > 40 ? 0.05 : 0);
+  const lean = facing * (-0.14) + verticalLean;
+  const shoulderRoll = facing * 0.08 + bank * 0.4;
 
-  // Lead leg: bent at knee, foot tucked under/forward of body.
-  // Trail leg: extended back and slightly down — clearly the longer silhouette.
-  const leadReach = 10 + horiz * 8;            // foot forward of hip
-  const leadKneeUp = 14 + horiz * 6;           // knee lifted up toward chest
-  const trailReach = 22 + horiz * 30;          // foot back of hip
-  const trailDrop = 14 + (1 - horiz) * 10;     // foot drops down a bit
-  const trailKneeReach = 10 + horiz * 14;
+  // ---- Arms: lead fist forward at side, trail fist tucked at hip ----
+  const sxF = facing > 0 ? 4 : -4;
+  const push = 2;
+  const leadHandX = facing * (8 + push);
+  const leadHandY = shoulderY + 14 + tremor;
+  const leadElbowX = facing * (7 + push * 0.5);
+  const leadElbowY = shoulderY + 7;
+  const trailHandX = -facing * 6;
+  const trailHandY = shoulderY + 18 + tremor * 0.6;
+  const trailElbowX = -facing * 9;
+  const trailElbowY = shoulderY + 8;
 
-  const verticalLean = goingUp ? 0.4 : (goingDown ? -0.18 : 0);
-  const vY = verticalLean * 22;
-
-  // Lead foot: forward + up (knee bent)
-  const leadFootX = fwd * leadReach + sway * 0.3;
-  const leadFootY = hipY + 8 - leadKneeUp * strideCycle - vY + flutter * 0.4;
-  const leadKneeX = fwd * (leadReach * 0.55);
-  const leadKneeY = hipY + 4 - leadKneeUp * 0.4 - vY * 0.5;
-
-  // Trail foot: back + down (mostly straight)
-  const trailFootX = back * trailReach * strideCycle + sway * 0.3;
-  const trailFootY = hipY + trailDrop - vY - flutter * 0.5;
-  const trailKneeX = back * trailKneeReach * strideCycle;
-  const trailKneeY = hipY + trailDrop * 0.55 - vY * 0.5;
-
-  // Map to L/R based on facing so the lead leg is always the front leg visually.
-  // When facing right (+1): right leg leads, left leg trails.
-  // When facing left  (-1): left leg leads, right leg trails.
-  const legR: [number, number, number, number, number, number] =
-    facing > 0
-      ? [3 + sway * 0.2, hipY, leadKneeX, leadKneeY, leadFootX, leadFootY]
-      : [3 + sway * 0.2, hipY, trailKneeX, trailKneeY, trailFootX, trailFootY];
-  const legL: [number, number, number, number, number, number] =
-    facing > 0
-      ? [-3 + sway * 0.2, hipY, trailKneeX, trailKneeY, trailFootX, trailFootY]
-      : [-3 + sway * 0.2, hipY, leadKneeX, leadKneeY, leadFootX, leadFootY];
-  const footL: [number, number] = [legL[4], legL[5]];
-  const footR: [number, number] = [legR[4], legR[5]];
-
-  // ---- Arms: lead fist forward, trail arm tucked tight ----
-  let leadHandX: number, leadHandY: number, leadElbowX: number, leadElbowY: number;
-  let trailHandX: number, trailHandY: number, trailElbowX: number, trailElbowY: number;
-
-  if (goingUp && horiz < 0.5) {
-    // Both fists punched up overhead — classic ascent pose
-    const u = 1 - horiz;
-    leadHandX = facing * 4 * u;
-    leadHandY = shoulderY - 30 - u * 6;
-    leadElbowX = facing * 3 * u;
-    leadElbowY = shoulderY - 12 - u * 4;
-    trailHandX = -facing * 4 * u;
-    trailHandY = shoulderY - 26 - u * 4;
-    trailElbowX = -facing * 3 * u;
-    trailElbowY = shoulderY - 10;
+  let armR: [number, number, number, number, number, number];
+  let armL: [number, number, number, number, number, number];
+  if (facing > 0) {
+    armR = [sxF, shoulderY, leadElbowX, leadElbowY, leadHandX, leadHandY];
+    armL = [-sxF, shoulderY, trailElbowX, trailElbowY, trailHandX, trailHandY];
   } else {
-    // Cruise: lead arm fully extended forward like a punch, trail arm pinned
-    // back to the hip for an aerodynamic silhouette.
-    const lead = horiz;
-    leadHandX = facing * (14 + lead * 26);
-    leadHandY = shoulderY + 2 - lead * 8 + flutter * 0.2;
-    leadElbowX = facing * (8 + lead * 14);
-    leadElbowY = shoulderY + 4 - lead * 4;
-    // Trail arm: glued to hip when cruising, casual otherwise
-    trailHandX = -facing * (4 + (1 - lead) * 6);
-    trailHandY = shoulderY + 18 + (1 - lead) * 6 + flutter * 0.15;
-    trailElbowX = -facing * (5 + (1 - lead) * 3);
-    trailElbowY = shoulderY + 11;
+    armL = [sxF, shoulderY, leadElbowX, leadElbowY, leadHandX, leadHandY];
+    armR = [-sxF, shoulderY, trailElbowX, trailElbowY, trailHandX, trailHandY];
   }
 
-  const armR: [number, number, number, number, number, number] =
-    facing > 0
-      ? [4, shoulderY, leadElbowX, leadElbowY, leadHandX, leadHandY]
-      : [4, shoulderY, trailElbowX, trailElbowY, trailHandX, trailHandY];
-  const armL: [number, number, number, number, number, number] =
-    facing > 0
-      ? [-4, shoulderY, trailElbowX, trailElbowY, trailHandX, trailHandY]
-      : [-4, shoulderY, leadElbowX, leadElbowY, leadHandX, leadHandY];
+  // ---- Legs: power stance (rear leg back, lead leg forward & slightly bent) ----
+  const rearX = -facing * 8;
+  const leadX = facing * 6;
+  const rearKneeX = -facing * 7;
+  const leadKneeX = facing * 5;
+  const rearKneeY = hipY + 14;
+  const leadKneeY = hipY + 16;
+  const rearFootY = hipY + 24 + bob * 0.4;
+  const leadFootY = hipY + 24 + bob * 0.4;
+
+  let legR: [number, number, number, number, number, number];
+  let legL: [number, number, number, number, number, number];
+  if (facing > 0) {
+    legL = [-3, hipY, rearKneeX, rearKneeY, rearX, rearFootY];
+    legR = [3, hipY, leadKneeX, leadKneeY, leadX, leadFootY];
+  } else {
+    legR = [3, hipY, rearKneeX, rearKneeY, rearX, rearFootY];
+    legL = [-3, hipY, leadKneeX, leadKneeY, leadX, leadFootY];
+  }
 
   return {
     headOffsetY,
@@ -731,10 +679,10 @@ export function computeFlightPose(
     armL, armR,
     handL: [armL[4], armL[5]],
     handR: [armR[4], armR[5]],
-    footL, footR,
-    lean: pitch,
-    // Banking + faint shoulder roll for life
-    shoulderRoll: bank * 0.85 + Math.sin(phase * 0.6) * 0.04 * (1 - horiz),
+    footL: [legL[4], legL[5]],
+    footR: [legR[4], legR[5]],
+    lean,
+    shoulderRoll,
   };
 }
 
