@@ -1396,6 +1396,18 @@ export class GameEngine {
 
     // Decay timers (always)
     if (f.iframeT > 0) f.iframeT = Math.max(0, f.iframeT - dt);
+    if (f.stunT > 0) {
+      f.stunT = Math.max(0, f.stunT - dt);
+      // Sparks while stunned
+      if (!this.lowPower && Math.random() < 0.4) {
+        this.particles.push({
+          x: f.x + (Math.random() - 0.5) * 22, y: f.y + 16 + Math.random() * 24,
+          vx: (Math.random() - 0.5) * 60, vy: -20 - Math.random() * 60,
+          life: 0.4, maxLife: 0.4,
+          color: "oklch(0.95 0.16 90)", size: 1.5 + Math.random() * 1.5,
+        });
+      }
+    }
     if (f.ragdollImmuneT > 0) f.ragdollImmuneT = Math.max(0, f.ragdollImmuneT - dt);
 
     // Ragdoll mode bypasses input — physics-driven tumble
