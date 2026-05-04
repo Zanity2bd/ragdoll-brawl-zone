@@ -452,7 +452,7 @@ function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "r
   );
 }
 
-function FrenzyBar({ cd, max, active, side, onActivate, hint }: { cd: number; max: number; active: boolean; side: "left" | "right"; onActivate?: () => void; hint?: string }) {
+function FrenzyBar({ cd, max, active, side, onActivate }: { cd: number; max: number; active: boolean; side: "left" | "right"; onActivate?: () => void }) {
   const ready = cd <= 0;
   const pct = ready ? 100 : (1 - cd / max) * 100;
   const fill = active ? "oklch(0.78 0.22 30)" : ready ? "oklch(0.72 0.22 145)" : "oklch(0.55 0.10 145)";
