@@ -309,7 +309,7 @@ export class GameEngine {
       meleeHitMask: new Set(),
       ragdollT: 0, ragdollPhase: 0, slowedT: 0,
       trail: [],
-      canFly, flying: false, hoverPhase: 0, superCd: 0,
+      canFly, flying: canFly, hoverPhase: 0, superCd: 0,
       dash: null,
     };
   }
