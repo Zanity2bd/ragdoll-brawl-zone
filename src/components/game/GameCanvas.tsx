@@ -39,7 +39,7 @@ export function GameCanvas() {
   const [muted, setMuted] = useState(false);
   const [sfxVol, setSfxVol] = useState(0.8);
   const [musicVol, setMusicVol] = useState(0.35);
-  const [audioOpen, setAudioOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [needsLandscape, setNeedsLandscape] = useState(false);
   const [cpuEnabled, setCpuEnabled] = useState(true);
   const [difficulty, setDifficulty] = useState<Difficulty>("hard");
