@@ -880,6 +880,22 @@ export class GameEngine {
 
     ctx.save();
     ctx.translate(x, y);
+    // Wobbly jiggle: gentle squash + sway around the feet, scaled with motion
+    // and amplified briefly after a hit. Keeps stickman feeling alive/jelly.
+    if (!ghost && f.ragdollT <= 0) {
+      const t = this.elapsed + (f.id === "p1" ? 0 : 1.7);
+      const moving = Math.min(1, Math.abs(f.vx) / 280);
+      const hit = Math.min(1, f.hitFlash * 4);
+      const wobAmp = 0.022 + moving * 0.018 + hit * 0.05;
+      const wob = Math.sin(t * 6.2) * wobAmp;
+      const breath = 1 + Math.sin(t * 2.4) * 0.012;
+      const squash = 1 + Math.sin(t * 5.5) * (0.018 + hit * 0.04);
+      ctx.translate(0, FIGHTER_H);
+      ctx.scale(squash, 2 - squash);
+      ctx.scale(breath, breath);
+      ctx.rotate(wob);
+      ctx.translate(0, -FIGHTER_H);
+    }
     ctx.translate(0, FIGHTER_H);
     ctx.rotate(pose.lean);
     ctx.translate(0, -FIGHTER_H);
