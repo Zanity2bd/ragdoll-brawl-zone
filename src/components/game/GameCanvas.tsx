@@ -39,6 +39,10 @@ export function GameCanvas() {
   const [musicVol, setMusicVol] = useState(0.35);
   const [audioOpen, setAudioOpen] = useState(false);
   const [needsLandscape, setNeedsLandscape] = useState(false);
+  const [cpuEnabled, setCpuEnabled] = useState(true);
+  const [difficulty, setDifficulty] = useState<Difficulty>("hard");
+  const cpuEnabledRef = useRef(true);
+  useEffect(() => { cpuEnabledRef.current = cpuEnabled; }, [cpuEnabled]);
 
   useEffect(() => {
     const touch = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
