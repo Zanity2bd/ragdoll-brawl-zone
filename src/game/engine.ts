@@ -1423,36 +1423,98 @@ export class GameEngine {
     }
     this.lightnings = this.lightnings.filter(lo => lo.life > 0 && lo.x > -100 && lo.x < W + 100 && lo.y > -100 && lo.y < H + 100);
 
-    // ---- Heat Vision sustained beam (Superman) ----
+    // ---- Heat Vision sustained beam (Superman) — mirrors Homelander laserSweep ----
     for (const f of [this.p1, this.p2]) {
       if (freezeActive && f.id !== this.timeFreezer) continue;
       if (f.heatVisionT > 0) {
         f.heatVisionT -= dt;
         const tgt = f.id === "p1" ? this.p2 : this.p1;
-        const sx = f.x + f.facing * 8;
-        const sy = f.y + 16;
-        const dxh = (tgt.x + 0) - sx;
-        const dyh = (tgt.y + 30) - sy;
-        const ang = Math.atan2(dyh, dxh);
-        // Auto-track but clamp toward facing
-        const clampedAng = f.facing > 0
-          ? Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, ang))
-          : (Math.abs(ang) > Math.PI / 2 ? ang : (ang >= 0 ? Math.PI - 0.01 : -Math.PI + 0.01));
-        const beamLen = Math.min(680, Math.hypot(dxh, dyh) + 60);
-        this.beams.push({ owner: f.id, x: sx, y: sy, angle: clampedAng, length: beamLen, life: 0.05 });
-        // Apply tick damage if target is in cone
-        const targAng = Math.atan2(dyh, dxh);
-        const dAng = Math.abs(((targAng - clampedAng + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-        if (dAng < 0.18 && Math.hypot(dxh, dyh) < beamLen && tgt.iframeT <= 0 && tgt.downedT <= 0 && tgt.getUpT <= 0) {
-          tgt.hp = Math.max(0, tgt.hp - HEAT_VISION_DPS * dt);
-          tgt.hitFlash = 0.2;
-          if (Math.random() < 0.5) {
-            this.particles.push({
-              x: tgt.x + (Math.random() - 0.5) * 18, y: tgt.y + 20 + Math.random() * 30,
-              vx: (Math.random() - 0.5) * 60, vy: -50 - Math.random() * 90,
-              life: 0.45, maxLife: 0.45,
-              color: "oklch(0.92 0.20 30)", size: 1.6 + Math.random() * 1.6,
+        const activeT = HEAT_VISION_DUR - f.heatVisionT;
+        const overload = activeT > Math.max(0, HEAT_VISION_DUR - 3);
+        const eye = this.getEyeWorldPos(f);
+        const sx = eye.x; const sy = eye.y;
+        const tx = tgt.x; const ty = tgt.y + 30;
+        const dxh = tx - sx; const dyh = ty - sy;
+        const desired = Math.atan2(dyh, dxh);
+        const beamMaxLen = 520;
+        const blockHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
+        const beamLen = blockHit ? blockHit.dist : beamMaxLen;
+        this.beams.push({
+          owner: f.id, x: sx, y: sy, angle: desired, length: beamLen, life: 0.05,
+          overload, red: true,
+        });
+        // Spark at impact
+        if (blockHit && Math.random() < 0.6) {
+          const ex = sx + Math.cos(desired) * beamLen;
+          const ey = sy + Math.sin(desired) * beamLen;
+          this.particles.push({
+            x: ex + (Math.random() - 0.5) * 8, y: ey + (Math.random() - 0.5) * 8,
+            vx: (Math.random() - 0.5) * 160, vy: -40 - Math.random() * 100,
+            life: 0.35, maxLife: 0.35,
+            color: "oklch(0.78 0.28 28)", size: 1.5 + Math.random() * 1.8,
+          });
+        }
+        // Overload: pierce + shatter platforms
+        if (overload) {
+          const ex = sx + Math.cos(desired) * beamLen;
+          const ey = sy + Math.sin(desired) * beamLen;
+          for (const pl of this.platforms) {
+            if (pl.destroyed) continue;
+            if (!this.segmentIntersectsRect(sx, sy, ex, ey, pl.x, pl.y, pl.w, pl.h)) continue;
+            pl.destroyed = true;
+            this.shake = Math.max(this.shake, 22);
+            this.impactFlash = Math.max(this.impactFlash, 0.6);
+            this.shockwaves.push({
+              x: pl.x + pl.w / 2, y: pl.y + pl.h / 2,
+              r: 8, rMax: Math.max(pl.w, pl.h) * 1.6,
+              life: 0.5, maxLife: 0.5, color: "oklch(0.78 0.28 28)",
             });
+            const cols = Math.max(3, Math.round(pl.w / 18));
+            const rows = Math.max(2, Math.round(Math.max(pl.h, 14) / 16));
+            const cw = pl.w / cols;
+            const ch = Math.max(8, pl.h / rows);
+            for (let cy = 0; cy < rows; cy++) {
+              for (let cx = 0; cx < cols; cx++) {
+                const px = pl.x + cx * cw + cw / 2;
+                const py = pl.y + cy * ch + ch / 2;
+                const blast = 240 + Math.random() * 220;
+                const ang2 = Math.atan2(py - sy, px - sx);
+                this.debris.push({
+                  x: px, y: py,
+                  vx: Math.cos(ang2) * blast + (Math.random() - 0.5) * 80,
+                  vy: Math.sin(ang2) * blast - 120 - Math.random() * 140,
+                  w: cw * (0.7 + Math.random() * 0.4),
+                  h: ch * (0.7 + Math.random() * 0.4),
+                  rot: Math.random() * Math.PI,
+                  rotV: (Math.random() - 0.5) * 12,
+                  life: 1.4 + Math.random() * 0.6, maxLife: 2.0,
+                  color: pl.kind === "cover"
+                    ? (Math.random() < 0.5 ? "oklch(0.40 0.04 30)" : "oklch(0.28 0.04 30)")
+                    : "oklch(0.45 0.16 30)",
+                });
+              }
+            }
+            Sfx.play("boom", 0.6);
+          }
+        }
+        // Damage
+        const ang = Math.abs(((desired - desired + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        const targetDist = Math.hypot(dxh, dyh);
+        const inBeam = ang < (overload ? 0.22 : 0.18) && targetDist < beamLen;
+        if (inBeam && tgt.iframeT <= 0 && tgt.downedT <= 0 && tgt.getUpT <= 0) {
+          const dps = HEAT_VISION_DPS * (overload ? 3 : 1);
+          tgt.hp = Math.max(0, tgt.hp - dps * dt);
+          tgt.hitFlash = overload ? 0.35 : 0.15;
+          this.particles.push({
+            x: tgt.x + (Math.random() - 0.5) * 20, y: tgt.y + 20 + Math.random() * 30,
+            vx: (Math.random() - 0.5) * 80, vy: -60 - Math.random() * 80,
+            life: 0.5, maxLife: 0.5,
+            color: overload ? "oklch(0.65 0.30 28)" : "oklch(0.78 0.28 28)",
+            size: 2 + Math.random() * 2,
+          });
+          if (overload) {
+            this.shake = Math.max(this.shake, 6);
+            this.impactFlash = Math.max(this.impactFlash, 0.25);
           }
           if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
         }
