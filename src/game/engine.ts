@@ -2819,6 +2819,48 @@ export class GameEngine {
 
     getMap(this.mapId).drawBackground(ctx, this.elapsed, W, H, GROUND_Y);
 
+    // Smoke clouds — multi-blob volumetric brimstone with soft alpha falloff.
+    // Drawn under particles so glowing embers/sparks pop on top.
+    if (this.smokeClouds.length) {
+      ctx.globalCompositeOperation = "source-over";
+      for (const sc of this.smokeClouds) {
+        const t = sc.life / sc.maxLife;
+        // Fade in fast, out slow — looks like dispersing smoke
+        const fade = t < 0.85 ? Math.min(1, t / 0.25) * (t / 0.85) : (1 - (t - 0.85) / 0.15) * 0.0 + 1;
+        const alpha = Math.max(0, Math.min(1, fade)) * 0.55;
+        const hue = sc.hue ?? 295;
+        const seed = sc.seed ?? 0;
+        // Lightness drifts darker as smoke ages and rises
+        const L1 = 0.32 - (1 - t) * 0.06;
+        const L2 = 0.18 - (1 - t) * 0.04;
+        // Outer halo (soft, dark)
+        ctx.globalAlpha = alpha * 0.55;
+        ctx.fillStyle = `oklch(${L2} 0.06 ${hue.toFixed(0)})`;
+        ctx.beginPath(); ctx.arc(sc.x, sc.y, sc.r * 1.35, 0, Math.PI * 2); ctx.fill();
+        // Body — multi-blob clusters for billowing look
+        if (sc.dense && !this.lowPower) {
+          const blobs = 5;
+          for (let i = 0; i < blobs; i++) {
+            const ang = (i / blobs) * Math.PI * 2 + seed;
+            const off = sc.r * 0.45;
+            const bx = sc.x + Math.cos(ang) * off;
+            const by = sc.y + Math.sin(ang) * off * 0.7;
+            const br = sc.r * (0.55 + 0.18 * Math.sin(seed + i * 1.7));
+            ctx.globalAlpha = alpha * 0.7;
+            ctx.fillStyle = `oklch(${L1} 0.08 ${hue.toFixed(0)})`;
+            ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+        // Core highlight (slight purple glow)
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = alpha * 0.18;
+        ctx.fillStyle = `oklch(0.55 0.18 ${hue.toFixed(0)})`;
+        ctx.beginPath(); ctx.arc(sc.x, sc.y, sc.r * 0.7, 0, Math.PI * 2); ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+      }
+      ctx.globalAlpha = 1;
+    }
+
     // Particles — soft additive disks with a brighter core for premium feel
     ctx.globalCompositeOperation = "lighter";
     for (const p of this.particles) {
