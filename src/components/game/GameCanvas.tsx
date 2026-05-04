@@ -36,10 +36,11 @@ export function GameCanvas() {
 
   useEffect(() => {
     const canvas = canvasRef.current!;
+    const dprCap = Math.min(devicePixelRatio || 1, 1.5);
     const resize = () => {
       const r = canvas.getBoundingClientRect();
-      canvas.width = Math.floor(r.width * devicePixelRatio);
-      canvas.height = Math.floor(r.height * devicePixelRatio);
+      canvas.width = Math.floor(r.width * dprCap);
+      canvas.height = Math.floor(r.height * dprCap);
     };
     resize();
     window.addEventListener("resize", resize);
@@ -47,7 +48,20 @@ export function GameCanvas() {
     const engine = new GameEngine(canvas);
     engineRef.current = engine;
     engine.onSnapshot = setSnap;
+
+    // Detect low-power profile (mobile / few cores / small screen)
+    const isTouchDev = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    const fewCores = (navigator.hardwareConcurrency || 8) <= 4;
+    const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 700;
+    engine.setLowPower(isTouchDev || fewCores || smallScreen);
+
     engine.start();
+
+    // Pause when tab/page hidden
+    const onVis = () => {
+      if (document.hidden) engine.stop(); else engine.start();
+    };
+    document.addEventListener("visibilitychange", onVis);
 
     const down = (e: KeyboardEvent) => {
       const m = KEY_MAP[e.code];
@@ -85,6 +99,7 @@ export function GameCanvas() {
       window.removeEventListener("resize", resize);
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
+      document.removeEventListener("visibilitychange", onVis);
       canvas.removeEventListener("click", click);
       canvas.removeEventListener("touchstart", touch);
     };
