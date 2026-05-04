@@ -384,6 +384,54 @@ function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
         )}
         <CdPill label={`${isP1 ? "J" : ";"} · ${p.meleeName}`} cd={p.meleeCd} max={p.meleeCdMax} color={color} />
       </div>
+      {p.hasFrenzy && (
+        <FrenzyBar
+          cd={p.frenzyCd} max={p.frenzyCdMax} active={p.frenzyActive}
+          side={side}
+        />
+      )}
+    </div>
+  );
+}
+
+function FrenzyBar({ cd, max, active, side }: { cd: number; max: number; active: boolean; side: "left" | "right" }) {
+  const ready = cd <= 0;
+  const pct = ready ? 100 : (1 - cd / max) * 100;
+  const fill = active ? "oklch(0.78 0.22 30)" : ready ? "oklch(0.72 0.22 145)" : "oklch(0.55 0.10 145)";
+  const glow = active ? "oklch(0.85 0.25 30)" : "oklch(0.78 0.22 145)";
+  return (
+    <div className={`flex flex-col gap-1 ${side === "right" ? "items-end" : ""}`}>
+      <div
+        className={`flex items-center gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}
+      >
+        <span
+          className="font-mono text-[10px] tracking-[0.2em] uppercase"
+          style={{ color: ready ? glow : "oklch(0.65 0.04 145)" }}
+        >
+          {active ? "RAGE FRENZY!" : ready ? "Rage Frenzy ▸ READY" : "Rage Frenzy"}
+        </span>
+        {!ready && !active && (
+          <span className="font-mono text-[10px] text-foreground/50">{cd.toFixed(1)}s</span>
+        )}
+      </div>
+      <div
+        className="h-2 rounded-sm overflow-hidden border"
+        style={{
+          width: "min(280px, 60vw)",
+          borderColor: "oklch(0.3 0.05 145 / 0.6)",
+          background: "oklch(0.12 0.02 145 / 0.6)",
+        }}
+      >
+        <div
+          className="h-full transition-[width] duration-150"
+          style={{
+            width: `${pct}%`,
+            background: fill,
+            boxShadow: ready || active ? `0 0 14px ${glow}` : "none",
+            marginLeft: side === "right" ? "auto" : 0,
+          }}
+        />
+      </div>
     </div>
   );
 }
