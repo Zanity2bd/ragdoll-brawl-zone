@@ -4087,7 +4087,7 @@ export class GameEngine {
     const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
     const base = f.flying
       ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, renderFacing, FIGHTER_H)
-      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.kickT > 0, renderFacing, FIGHTER_H);
+      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0 || f.kickT > 0, renderFacing, FIGHTER_H);
     let posed: Pose;
     if (f.dash) {
       // Cinematic super-punch pose during the dash. Superman = 1-hand cross,
