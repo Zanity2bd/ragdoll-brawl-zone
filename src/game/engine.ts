@@ -4858,12 +4858,13 @@ export class GameEngine {
       const frac = fIdx - Math.floor(fIdx);
       const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
       const tint = f.hitFlash > 0 ? "oklch(0.95 0.20 30)" : skin.body;
+      void tint;
       // Match procedural FIGHTER_H exactly so attacks don't visually shrink.
-      drawWalkFrame(ctx, tint, f0, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+      drawWalkFrame(ctx, skin, f0, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
       if (moving && frac > 0.01) {
         ctx.save();
         ctx.globalAlpha = frac;
-        drawWalkFrame(ctx, tint, f1, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+        drawWalkFrame(ctx, skin, f1, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
         ctx.restore();
       }
 
