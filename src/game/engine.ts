@@ -606,66 +606,128 @@ export class GameEngine {
       }
     }
 
+    // Edge-triggered flight toggle for flyers.
+    if (f.canFly && intent.toggleFlight && !f.meleeKind) {
+      f.flying = !f.flying;
+      if (f.flying) {
+        // Liftoff impulse for cinematic launch.
+        f.vy = -260;
+        f.onGround = false;
+        if (f.y > GROUND_Y - FIGHTER_H - 20) f.y = GROUND_Y - FIGHTER_H - 20;
+        this.burst(f.x, f.y + FIGHTER_H, f.skin.glow, 16);
+        Sfx.play("whoosh", 0.7);
+      } else {
+        // Soft drop — gravity will resume below.
+        Sfx.play("blip", 0.4);
+      }
+    }
+
     let move = 0;
     const locked = f.meleeKind && f.meleeKind !== "laserSweep";
-    if (!locked) {
-      if (intent.left) move -= 1;
-      if (intent.right) move += 1;
-    }
 
-    if (move !== 0) {
-      const target = move * MOVE_SPEED;
-      const a = ACCEL * ldt;
-      if (f.vx < target) f.vx = Math.min(target, f.vx + a);
-      else if (f.vx > target) f.vx = Math.max(target, f.vx - a);
-    } else {
-      const fr = FRICTION * ldt;
-      if (f.vx > 0) f.vx = Math.max(0, f.vx - fr);
-      else if (f.vx < 0) f.vx = Math.min(0, f.vx + fr);
-    }
-
-    if (!locked && intent.jump && f.onGround) { f.vy = -JUMP_V; f.onGround = false; }
-    if (!f.meleeKind) {
-      const canFire = f.skin.id === "heatwave";
-      const canTele = f.skin.id === "nightcrawler";
-      if (canFire && intent.fire && f.fireCd <= 0 && !f.teleporting) this.fire(f);
-      if (canTele && intent.teleport && f.teleCd <= 0 && !f.teleporting && this.teleTargeting === null) {
-        f.teleporting = true; f.teleCd = TELE_CD;
-        this.teleTargeting = f.id;
-        this.slowmoT = 5; this.slowmoMode = "tele";
+    if (f.flying && f.canFly) {
+      // ---- Flight kinematics: smooth analog steering with damping ----
+      // Combine analog axes with discrete left/right + jump (=up).
+      let ax = intent.ax;
+      let ay = intent.ay;
+      if (intent.left) ax -= 1;
+      if (intent.right) ax += 1;
+      if (intent.jump) ay -= 1;
+      const mag = Math.hypot(ax, ay);
+      if (mag > 1) { ax /= mag; ay /= mag; }
+      const targetVx = ax * FLY_MAX;
+      const targetVy = ay * FLY_MAX * 0.85;
+      const accel = FLY_ACCEL * ldt;
+      // Move vx toward target
+      if (f.vx < targetVx) f.vx = Math.min(targetVx, f.vx + accel);
+      else if (f.vx > targetVx) f.vx = Math.max(targetVx, f.vx - accel);
+      if (f.vy < targetVy) f.vy = Math.min(targetVy, f.vy + accel);
+      else if (f.vy > targetVy) f.vy = Math.max(targetVy, f.vy - accel);
+      // No input → exponential damping back toward natural hover
+      if (mag < 0.05) {
+        const k = Math.exp(-FLY_DAMP * ldt);
+        f.vx *= k; f.vy *= k;
       }
-      if (intent.melee && f.meleeCd <= 0) this.startMelee(f);
-    }
-
-    if (f.onGround) {
-      f.walkPhase += ldt * (1.6 + Math.abs(f.vx) * 0.018);
+      // Specials still allowed during flight
+      if (!f.meleeKind) {
+        const canFire = f.skin.id === "heatwave";
+        if (canFire && intent.fire && f.fireCd <= 0) this.fire(f);
+        if (intent.melee && f.meleeCd <= 0) this.startMelee(f);
+      }
+      f.walkPhase += ldt * 1.4;
+      f.x += f.vx * ldt;
+      f.y += f.vy * ldt;
+      // Stage bounds + ceiling
+      if (f.x < 30) { f.x = 30; f.vx = 0; }
+      if (f.x > W - 30) { f.x = W - 30; f.vx = 0; }
+      if (f.y < 30) { f.y = 30; f.vy = 0; }
+      // If they fly into the ground, stop and resume ground physics.
+      if (f.y + FIGHTER_H >= GROUND_Y) {
+        f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
+        f.flying = false;
+      } else {
+        f.onGround = false;
+      }
     } else {
-      f.walkPhase += ldt * 1.2;
-    }
+      // ---- Ground / standard physics ----
+      if (!locked) {
+        if (intent.left) move -= 1;
+        if (intent.right) move += 1;
+      }
+      if (move !== 0) {
+        const target = move * MOVE_SPEED;
+        const a = ACCEL * ldt;
+        if (f.vx < target) f.vx = Math.min(target, f.vx + a);
+        else if (f.vx > target) f.vx = Math.max(target, f.vx - a);
+      } else {
+        const fr = FRICTION * ldt;
+        if (f.vx > 0) f.vx = Math.max(0, f.vx - fr);
+        else if (f.vx < 0) f.vx = Math.min(0, f.vx + fr);
+      }
 
-    f.vy += GRAVITY * ldt;
-    f.x += f.vx * ldt;
-    f.y += f.vy * ldt;
+      if (!locked && intent.jump && f.onGround) { f.vy = -JUMP_V; f.onGround = false; }
+      if (!f.meleeKind) {
+        const canFire = f.skin.id === "heatwave";
+        const canTele = f.skin.id === "nightcrawler";
+        if (canFire && intent.fire && f.fireCd <= 0 && !f.teleporting) this.fire(f);
+        if (canTele && intent.teleport && f.teleCd <= 0 && !f.teleporting && this.teleTargeting === null) {
+          f.teleporting = true; f.teleCd = TELE_CD;
+          this.teleTargeting = f.id;
+          this.slowmoT = 5; this.slowmoMode = "tele";
+        }
+        if (intent.melee && f.meleeCd <= 0) this.startMelee(f);
+      }
 
-    if (f.x < 30) { f.x = 30; f.vx = 0; }
-    if (f.x > W - 30) { f.x = W - 30; f.vx = 0; }
+      if (f.onGround) {
+        f.walkPhase += ldt * (1.6 + Math.abs(f.vx) * 0.018);
+      } else {
+        f.walkPhase += ldt * 1.2;
+      }
 
-    if (f.y + FIGHTER_H >= GROUND_Y) {
-      f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
-    } else { f.onGround = false; }
+      f.vy += GRAVITY * ldt;
+      f.x += f.vx * ldt;
+      f.y += f.vy * ldt;
 
-    for (const pl of this.platforms) {
-      const prevY = f.y - f.vy * ldt;
-      const feet = f.y + FIGHTER_H;
-      const prevFeet = prevY + FIGHTER_H;
-      if (
-        f.vy >= 0 &&
-        prevFeet <= pl.y + 2 &&
-        feet >= pl.y &&
-        f.x + FIGHTER_W / 2 > pl.x &&
-        f.x - FIGHTER_W / 2 < pl.x + pl.w
-      ) {
-        f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
+      if (f.x < 30) { f.x = 30; f.vx = 0; }
+      if (f.x > W - 30) { f.x = W - 30; f.vx = 0; }
+
+      if (f.y + FIGHTER_H >= GROUND_Y) {
+        f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
+      } else { f.onGround = false; }
+
+      for (const pl of this.platforms) {
+        const prevY = f.y - f.vy * ldt;
+        const feet = f.y + FIGHTER_H;
+        const prevFeet = prevY + FIGHTER_H;
+        if (
+          f.vy >= 0 &&
+          prevFeet <= pl.y + 2 &&
+          feet >= pl.y &&
+          f.x + FIGHTER_W / 2 > pl.x &&
+          f.x - FIGHTER_W / 2 < pl.x + pl.w
+        ) {
+          f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
+        }
       }
     }
 
