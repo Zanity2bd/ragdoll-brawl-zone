@@ -2239,9 +2239,18 @@ export class GameEngine {
         const canTele = f.skin.id === "nightcrawler";
         if (canFire && intent.fire && f.fireCd <= 0 && !f.teleporting) this.fire(f);
         if (canTele && intent.teleport && f.teleCd <= 0 && !f.teleporting && this.teleTargeting === null) {
-          f.teleporting = true; f.teleCd = TELE_CD;
-          this.teleTargeting = f.id;
-          this.slowmoT = 5; this.slowmoMode = "tele";
+          // Keyboard teleport: blink toward the opponent instantly (no aim, no slow-mo).
+          const opp = f.id === "p1" ? this.p2 : this.p1;
+          const side = opp.x >= f.x ? -1 : 1;
+          const tx = Math.max(40, Math.min(W - 40, opp.x + side * 80));
+          const ty = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, opp.y));
+          f.teleCd = TELE_CD;
+          this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
+          Sfx.play("bamf", 0.95);
+          f.x = tx; f.y = ty;
+          f.facing = opp.x >= f.x ? 1 : -1;
+          f.vx = 0; f.vy = 0;
+          this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
         }
         if (intent.melee && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) this.startMelee(f);
       }
