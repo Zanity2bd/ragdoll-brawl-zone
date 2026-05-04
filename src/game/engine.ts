@@ -2496,6 +2496,7 @@ function getPowerSpec(id: SkinId): PowerSpec {
   }
 }
 
+function drawLimb(ctx: CanvasRenderingContext2D, j: [number, number, number, number, number, number]) {
   ctx.beginPath();
   ctx.moveTo(j[0], j[1]);
   ctx.quadraticCurveTo(j[2], j[3], j[4], j[5]);
