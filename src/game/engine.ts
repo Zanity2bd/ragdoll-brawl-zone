@@ -4857,6 +4857,17 @@ export class GameEngine {
       const drawFrame = (idx: number) =>
         drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
 
+      // ---- Ragdoll tumble (rotate down silhouette by physics angle) ----
+      if (f.ragdollT > 0) {
+        ctx.save();
+        ctx.translate(x + f.bodyLagX, y + FIGHTER_H * 0.5);
+        ctx.rotate(f.ragdollAng);
+        ctx.translate(0, FIGHTER_H * 0.5);
+        drawWalkFrame(ctx, skin, DOWN_FRAME, 0, 0, renderFacing, FIGHTER_H);
+        ctx.restore();
+        return;
+      }
+
       // ---- Downed (KO laydown) ----
       if (f.downedT > 0) { drawFrame(DOWN_FRAME); return; }
 
