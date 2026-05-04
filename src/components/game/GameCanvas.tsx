@@ -126,6 +126,9 @@ export function GameCanvas() {
         engine.pressFrenzy("p2");
         return;
       }
+      // Flash: V = Time Freeze (P1), C = Lightning Blast (P1)
+      if (e.code === "KeyV") { e.preventDefault(); engine.pressPower1("p1"); return; }
+      if (e.code === "KeyC") { e.preventDefault(); engine.pressPower2("p1"); return; }
       const m = KEY_MAP[e.code];
       if (!m) return;
       if (m.p === "p2" && cpuEnabledRef.current) return;
