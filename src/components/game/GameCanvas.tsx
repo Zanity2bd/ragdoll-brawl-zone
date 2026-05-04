@@ -129,6 +129,8 @@ export function GameCanvas() {
       {screen === "fight" && snap && (
         <HUD
           snap={snap}
+          muted={muted}
+          onToggleMute={() => setMuted(m => !m)}
           onRematch={() => engine?.reset()}
           onChange={() => setScreen("map")}
         />
@@ -136,7 +138,7 @@ export function GameCanvas() {
       {screen === "fight" && isTouch && engine && <TouchControls engine={engine} />}
 
       {screen === "splash" && (
-        <Splash onPlay={() => setScreen("map")} />
+        <Splash onPlay={() => { Sfx.unlock(); setScreen("map"); }} />
       )}
       {screen === "map" && (
         <Lobby onPickMap={(id) => { setMapId(id); setScreen("skin"); }} />
