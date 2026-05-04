@@ -4116,7 +4116,11 @@ export class GameEngine {
       const wp = KICK_WINDUP / KICK_DUR;
       const ap = KICK_ACTIVE / KICK_DUR;
       const prog = Math.min(1, f.kickT / KICK_DUR);
-      posed = computeAttackPose(base, "basicKick", prog, { wp, ap }, renderFacing);
+      // Airborne kick: keep the flying-kick walk pose (already set in `base`).
+      // Grounded kick: apply the snap-kick attack overlay.
+      posed = f.onGround
+        ? computeAttackPose(base, "basicKick", prog, { wp, ap }, renderFacing)
+        : base;
     } else {
       posed = base;
     }
