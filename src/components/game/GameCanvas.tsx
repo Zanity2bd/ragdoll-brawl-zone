@@ -54,18 +54,6 @@ export function GameCanvas() {
 
   useEffect(() => {
     const canvas = canvasRef.current!;
-    const dprCap = Math.min(devicePixelRatio || 1, 1.5);
-    const resize = () => {
-      const r = canvas.getBoundingClientRect();
-      canvas.width = Math.floor(r.width * dprCap);
-      canvas.height = Math.floor(r.height * dprCap);
-    };
-    resize();
-    window.addEventListener("resize", resize);
-
-    const engine = new GameEngine(canvas);
-    engineRef.current = engine;
-    engine.onSnapshot = setSnap;
 
     // Detect device tier: low-power gets simpler effects + lower DPR;
     // high-end gets crisper rendering up to DPR 2.
