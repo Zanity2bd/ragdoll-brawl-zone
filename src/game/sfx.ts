@@ -221,6 +221,17 @@ class SfxEngine {
         setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch { /* */ } }, (sample.duration + 0.1) * 1000);
         break;
       }
+      case "homelanderVO": {
+        const sample = this.samples["homelanderVO"];
+        if (!sample) break;
+        const src = ctx.createBufferSource();
+        src.buffer = sample;
+        const g = ctx.createGain(); g.gain.value = 1.0 * vol;
+        src.connect(g); g.connect(this.sfxGain);
+        src.start(t);
+        setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch { /* */ } }, (sample.duration + 0.1) * 1000);
+        break;
+      }
     }
   }
 }
