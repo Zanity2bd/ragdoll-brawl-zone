@@ -1059,9 +1059,9 @@ export class GameEngine {
         this.magmas.push({
           owner: a.id,
           x: a.x + dir * 16, y: a.y + 28,
-          vx: dir * Math.min(520, Math.abs(dx) * 1.4 + 200),
-          vy: -260,
-          life: 2.5, maxLife: 2.5, phase: 0,
+          vx: dir * 380,
+          vy: -120,
+          life: 3.0, maxLife: 3.0, phase: 0,
           exploded: false, explosionT: 0,
         });
         // void unused
