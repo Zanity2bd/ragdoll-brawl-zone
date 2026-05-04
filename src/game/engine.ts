@@ -2886,6 +2886,7 @@ export class GameEngine {
     const dx = Math.cos(angle), dy = Math.sin(angle);
     let best: number | null = null;
     for (const pl of this.platforms) {
+      if (pl.destroyed) continue;
       // Slab method: ray vs AABB
       const minX = pl.x, maxX = pl.x + pl.w;
       const minY = pl.y, maxY = pl.y + pl.h;
