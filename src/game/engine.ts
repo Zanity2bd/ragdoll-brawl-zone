@@ -740,6 +740,7 @@ export class GameEngine {
         this.shockwaves.push({ x: target.x, y: target.y + 40, r: 10, rMax: 320, life: 0.7, maxLife: 0.7, color: "oklch(0.7 0.18 145)" });
         Sfx.play("boom", 1);
         f.frenzy = null;
+        if (this.frenzyVideo) { try { this.frenzyVideo.pause(); } catch { /* ignore */ } }
       }
       return;
     }
