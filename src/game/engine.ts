@@ -15,6 +15,7 @@ import {
   DOWN_FRAME, GETUP_FRAME_A, GETUP_FRAME_B, HURT_FRAME,
   KICK_CHAMBER_FRAME, KICK_HIT_FRAME, KNEE_CHAMBER_FRAME, KNEE_HIT_FRAME,
 } from "./walkSprite";
+import { loadAttackFx, spawnFx, tickFx, drawFxPool, type ActiveFx } from "./attackFx";
 
 export type PlayerId = "p1" | "p2";
 
@@ -452,6 +453,7 @@ export class GameEngine {
   private projectiles: Projectile[] = [];
   private particles: Particle[] = [];
   private shockwaves: Shockwave[] = [];
+  private attackFx: ActiveFx[] = [];
   private beams: Beam[] = [];
   private lightnings: LightningOrb[] = [];
   private missiles: Missile[] = [];
@@ -519,6 +521,7 @@ export class GameEngine {
     if (!ctx) throw new Error("no ctx");
     this.ctx = ctx;
     loadWalkSheet();
+    loadAttackFx();
     if (typeof document !== "undefined") {
       const v = document.createElement("video");
       v.src = "/fx/hulk-special.webm";
@@ -695,6 +698,7 @@ export class GameEngine {
     this.projectiles = [];
     this.particles = [];
     this.shockwaves = [];
+    this.attackFx = [];
     this.beams = [];
     this.lightnings = [];
     this.missiles = [];
@@ -1528,6 +1532,7 @@ export class GameEngine {
       sw.life -= dt; sw.r += (sw.rMax - sw.r) * Math.min(1, dt * 4);
     }
     this.shockwaves = this.shockwaves.filter(s => s.life > 0);
+    tickFx(this.attackFx, dt);
     for (const b of this.beams) {
       if (freezeActive && b.owner !== this.timeFreezer) continue;
       b.life -= dt;
@@ -2948,6 +2953,16 @@ export class GameEngine {
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
+    // Charge-ring telegraph for the new sprite-driven specials.
+    if (m.kind === "heatPunch" || m.kind === "crowbar" || m.kind === "repulsor" || m.kind === "groundSmash") {
+      const cy = m.kind === "groundSmash" ? f.y + FIGHTER_H - 6 : f.y + 36;
+      const col: GlobalCompositeOperation = "lighter";
+      spawnFx(this.attackFx, "chargeRing", f.x + f.facing * 8, cy, {
+        size: m.kind === "groundSmash" ? 38 : 28,
+        life: Math.max(0.18, m.windup),
+        spin: 6, grow: 18, blend: col, facing: f.facing as 1 | -1,
+      });
+    }
     // (Homelander laser SFX is played on every beam start via the beam edge-trigger
     //  in update(), so it plays for any laser/heat-vision/unibeam in any match.)
     // Flash blink: instantly teleport behind opponent
@@ -3004,6 +3019,16 @@ export class GameEngine {
               }
               this.applyMeleeHit(f, target, m, target.x, target.y + 40);
               f.meleeHitMask.add(1);
+              // Sprite FX: slash arc trailing the strike + impact star at contact.
+              const ix = (f.x + target.x) / 2 + f.facing * 6;
+              const iy = target.y + 40;
+              spawnFx(this.attackFx, "slashArc", ix, iy, {
+                size: 46, life: 0.22, facing: f.facing as 1 | -1,
+                rot: m.kind === "crowbar" ? -0.2 : 0,
+              });
+              spawnFx(this.attackFx, "impactStar", target.x, iy, {
+                size: 30, life: 0.28, grow: 60, spin: 4,
+              });
               if (m.kind === "repulsor") {
                 this.shockwaves.push({
                   x: f.x + f.facing * 30, y: f.y + 40, r: 6, rMax: 70,
@@ -3026,6 +3051,13 @@ export class GameEngine {
             this.shockwaves.push({
               x: cx, y: cy, r: 20, rMax: m.range * 1.6, life: 0.7, maxLife: 0.7,
               color: "oklch(0.55 0.20 25)",
+            });
+            // Sprite shockwave ring overlay (additive) — sells the impact.
+            spawnFx(this.attackFx, "shockRing", cx, cy, {
+              size: m.range * 0.6, life: 0.55, grow: m.range * 1.4, blend: "lighter",
+            });
+            spawnFx(this.attackFx, "impactStar", cx, cy - 8, {
+              size: 44, life: 0.32, grow: 80,
             });
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dist = Math.abs(target.x - cx);
@@ -4445,6 +4477,8 @@ export class GameEngine {
     const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
     if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
+    // Sprite-based attack FX overlays (charge ring, slash arc, impact star, shockwave).
+    drawFxPool(ctx, this.attackFx);
     // Web-swing tethers — silky double strand with glow + slight slack curve.
     for (const f of [this.p1, this.p2]) {
       if (!f.swing) continue;
