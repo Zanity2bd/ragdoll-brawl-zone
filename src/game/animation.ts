@@ -78,6 +78,76 @@ export function computeWalkPose(
   // Stronger lean at sprint (was speed/1700, capped 0.16)
   const lean = moving ? facing * Math.min(0.22, speed / 1300) : 0;
 
+  if (!onGround && attacking) {
+    // ----- Flying kick (airborne basic kick) -----
+    // Front leg snaps fully forward & extended, back leg tucks knee under butt,
+    // arms sweep back for momentum, torso leans slightly forward.
+    const apex = 1 - Math.min(1, Math.abs(vy) / 320);
+    // Strike-pose intensity ramps up at apex / on the way down so the impact reads.
+    const strike = 0.6 + 0.4 * apex;
+
+    // Front (kicking) leg — straight, forward & slightly up
+    const frontHipX = facing * 2;
+    const frontKneeX = facing * (16 + 6 * strike);
+    const frontKneeY = hipYBase + 2 - 4 * strike;       // raised toward hip line
+    const frontFootX = facing * (34 + 10 * strike);     // full reach
+    const frontFootY = hipYBase + 4 - 8 * strike;       // strike at hip height
+
+    // Back leg — knee tucked high under body, foot pulled in
+    const backHipX = -facing * 2;
+    const backKneeX = -facing * 4;
+    const backKneeY = hipYBase + 6 - 6 * strike;        // pulled up
+    const backFootX = -facing * 8;
+    const backFootY = hipYBase + 12 - 10 * strike;      // tucked under butt
+
+    // Arms swept back behind for momentum & balance
+    const sy = 28 - 1;
+    const backArmHandX = -facing * (18 + 8 * strike);
+    const backArmHandY = sy + 2 + 4 * strike;
+    const backArmElbowX = -facing * (10 + 4 * strike);
+    const backArmElbowY = sy + 4;
+    // Front arm: bent across chest as guard
+    const frontArmHandX = facing * (4 + 2 * strike);
+    const frontArmHandY = sy - 2;
+    const frontArmElbowX = facing * 8;
+    const frontArmElbowY = sy + 4;
+
+    const lean = facing * (0.18 + 0.10 * strike);
+
+    if (facing > 0) {
+      return {
+        headOffsetY: -3 - 1 * strike,
+        shoulderY: sy,
+        hipY: hipYBase - 1,
+        legR: [frontHipX, hipYBase, frontKneeX, frontKneeY, frontFootX, frontFootY],
+        legL: [backHipX, hipYBase, backKneeX, backKneeY, backFootX, backFootY],
+        armL: [-4, sy, frontArmElbowX, frontArmElbowY, frontArmHandX, frontArmHandY],
+        armR: [4, sy, backArmElbowX, backArmElbowY, backArmHandX, backArmHandY],
+        handL: [frontArmHandX, frontArmHandY],
+        handR: [backArmHandX, backArmHandY],
+        footR: [frontFootX, frontFootY],
+        footL: [backFootX, backFootY],
+        lean,
+        shoulderRoll: facing * 0.18,
+      };
+    }
+    return {
+      headOffsetY: -3 - 1 * strike,
+      shoulderY: sy,
+      hipY: hipYBase - 1,
+      legL: [frontHipX, hipYBase, frontKneeX, frontKneeY, frontFootX, frontFootY],
+      legR: [backHipX, hipYBase, backKneeX, backKneeY, backFootX, backFootY],
+      armR: [4, sy, frontArmElbowX, frontArmElbowY, frontArmHandX, frontArmHandY],
+      armL: [-4, sy, backArmElbowX, backArmElbowY, backArmHandX, backArmHandY],
+      handR: [frontArmHandX, frontArmHandY],
+      handL: [backArmHandX, backArmHandY],
+      footL: [frontFootX, frontFootY],
+      footR: [backFootX, backFootY],
+      lean,
+      shoulderRoll: facing * 0.18,
+    };
+  }
+
   if (!onGround) {
     // Three-phase jump: launch (vy<<0) → apex (|vy|≈0) → fall (vy>0).
     // Knees tuck high during launch, splay outward at apex, extend on fall to "stick" landing.
