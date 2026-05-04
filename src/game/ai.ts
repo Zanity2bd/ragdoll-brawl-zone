@@ -126,14 +126,14 @@ export class CpuController {
     if (meRect.canFly && meRect.flying) {
       const dx = oppRect.x - meRect.x;
       const adx = Math.abs(dx);
-      const skill = SKILLS[me.name.toLowerCase().replace("-", "") as SkinId] ?? SKILLS.homelander;
+      const skill = SKILLS[this.engine.getSkinIdFor(this.id)] ?? SKILLS.homelander;
       const pref = skill.preferred;
       // Horizontal: close to preferred range, kite if too close (for ranged).
       const dead = 28;
       if (adx > pref + dead) ax = Math.sign(dx);
       else if (adx < pref - dead && skill.ranged) ax = -Math.sign(dx);
       else ax = 0;
-      // Vertical: match opponent's altitude with a small offset so we float just
+      // Vertical: match opponent altitude with a small offset so we float just
       // above and can dive in. Add gentle hover oscillation so we don't lock flat.
       const targetY = oppRect.y - (skill.ranged ? 60 : 20);
       const dy = targetY - meRect.y;
