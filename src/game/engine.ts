@@ -195,6 +195,13 @@ interface Platform {
   // "cover"    = solid block: lands on top AND blocks horizontal movement & projectiles.
   kind: "platform" | "cover";
   accent?: string;
+  destroyed?: boolean;
+}
+
+interface Debris {
+  x: number; y: number; vx: number; vy: number;
+  w: number; h: number; rot: number; rotV: number;
+  life: number; maxLife: number; color: string;
 }
 
 export interface Intents {
