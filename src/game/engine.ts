@@ -3436,7 +3436,8 @@ export class GameEngine {
     }
 
     ctx.save();
-    ctx.translate(x, y);
+    // Body translation lag: small horizontal shove on impact, springs back to 0
+    ctx.translate(x + (ghost ? 0 : f.bodyLagX), y);
     if (bamfActive) {
       // Perspective scale anchored at the feet so the head/fist swell forward.
       ctx.translate(0, FIGHTER_H);
@@ -3460,7 +3461,7 @@ export class GameEngine {
       ctx.translate(0, -FIGHTER_H);
     }
     ctx.translate(0, FIGHTER_H);
-    ctx.rotate(pose.lean);
+    ctx.rotate(pose.lean + (ghost ? 0 : f.bodyRoll));
     ctx.translate(0, -FIGHTER_H);
 
     const headR = 10;
