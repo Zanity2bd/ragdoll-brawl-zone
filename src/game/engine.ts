@@ -1433,6 +1433,9 @@ export class GameEngine {
       meleeCd: f.meleeCd, meleeCdMax: f.move.cooldown,
       meleeName: f.move.name,
       teleporting: f.teleporting,
+      frenzyCd: f.frenzyCd, frenzyCdMax: FRENZY_CD,
+      hasFrenzy: f.skin.id === "hulk",
+      frenzyActive: f.frenzy !== null,
     };
   }
 
