@@ -3033,8 +3033,36 @@ export class GameEngine {
     const ctx = this.ctx;
     const skin = f.skin;
 
+    // ---- Bamf strike depth FX (perspective scale + z-shadow) ----
+    // Drives a punch-in zoom toward the camera plus a darker offset shadow underfoot
+    // to fake a Z-axis (depth) push during the active swing window.
+    let bamfScale = 1;
+    let bamfActive = false;
+    if (!ghost && (f.meleeKind === "bamfPunch" || f.meleeKind === "bamfKick") && f.meleeDur > 0) {
+      bamfActive = true;
+      const p = Math.min(1, f.meleeT / f.meleeDur);
+      // Bell curve peaking near contact (~45%) → zooms toward camera then settles
+      const bell = Math.sin(Math.min(1, p * 1.6) * Math.PI);
+      bamfScale = 1 + bell * 0.18;
+      // Z-offset shadow: heavier offset under the fighter to imply forward push
+      if (f.onGround) {
+        ctx.save();
+        ctx.fillStyle = `oklch(0 0 0 / ${0.18 + bell * 0.22})`;
+        ctx.beginPath();
+        ctx.ellipse(x + f.facing * bell * 6, y + FIGHTER_H - 1, 22 + bell * 10, 5 + bell * 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
     ctx.save();
     ctx.translate(x, y);
+    if (bamfActive) {
+      // Perspective scale anchored at the feet so the head/fist swell forward.
+      ctx.translate(0, FIGHTER_H);
+      ctx.scale(bamfScale, bamfScale);
+      ctx.translate(0, -FIGHTER_H);
+    }
     // Wobbly jiggle: gentle squash + sway around the feet, scaled with motion
     // and amplified briefly after a hit. Keeps stickman feeling alive/jelly.
     if (!ghost && f.ragdollT <= 0) {
