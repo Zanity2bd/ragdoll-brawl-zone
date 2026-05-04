@@ -554,8 +554,10 @@ export class GameEngine {
     f.teleCd = TELE_CD;
     this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
     Sfx.play("bamf", 0.9);
-    f.x = Math.max(40, Math.min(W - 40, sx));
-    f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy));
+    // sy here is already a foot-anchored target — feed it through the resolver
+    // (which expects a midpoint-style sy) by offsetting then letting it clamp.
+    const dest = this.resolveTeleportTarget(sx, sy + FIGHTER_H / 2);
+    f.x = dest.x; f.y = dest.y;
     f.vx = 0; f.vy = 0; f.teleporting = false;
     this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
   }
