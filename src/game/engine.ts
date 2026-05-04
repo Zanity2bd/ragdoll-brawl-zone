@@ -152,13 +152,13 @@ const HOVER_RATE = 1.6;          // hover frequency (Hz-ish)
 
 // Super-Punch
 const SUPER_CD = 4.5;
-const SUPER_DAMAGE = 38;
-const SUPER_KB_X = 980;
-const SUPER_KB_Y = -380;
-const SUPER_HITSTOP = 0.26;
-const SUPER_SLOWMO = 0.45;
-const SUPER_RAGDOLL = 1.0;
-const SUPER_SHAKE = 36;
+const SUPER_DAMAGE = 46;
+const SUPER_KB_X = 1280;
+const SUPER_KB_Y = -460;
+const SUPER_HITSTOP = 0.34;
+const SUPER_SLOWMO = 0.7;
+const SUPER_RAGDOLL = 1.3;
+const SUPER_SHAKE = 52;
 
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
@@ -309,7 +309,7 @@ export class GameEngine {
       meleeHitMask: new Set(),
       ragdollT: 0, ragdollPhase: 0, slowedT: 0,
       trail: [],
-      canFly, flying: false, hoverPhase: 0, superCd: 0,
+      canFly, flying: canFly, hoverPhase: 0, superCd: 0,
       dash: null,
     };
   }
@@ -554,8 +554,11 @@ export class GameEngine {
       const d = f.dash;
       d.t += dt;
       const u = Math.min(1, d.t / d.dur);
-      // Quadratic bezier, eased.
-      const e = u * u * (3 - 2 * u); // smoothstep for cinematic curve
+      // Cinematic ease: slow wind-up, explosive accel into target.
+      // Cubic ease-in for the first 70%, then snap forward.
+      const e = u < 0.7
+        ? (u / 0.7) * (u / 0.7) * 0.55
+        : 0.55 + ((u - 0.7) / 0.3) * 0.45;
       const om = 1 - e;
       const px = om * om * d.x0 + 2 * om * e * d.cx + e * e * d.tx;
       const py = om * om * d.y0 + 2 * om * e * d.cy + e * e * d.ty;
@@ -565,22 +568,35 @@ export class GameEngine {
       f.x = px; f.y = py;
       f.facing = (d.tx - d.x0) >= 0 ? 1 : -1;
       f.onGround = false;
-      // Drop a dense afterimage trail every frame.
+      // Mild slow-mo during the dash for cinematic feel
+      if (u < 0.92) this.slowmoT = Math.max(this.slowmoT, 0.05);
+      // Dense afterimage trail every frame.
       f.trail.push({
         x: f.x, y: f.y, phase: f.walkPhase, vx: f.vx, vy: f.vy,
         onGround: false, facing: f.facing, pose: this.poseFor(f),
       });
-      const cap = this.lowPower ? 6 : 12;
+      const cap = this.lowPower ? 8 : 18;
       while (f.trail.length > cap) f.trail.shift();
-      // Burst sparks
-      if (!this.lowPower && Math.random() < 0.85) {
+      // Burst sparks — denser cone behind the fighter
+      const sparkN = this.lowPower ? 1 : 3;
+      for (let i = 0; i < sparkN; i++) {
         this.particles.push({
-          x: f.x + (Math.random() - 0.5) * 18,
-          y: f.y + FIGHTER_H * 0.5 + (Math.random() - 0.5) * 18,
-          vx: -f.vx * 0.05 + (Math.random() - 0.5) * 60,
-          vy: -f.vy * 0.05 + (Math.random() - 0.5) * 60,
-          life: 0.45, maxLife: 0.45,
-          color: f.skin.glow, size: 2 + Math.random() * 2,
+          x: f.x + (Math.random() - 0.5) * 22,
+          y: f.y + FIGHTER_H * 0.5 + (Math.random() - 0.5) * 22,
+          vx: -f.vx * 0.08 + (Math.random() - 0.5) * 80,
+          vy: -f.vy * 0.08 + (Math.random() - 0.5) * 80,
+          life: 0.55, maxLife: 0.55,
+          color: i === 0 ? "oklch(0.95 0.08 80)" : f.skin.glow,
+          size: 2 + Math.random() * 3,
+        });
+      }
+      // Leading-edge glow particle (front of fist)
+      if (!this.lowPower) {
+        this.particles.push({
+          x: f.x + f.facing * 22, y: f.y + FIGHTER_H * 0.42,
+          vx: f.vx * 0.15, vy: f.vy * 0.15,
+          life: 0.25, maxLife: 0.25,
+          color: "oklch(0.98 0.05 80)", size: 5 + Math.random() * 3,
         });
       }
       if (u >= 1 && !d.landed) {
@@ -610,24 +626,8 @@ export class GameEngine {
       }
     }
 
-    // Edge-triggered flight toggle for flyers.
-    if (f.canFly && intent.toggleFlight && !f.meleeKind) {
-      f.flying = !f.flying;
-      if (f.flying) {
-        // Liftoff impulse for cinematic launch.
-        f.vy = -260;
-        f.onGround = false;
-        if (f.y > GROUND_Y - FIGHTER_H - 20) f.y = GROUND_Y - FIGHTER_H - 20;
-        this.burst(f.x, f.y + FIGHTER_H, f.skin.glow, 16);
-        Sfx.play("whoosh", 0.7);
-      } else {
-        // Soft drop — gravity will resume below.
-        Sfx.play("blip", 0.4);
-      }
-    }
-
-    let move = 0;
-    const locked = f.meleeKind && f.meleeKind !== "laserSweep";
+    // Flyers stay airborne — flight is always on, no toggle needed.
+    if (f.canFly) f.flying = true;
 
     if (f.flying && f.canFly) {
       // ---- Flight kinematics: smooth analog steering with damping ----
@@ -648,7 +648,8 @@ export class GameEngine {
       if (f.vy < targetVy) f.vy = Math.min(targetVy, f.vy + accel);
       else if (f.vy > targetVy) f.vy = Math.max(targetVy, f.vy - accel);
       // No input → exponential damping back toward natural hover
-      if (mag < 0.05) {
+      const idle = mag < 0.05;
+      if (idle) {
         const k = Math.exp(-FLY_DAMP * ldt);
         f.vx *= k; f.vy *= k;
       }
@@ -661,19 +662,23 @@ export class GameEngine {
       f.walkPhase += ldt * 1.4;
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
-      // Stage bounds + ceiling
+      // Idle hover bob — gentle vertical oscillation when not steering
+      if (idle) {
+        const bob = Math.sin(f.hoverPhase) * HOVER_AMP * 0.6;
+        f.y += bob * ldt;
+      }
+      // Stage bounds + ceiling. Floor clamp keeps flyers always airborne.
+      const minY = 30;
+      const maxY = GROUND_Y - FIGHTER_H - 40; // never touch the ground
       if (f.x < 30) { f.x = 30; f.vx = 0; }
       if (f.x > W - 30) { f.x = W - 30; f.vx = 0; }
-      if (f.y < 30) { f.y = 30; f.vy = 0; }
-      // If they fly into the ground, stop and resume ground physics.
-      if (f.y + FIGHTER_H >= GROUND_Y) {
-        f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
-        f.flying = false;
-      } else {
-        f.onGround = false;
-      }
+      if (f.y < minY) { f.y = minY; f.vy = Math.max(0, f.vy); }
+      if (f.y > maxY) { f.y = maxY; f.vy = Math.min(0, f.vy); }
+      f.onGround = false;
     } else {
       // ---- Ground / standard physics ----
+      let move = 0;
+      const locked = f.meleeKind && f.meleeKind !== "laserSweep";
       if (!locked) {
         if (intent.left) move -= 1;
         if (intent.right) move += 1;
@@ -922,7 +927,7 @@ export class GameEngine {
     const t = targetId === "p1" ? this.p1 : this.p2;
     if (t.id === attacker.id) return;
     t.hp = Math.max(0, t.hp - SUPER_DAMAGE);
-    t.hitFlash = 0.4;
+    t.hitFlash = 0.55;
     const dir = Math.sign(t.x - attacker.x) || attacker.facing;
     t.vx = dir * SUPER_KB_X;
     t.vy = SUPER_KB_Y;
@@ -934,14 +939,38 @@ export class GameEngine {
     this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
     this.slowmoMode = "impact";
     this.impactFlash = 1;
-    this.burst(t.x, t.y + FIGHTER_H * 0.5, attacker.skin.glow, 48);
-    this.burst(t.x, t.y + FIGHTER_H * 0.5, "oklch(0.95 0.08 80)", 28);
+    // Cinematic glow burst — multi-ring shockwaves + dense particle explosion
+    const cx = t.x, cy = t.y + FIGHTER_H * 0.5;
+    this.burst(cx, cy, attacker.skin.glow, 64);
+    this.burst(cx, cy, "oklch(0.98 0.10 80)", 48);
+    this.burst(cx, cy, "oklch(0.92 0.18 30)", 36);
+    // Radial spark streaks
+    for (let i = 0; i < 28; i++) {
+      const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
+      const sp = 380 + Math.random() * 320;
+      this.particles.push({
+        x: cx, y: cy,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.55 + Math.random() * 0.3, maxLife: 0.85,
+        color: i % 2 ? attacker.skin.glow : "oklch(0.95 0.08 80)",
+        size: 2 + Math.random() * 3,
+      });
+    }
     this.shockwaves.push({
-      x: t.x, y: t.y + FIGHTER_H * 0.5, r: 10, rMax: 220,
-      life: 0.55, maxLife: 0.55, color: attacker.skin.glow,
+      x: cx, y: cy, r: 12, rMax: 280,
+      life: 0.7, maxLife: 0.7, color: attacker.skin.glow,
     });
-    Sfx.play("boom", 0.9);
-    Sfx.play("heavy", 0.8);
+    this.shockwaves.push({
+      x: cx, y: cy, r: 6, rMax: 180,
+      life: 0.5, maxLife: 0.5, color: "oklch(0.98 0.05 80)",
+    });
+    this.shockwaves.push({
+      x: cx, y: cy, r: 20, rMax: 360,
+      life: 0.85, maxLife: 0.85, color: "oklch(0.85 0.18 30)",
+    });
+    Sfx.play("boom", 1);
+    Sfx.play("heavy", 0.95);
+    Sfx.play("punch", 0.8);
     if (t.hp <= 0 && this.phase === "fight") {
       this.phase = "ko"; this.winner = attacker.id;
     }

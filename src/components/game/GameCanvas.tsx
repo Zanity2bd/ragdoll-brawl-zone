@@ -229,25 +229,6 @@ export function GameCanvas() {
           muted={muted}
         />
       )}
-      {screen === "fight" && engine && engine.canFly("p1") && (
-        <button
-          onPointerDown={(e) => { e.preventDefault(); engine.pressToggleFlight("p1"); }}
-          className="absolute z-30 rounded-full border-2 backdrop-blur-md bg-background/40 font-mono flex items-center justify-center pointer-events-auto active:scale-95 transition-transform"
-          style={{
-            left: "calc(env(safe-area-inset-left, 0px) + 12px)",
-            bottom: "calc(env(safe-area-inset-bottom, 0px) + 9rem)",
-            width: "min(14vw, 56px)",
-            height: "min(14vw, 56px)",
-            fontSize: "min(5vw, 22px)",
-            borderColor: "oklch(0.85 0.18 210)",
-            color: "oklch(0.85 0.18 210)",
-            boxShadow: `0 0 18px -4px oklch(0.85 0.18 210)`,
-          }}
-          aria-label="Toggle flight"
-        >
-          ✈
-        </button>
-      )}
       <AudioPanel
         open={audioOpen && screen === "fight"}
         muted={muted}
