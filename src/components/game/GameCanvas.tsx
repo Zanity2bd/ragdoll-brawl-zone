@@ -421,26 +421,30 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
           side="left"
           color="oklch(0.85 0.18 210)"
           p={snap.p1}
-          onMove={(x) => {
+          onMove={(x, y) => {
             engine.setIntent("p1", { left: x < -0.25, right: x > 0.25 });
+            engine.setAirSteering("p1", x, y);
           }}
           onJump={() => engine.pressJump("p1")}
           onFire={() => engine.pressFire("p1")}
           onPunch={() => engine.pressMelee("p1")}
           onTele={() => engine.pressTeleport("p1")}
+          canFly={engine.canFly("p1")}
         />
         {!cpu && (
           <PlayerControls
             side="right"
             color="oklch(0.72 0.28 340)"
             p={snap.p2}
-            onMove={(x) => {
+            onMove={(x, y) => {
               engine.setIntent("p2", { left: x < -0.25, right: x > 0.25 });
+              engine.setAirSteering("p2", x, y);
             }}
             onJump={() => engine.pressJump("p2")}
             onFire={() => engine.pressFire("p2")}
             onPunch={() => engine.pressMelee("p2")}
             onTele={() => engine.pressTeleport("p2")}
+            canFly={engine.canFly("p2")}
           />
         )}
       </div>
