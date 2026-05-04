@@ -2191,6 +2191,11 @@ export class GameEngine {
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
+    // Homelander signature VO — plays once per match, on his first laser cast.
+    if (m.kind === "laserSweep" && f.skin.id === "homelander" && !this.homelanderVoPlayed) {
+      this.homelanderVoPlayed = true;
+      Sfx.play("homelanderVO", 1.0);
+    }
     // Flash blink: instantly teleport behind opponent
     if (m.kind === "phaseStrike") {
       const t = f.id === "p1" ? this.p2 : this.p1;
