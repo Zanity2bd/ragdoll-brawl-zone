@@ -382,8 +382,10 @@ export function computeFlightPose(
   const goingUp = vy < -40;
   const goingDown = vy > 40;
 
-  const pitch = facing * (0.05 + horiz * 0.55) + (goingUp ? -0.12 : 0) + (goingDown ? 0.18 : 0);
+  const pitch = facing * (0.05 + horiz * 0.65) + (goingUp ? -0.18 : 0) + (goingDown ? 0.22 : 0);
   const bob = (1 - horiz) * Math.sin(hoverPhase) * 1.8;
+  // Bank/roll: tilt sideways into lateral motion (Superman flight)
+  const bank = Math.max(-0.35, Math.min(0.35, vx / 600));
 
   const shoulderY = 28 + bob;
   const hipY = 56 + bob * 0.5;
