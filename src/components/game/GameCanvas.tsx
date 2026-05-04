@@ -281,7 +281,7 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
         style={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       >
         <div className="flex gap-3 sm:gap-6 items-start w-full px-3 sm:px-6" style={{ maxWidth: "min(1200px, 96vw)" }}>
-          <HpBar p={snap.p1} side="left" />
+          <HpBar p={snap.p1} side="left" onFrenzy={() => engineRef.current?.pressFrenzy("p1")} />
           <HpBar p={snap.p2} side="right" />
         </div>
       </div>
@@ -362,7 +362,7 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
   );
 }
 
-function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
+function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "right"; onFrenzy?: () => void }) {
   const isP1 = p.id === "p1";
   const color = isP1 ? "oklch(0.85 0.18 210)" : "oklch(0.72 0.28 340)";
   const glow = isP1 ? "oklch(0.75 0.22 215)" : "oklch(0.65 0.30 345)";
@@ -399,7 +399,7 @@ function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
         <FrenzyBar
           cd={p.frenzyCd} max={p.frenzyCdMax} active={p.frenzyActive}
           side={side}
-          onActivate={isP1 ? () => engineRef.current?.pressFrenzy("p1") : undefined}
+          onActivate={isP1 ? onFrenzy : undefined}
           hint={isP1 ? "B · Tap" : "N"}
         />
       )}
@@ -407,7 +407,7 @@ function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
   );
 }
 
-function FrenzyBar({ cd, max, active, side }: { cd: number; max: number; active: boolean; side: "left" | "right" }) {
+function FrenzyBar({ cd, max, active, side, onActivate, hint }: { cd: number; max: number; active: boolean; side: "left" | "right"; onActivate?: () => void; hint?: string }) {
   const ready = cd <= 0;
   const pct = ready ? 100 : (1 - cd / max) * 100;
   const fill = active ? "oklch(0.78 0.22 30)" : ready ? "oklch(0.72 0.22 145)" : "oklch(0.55 0.10 145)";
