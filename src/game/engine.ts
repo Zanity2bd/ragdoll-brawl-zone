@@ -2161,6 +2161,62 @@ export class GameEngine {
     }
     ctx.globalCompositeOperation = "source-over";
 
+    // ---- Lightning orbs (Flash power 2) ----
+    ctx.globalCompositeOperation = "lighter";
+    for (const lo of this.lightnings) {
+      const fade = Math.min(1, lo.life * 4);
+      if (!this.lowPower) { ctx.shadowBlur = 30; ctx.shadowColor = "oklch(0.95 0.18 95)"; }
+      ctx.fillStyle = "oklch(0.95 0.18 95)";
+      ctx.globalAlpha = fade * 0.85;
+      ctx.beginPath(); ctx.arc(lo.x, lo.y, 10 + Math.sin(lo.phase) * 2, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "oklch(0.99 0.06 95)";
+      ctx.globalAlpha = fade;
+      ctx.beginPath(); ctx.arc(lo.x, lo.y, 4.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "oklch(0.95 0.18 95)";
+      ctx.lineWidth = 1.6;
+      ctx.globalAlpha = fade * 0.85;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + lo.phase * 0.4;
+        let px = lo.x, py = lo.y;
+        ctx.beginPath(); ctx.moveTo(px, py);
+        for (let k = 0; k < 4; k++) {
+          const r = 6 + k * 5;
+          const jag = (Math.random() - 0.5) * 6;
+          px = lo.x + Math.cos(a) * r + Math.cos(a + Math.PI / 2) * jag;
+          py = lo.y + Math.sin(a) * r + Math.sin(a + Math.PI / 2) * jag;
+          ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalCompositeOperation = "source-over";
+
+    // ---- Time Freeze ring around frozen victim ----
+    if (this.timeFreezeT > 0 && this.timeFreezer) {
+      const victim = this.timeFreezer === "p1" ? this.p2 : this.p1;
+      const fade = Math.min(1, this.timeFreezeT * 2);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "oklch(0.92 0.14 220)";
+      ctx.lineWidth = 2.5;
+      ctx.globalAlpha = 0.65 * fade;
+      const ringR = 50 + Math.sin(this.elapsed * 6) * 4;
+      ctx.beginPath(); ctx.arc(victim.x, victim.y + 40, ringR, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = "oklch(0.95 0.16 220)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + this.elapsed * 0.3;
+        const r1 = ringR - 4, r2 = ringR + 4;
+        ctx.beginPath();
+        ctx.moveTo(victim.x + Math.cos(a) * r1, victim.y + 40 + Math.sin(a) * r1);
+        ctx.lineTo(victim.x + Math.cos(a) * r2, victim.y + 40 + Math.sin(a) * r2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // Projectiles
     ctx.globalCompositeOperation = "lighter";
     for (const pr of this.projectiles) {
