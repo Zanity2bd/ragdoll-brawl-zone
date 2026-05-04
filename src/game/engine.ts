@@ -535,6 +535,15 @@ export class GameEngine {
           target.onGround = false;
         }
         this.shake = 14;
+        this.hitstopT = Math.max(this.hitstopT, 0.025);
+        this.impactFlash = Math.max(this.impactFlash, 0.55);
+        if (target.wobble.staggerImmuneT <= 0) {
+          const dir = (Math.sign(pr.vx) || 1) as 1 | -1;
+          target.wobble.staggerT = 0.22;
+          target.wobble.staggerDir = dir;
+          target.wobble.staggerMag = 0.6;
+          applyImpulse(target.wobble, dir, -0.35, 0.7);
+        }
         this.burst(pr.x, pr.y, pr.glow, 18);
         Sfx.play(pr.kind === "batarang" ? "punch" : (pr.kind === "web" ? "thud" : "punch"), 0.7);
         pr.life = 0;
@@ -1188,9 +1197,18 @@ export class GameEngine {
       target.ragdollAng = 0;
       target.ragdollAV = (Math.random() - 0.5) * 4 + f.facing * 3;
       target.ragdollEnergy = 1;
+      // Snap initial impulse so transition into tumble looks continuous
+      applyImpulse(target.wobble, f.facing, -0.4, 1.0);
+    } else if (target.wobble.staggerImmuneT <= 0) {
+      // Partial-ragdoll stagger for small/chain-immune hits
+      const mag = Math.max(0.4, Math.min(1, m.damage / 20));
+      target.wobble.staggerT = 0.28;
+      target.wobble.staggerDir = f.facing;
+      target.wobble.staggerMag = mag;
+      applyImpulse(target.wobble, f.facing, -0.45, mag);
     }
     this.shake = Math.max(this.shake, m.shake);
-    this.hitstopT = Math.max(this.hitstopT, m.hitstop);
+    this.hitstopT = Math.max(this.hitstopT, Math.max(m.hitstop, 0.025)); // 1–2 frame hit-freeze min
     if (m.slowmoT > 0) { this.slowmoT = Math.max(this.slowmoT, m.slowmoT); this.slowmoMode = "impact"; }
     this.impactFlash = 1;
     this.burst(fx, fy, f.skin.glow, 28);
@@ -1336,14 +1354,17 @@ export class GameEngine {
     const base = f.flying
       ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, f.facing, FIGHTER_H)
       : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, f.facing, FIGHTER_H);
+    let posed: Pose;
     if (f.meleeKind) {
       const m = f.move;
       const wp = m.windup / f.meleeDur;
       const ap = m.active / f.meleeDur;
       const prog = f.meleeT / f.meleeDur;
-      return computeAttackPose(base, f.meleeKind, prog, { wp, ap }, f.facing);
+      posed = computeAttackPose(base, f.meleeKind, prog, { wp, ap }, f.facing);
+    } else {
+      posed = base;
     }
-    return base;
+    return applyWobble(posed, f.wobble, this.lowPower, f.onGround && !f.flying);
   }
 
   // ---------------- RENDER ----------------
