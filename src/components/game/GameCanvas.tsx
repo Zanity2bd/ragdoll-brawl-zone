@@ -471,7 +471,7 @@ function FrenzyBar({ cd, max, active, side, onActivate }: { cd: number; max: num
           className="font-mono text-[10px] tracking-[0.2em] uppercase"
           style={{ color: ready ? glow : "oklch(0.65 0.04 145)" }}
         >
-          {active ? "RAGE FRENZY!" : ready ? `Rage Frenzy ▸ ${hint ?? "READY"}` : "Rage Frenzy"}
+          {active ? "RAGE FRENZY!" : ready ? "Rage Frenzy ▸ READY" : "Rage Frenzy"}
         </span>
         {!ready && !active && (
           <span className="font-mono text-[10px] text-foreground/50">{cd.toFixed(1)}s</span>
