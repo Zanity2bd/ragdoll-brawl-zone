@@ -453,6 +453,7 @@ export class GameEngine {
   private projectiles: Projectile[] = [];
   private particles: Particle[] = [];
   private shockwaves: Shockwave[] = [];
+  private attackFx: ActiveFx[] = [];
   private beams: Beam[] = [];
   private lightnings: LightningOrb[] = [];
   private missiles: Missile[] = [];
@@ -520,6 +521,7 @@ export class GameEngine {
     if (!ctx) throw new Error("no ctx");
     this.ctx = ctx;
     loadWalkSheet();
+    loadAttackFx();
     if (typeof document !== "undefined") {
       const v = document.createElement("video");
       v.src = "/fx/hulk-special.webm";
@@ -696,6 +698,7 @@ export class GameEngine {
     this.projectiles = [];
     this.particles = [];
     this.shockwaves = [];
+    this.attackFx = [];
     this.beams = [];
     this.lightnings = [];
     this.missiles = [];
