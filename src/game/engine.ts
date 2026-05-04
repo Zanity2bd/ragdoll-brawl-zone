@@ -500,6 +500,7 @@ export class GameEngine {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("no ctx");
     this.ctx = ctx;
+    loadWalkSheet();
     if (typeof document !== "undefined") {
       const v = document.createElement("video");
       v.src = "/fx/hulk-special.webm";
