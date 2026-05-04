@@ -129,7 +129,7 @@ export function GameCanvas() {
       {screen === "fight" && isTouch && engine && <TouchControls engine={engine} />}
 
       {screen === "map" && (
-        <MapSelect onPick={(id) => { setMapId(id); setScreen("skin"); }} />
+        <Lobby onPickMap={(id) => { setMapId(id); setScreen("skin"); }} />
       )}
       {screen === "skin" && (
         <SkinSelect
