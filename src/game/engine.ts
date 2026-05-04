@@ -187,7 +187,7 @@ interface Particle {
 }
 
 interface Shockwave { x: number; y: number; r: number; rMax: number; life: number; maxLife: number; color: string; }
-interface Beam { owner: PlayerId; x: number; y: number; angle: number; length: number; life: number; overload?: boolean; }
+interface Beam { owner: PlayerId; x: number; y: number; angle: number; length: number; life: number; overload?: boolean; red?: boolean; }
 
 interface Platform {
   x: number; y: number; w: number; h: number;
