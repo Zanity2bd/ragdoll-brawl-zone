@@ -250,11 +250,13 @@ export class GameEngine {
 
     for (const pr of this.projectiles) {
       pr.x += pr.vx * sdt; pr.y += pr.vy * sdt; pr.life -= dt;
-      this.particles.push({
-        x: pr.x, y: pr.y,
-        vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 30,
-        life: 0.4, maxLife: 0.4, color: pr.glow, size: 3,
-      });
+      if (!this.lowPower || Math.random() < 0.5) {
+        this.particles.push({
+          x: pr.x, y: pr.y,
+          vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 30,
+          life: 0.4, maxLife: 0.4, color: pr.glow, size: 3,
+        });
+      }
     }
     for (const pr of this.projectiles) {
       const target = pr.owner === "p1" ? this.p2 : this.p1;
