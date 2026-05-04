@@ -199,7 +199,7 @@ function RotatePrompt() {
   );
 }
 
-function HUD({ snap, onRematch, onChange, muted, onToggleMute }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onToggleMute: () => void }) {
+function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onOpenAudio: () => void }) {
   return (
     <>
       <div className="pointer-events-none absolute top-0 left-0 right-0 p-2 sm:p-4 flex gap-2 sm:gap-4 items-start">
@@ -207,9 +207,9 @@ function HUD({ snap, onRematch, onChange, muted, onToggleMute }: { snap: GameSna
         <HpBar p={snap.p2} side="right" />
       </div>
       <button
-        onClick={onToggleMute}
-        aria-label={muted ? "Unmute" : "Mute"}
-        className="absolute top-2 right-2 sm:top-3 sm:right-3 w-9 h-9 rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-20"
+        onClick={onOpenAudio}
+        aria-label="Audio settings"
+        className="absolute top-2 right-2 sm:top-3 sm:right-3 w-9 h-9 rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-30"
       >
         {muted ? "🔇" : "🔊"}
       </button>
