@@ -76,7 +76,8 @@ export function computeWalkPose(
   const hipYBase = 56;
 
   // Stronger lean at sprint (was speed/1700, capped 0.16)
-  const lean = moving ? facing * Math.min(0.22, speed / 1300) : 0;
+  // Bigger forward lean at run speeds — matches reference run silhouette
+  const lean = moving ? facing * Math.min(0.32, speed / 900) : 0;
 
   if (!onGround && attacking) {
     // ----- Flying kick (airborne basic kick) -----
