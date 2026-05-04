@@ -386,7 +386,11 @@ export class GameEngine {
   setIntent(p: PlayerId, intent: Partial<Intents>) { Object.assign(this.intents[p], intent); }
   pressFire(p: PlayerId) { this.intents[p].fire = true; }
   pressTeleport(p: PlayerId) { this.intents[p].teleport = true; }
-  pressJump(p: PlayerId) { this.intents[p].jump = true; }
+  pressJump(p: PlayerId) {
+    this.intents[p].jump = true;
+    const f = p === "p1" ? this.p1 : this.p2;
+    if (f) f.jumpBufferT = JUMP_BUFFER_T;
+  }
   pressMelee(p: PlayerId) { this.intents[p].melee = true; }
   setAirSteering(p: PlayerId, ax: number, ay: number) {
     this.intents[p].ax = Math.max(-1, Math.min(1, ax));
