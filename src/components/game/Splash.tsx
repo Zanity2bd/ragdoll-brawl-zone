@@ -77,75 +77,6 @@ export function Splash({ onPlay }: { onPlay: () => void }) {
       ctx.fillStyle = "oklch(0.18 0.02 260 / 0.05)";
       for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 1);
 
-      // ---------- Train (right side, recedes & approaches) ----------
-      const approach = Math.min(1, u / 0.55);
-      const recede = u > 0.55 ? (u - 0.55) / 0.45 : 0;
-      const trainX = W + 200 - approach * 520 + recede * 700;
-      const trainY = H * 0.55;
-      drawTrain(ctx, trainX, trainY, t);
-
-      // ---------- Homelander stickman (runs across) ----------
-      const runEase = u < 0.45 ? u / 0.45 : 1;
-      const lingerEnd = u > 0.65 ? (u - 0.65) / 0.35 : 0;
-      const heroX = -120 + runEase * (W * 0.45 + 120) + lingerEnd * (W * 0.55 + 240);
-      const heroY = H * 0.72;
-      const firing = u > 0.35 && u < 0.62;
-
-      drawHomelander(ctx, heroX, heroY, t, firing);
-
-      // ---------- Laser beams + impact ----------
-      if (firing) {
-        const intensity = 1 - Math.abs((u - 0.48) / 0.14); // peaks mid
-        const eyeY = heroY - 95; // head height
-        const eyeXL = heroX - 4;
-        const eyeXR = heroX + 4;
-        const targetX = trainX + 30;
-        const targetY = trainY + 10;
-
-        ctx.save();
-        ctx.shadowBlur = 22;
-        ctx.shadowColor = "oklch(0.78 0.25 25)";
-        ctx.strokeStyle = `oklch(0.85 0.28 25 / ${0.6 + 0.4 * intensity})`;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(eyeXL, eyeY); ctx.lineTo(targetX - 8, targetY);
-        ctx.moveTo(eyeXR, eyeY); ctx.lineTo(targetX + 8, targetY);
-        ctx.stroke();
-
-        // outer hot core
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = `oklch(0.98 0.10 60 / ${0.7 + 0.3 * intensity})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(eyeXL, eyeY); ctx.lineTo(targetX - 8, targetY);
-        ctx.moveTo(eyeXR, eyeY); ctx.lineTo(targetX + 8, targetY);
-        ctx.stroke();
-        ctx.restore();
-
-        // sparks at impact
-        for (let i = 0; i < 10; i++) {
-          const seed = i * 53.7 + Math.floor(t * 12);
-          const a = ((seed * 31) % 360) * (Math.PI / 180);
-          const r = ((seed * 17) % 60) * intensity;
-          const sx = targetX + Math.cos(a) * r;
-          const sy = targetY + Math.sin(a) * r;
-          ctx.fillStyle = `oklch(0.95 0.18 ${40 + (i % 20)} / ${intensity})`;
-          ctx.fillRect(sx, sy, 2, 2);
-        }
-        // smoke puff
-        ctx.fillStyle = `oklch(0.30 0.02 30 / ${0.25 * intensity})`;
-        ctx.beginPath();
-        ctx.arc(targetX, targetY - 10, 30 + intensity * 20, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // ---------- Hero motion streaks ----------
-      ctx.fillStyle = "oklch(0.55 0.18 260 / 0.35)";
-      for (let i = 0; i < 8; i++) {
-        const off = i * 16 + ((t * 200) % 16);
-        ctx.fillRect(heroX + off + 8, heroY - 60 + ((i * 7) % 50), 14, 1);
-      }
-
       // ---------- Vignette ----------
       const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.8);
       vg.addColorStop(0, "oklch(0 0 0 / 0)");
@@ -216,7 +147,7 @@ export function Splash({ onPlay }: { onPlay: () => void }) {
             ARENA
           </h2>
           <div className="mt-3 font-mono text-[10px] sm:text-xs tracking-[0.4em] uppercase text-foreground/50">
-            Ogun · war in Yoruba
+            Offline Arena
           </div>
         </div>
 
