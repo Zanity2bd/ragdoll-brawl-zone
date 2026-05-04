@@ -1,48 +1,27 @@
-## Goal
-Use the new 15-frame `walk2-3.zip` sheet exactly as specced:
-- **Walk** = frames 1–10 (loop)
-- **Punch** = frames 11–14 (one-shot, hit active on 12–13)
-- **Recovery** = frame 15 (one-shot transition back to idle/walk)
+## Issue
+Overlays (face, mask, eyes, chest emblem, cape) currently use a single SHARED anchor for all 15 frames, so as the body moves the painted features stay fixed in frame coordinates and "slip off" — Spider-Man's spider drifts off his chest, his mask floats off his head during the punch wind-up.
 
-The current T-key kick (procedural foot swing, jab SFX) is removed entirely and replaced with a sprite-driven punch that uses these new frames.
+## Fix
+Replace the SHARED anchor with the real per-frame head/chest positions extracted from `walk-sheet.png`'s alpha. Anchors I already extracted from the live sheet:
 
-## Changes
+| Frame | hx | hy | hr | cx | cy | hipY |
+|--|--|--|--|--|--|--|
+| 0–9 (walk) | varies 66..84 | 14–15 | 13–14 | varies 65..79 | 45–47 | 106 |
+| 10 punch windup | 71 | 15 | 14 | 67 | 46 | 106 |
+| 11 punch impact 1 | 87 | 56 | 14 | 72 | 84 | 123 |
+| 12 punch impact 2 | 98 | 27 | 14 | 94 | 50 | 110 |
+| 13 follow-through | 105 | 16 | 14 | 98 | 46 | 106 |
+| 14 recovery | 70 | 15 | 13 | 63 | 45 | 106 |
 
-### 1. Sprite sheet rebuild
-Already staged: `src/assets/walk-sheet.png` rebuilt as a 15×144×200 horizontal strip from `walk2-3.zip` (frames foot-anchored at the bottom, alpha-cropped, scaled to fit).
+`footY` is 193 across all frames.
 
-### 2. `src/game/walkSprite.ts`
-- `WALK_FRAME_COUNT = 15`
-- New exports: `WALK_LOOP_FRAMES = 10`, `PUNCH_FRAME_START = 10`, `PUNCH_FRAME_COUNT = 4`, `RECOVERY_FRAME = 14`
-- Composited per-skin sheet bakes overlays for all 15 frames (no other change to overlay logic).
+### Files
+- `src/game/walkAnchors.ts` — replace the SHARED constant + `Array.from` with a literal 15-entry table using the values above.
 
-### 3. `src/game/engine.ts`
-- Rename fighter state `kickT/kickCd/kickHit` → `punchT/punchCd/punchHit`. Add `recoverT` for the frame-15 transition.
-- New timing (4-frame swing with sped-up impact + slight pause-on-hit):
-  - frame 11 windup ~0.10s
-  - frames 12–13 impact ~0.05s each (hitbox active here only)
-  - frame 14 follow-through ~0.10s
-  - frame 15 recovery ~0.10s (visual only, no hit)
-  - cooldown 0.55s, range 60, dmg 1, SFX `punch`
-- Hit logic same as old kick but: chest-height impact origin, `Sfx.play("punch")`, brief hitstop ~0.06s.
-- Rename `pressKick` → `pressPunch` (engine method + intent flag).
-- Renderer (lines ~4851–4877):
-  - Walk loop modulo uses `WALK_LOOP_FRAMES` (10), not 14/15.
-  - If `punchT > 0`: pick frame 10/11/12/13 from elapsed time, draw it, skip procedural attack overlay, return.
-  - Else if `recoverT > 0`: draw frame 14, return.
-- Update `computeWalkPose` arg (line 4092): `f.kickT > 0` → `f.punchT > 0 || f.recoverT > 0`.
-- Remove the grounded-kick branch in `poseFor` (lines 4117–4125) — no longer needed since the sprite drives the punch.
-- Remove `KICK_*` constants.
-
-### 4. `src/components/game/GameCanvas.tsx`
-- T (P1) and P (P2) handlers + `KickButton` touch button → call `engine.pressPunch`. Update comment + aria-label to "Punch". (Component name kept as `KickButton` internally is fine, or renamed — minor.)
-
-### 5. `src/game/ai.ts`
-No `pressKick` calls — nothing to update.
+Nothing else needs to change: `walkSprite.ts` already pulls `WALK_ANCHORS[i]` per frame for compositing (overlays, cape, eyes, emblem), it just had no real data to work with.
 
 ## Acceptance
-- Walking only cycles frames 1–10.
-- T / P play frames 11→14 once with a 1-dmg hit on 12–13 + brief hit-pause.
-- Frame 15 plays once after each punch as recovery, never loops, never appears mid-walk.
-- All skins inherit the punch (overlays are baked per-frame already).
-- No leftover `kickT` / `KICK_*` references.
+- Spider-Man's mask, lenses and chest spider stay glued to his head/torso through walk and punch frames.
+- Batman's cowl ears and bat emblem track the body during the punch windup/impact (frame 11 lunges low, frame 12 extends — emblem follows).
+- Capes still draw behind the torso correctly (uses the same chest anchor).
+- No frame-rate impact (composited sheet is still cached per skin).
