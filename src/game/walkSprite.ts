@@ -6,12 +6,12 @@
 import sheetUrl from "@/assets/walk-sheet.png";
 
 export const WALK_FRAME_W = 144;
-export const WALK_FRAME_H = 100;
-export const WALK_FRAME_COUNT = 66;
+export const WALK_FRAME_H = 200;
+export const WALK_FRAME_COUNT = 15;
 // Approx vertical position of the feet in each frame, measured in the
-// source 100-px-tall frame. Used so we can pin the foot baseline to the
+// source frame. Used so we can pin the foot baseline to the
 // fighter's ground line in-game.
-export const WALK_FOOT_Y = 100;
+export const WALK_FOOT_Y = 200;
 
 let sheet: HTMLImageElement | null = null;
 let sheetReady = false;
