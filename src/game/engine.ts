@@ -4954,6 +4954,17 @@ export class GameEngine {
       // ---- Just landed (squash) ----
       if (f.justLandedT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
 
+      // ---- Combo swing (high kick / knee finisher) ----
+      if (f.comboKind && f.comboT > 0) {
+        const u = f.comboT / Math.max(0.001, f.comboDur);
+        if (f.comboKind === "kick") {
+          drawFrame(u < 0.4 ? KICK_CHAMBER_FRAME : KICK_HIT_FRAME);
+        } else {
+          drawFrame(u < 0.4 ? KNEE_CHAMBER_FRAME : KNEE_HIT_FRAME);
+        }
+        return;
+      }
+
       // ---- Punch one-shot (frames 10..13) ----
       if (f.punchT > 0) {
         const pt = f.punchT;
