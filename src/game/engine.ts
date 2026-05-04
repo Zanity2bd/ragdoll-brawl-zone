@@ -1274,9 +1274,19 @@ export class GameEngine {
     const headColor = skin.head ?? bodyColor;
 
     if (f.onGround && !ghost && f.ragdollT <= 0) {
-      ctx.fillStyle = "oklch(0 0 0 / 0.28)";
+      // Soft contact light pool — adds depth and grounding without cost.
+      if (!this.lowPower) {
+        const grad = ctx.createRadialGradient(0, FIGHTER_H - 1, 1, 0, FIGHTER_H - 1, 30);
+        grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 35%, transparent)`);
+        grad.addColorStop(1, "transparent");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(0, FIGHTER_H - 1, 30, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "oklch(0 0 0 / 0.32)";
       ctx.beginPath();
-      ctx.ellipse(0, FIGHTER_H - 2, 18, 4, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, FIGHTER_H - 2, 16, 3.5, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -1317,12 +1327,42 @@ export class GameEngine {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
+    // ---- Outer glow pass (one-time, cheap) ----
+    // A single soft stroke beneath the main limbs gives a premium neon read.
+    const baseW = skin.thickBody ? 5 : 4;
+    if (!this.lowPower && !ghost) {
+      ctx.save();
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = skin.glow;
+      ctx.strokeStyle = `color-mix(in oklab, ${skin.glow} 70%, transparent)`;
+      ctx.lineWidth = baseW + 2.5;
+      ctx.globalAlpha = 0.55;
+      drawLimb(ctx, pose.legL); drawLimb(ctx, pose.legR);
+      drawLimb(ctx, pose.armL); drawLimb(ctx, pose.armR);
+      ctx.beginPath(); ctx.moveTo(0, shoulderY); ctx.lineTo(0, hipY); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    // ---- Main limb stroke ----
     ctx.strokeStyle = limbColor;
-    ctx.lineWidth = skin.thickBody ? 4.5 : 3.5;
+    ctx.lineWidth = baseW;
     drawLimb(ctx, pose.legL);
     drawLimb(ctx, pose.legR);
     drawLimb(ctx, pose.armL);
     drawLimb(ctx, pose.armR);
+
+    // ---- Inner highlight: slim brighter core gives volume ----
+    if (!ghost) {
+      ctx.save();
+      ctx.strokeStyle = `color-mix(in oklab, ${limbColor} 40%, white)`;
+      ctx.lineWidth = Math.max(1, baseW - 2.4);
+      ctx.globalAlpha = 0.38;
+      drawLimb(ctx, pose.legL); drawLimb(ctx, pose.legR);
+      drawLimb(ctx, pose.armL); drawLimb(ctx, pose.armR);
+      ctx.restore();
+    }
 
     if (skin.boots) {
       drawBoot(ctx, pose.footL, f.facing, skin.boots);
@@ -1333,17 +1373,28 @@ export class GameEngine {
       drawFist(ctx, pose.handR, skin.gloves);
     }
 
+    // Torso
     ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = skin.thickBody ? 6 : 4.5;
+    ctx.lineWidth = skin.thickBody ? 6.5 : 5;
     ctx.beginPath();
     ctx.moveTo(0, shoulderY);
     ctx.lineTo(0, hipY);
     ctx.stroke();
+    if (!ghost) {
+      ctx.save();
+      ctx.strokeStyle = `color-mix(in oklab, ${bodyColor} 40%, white)`;
+      ctx.lineWidth = skin.thickBody ? 2.5 : 1.8;
+      ctx.globalAlpha = 0.42;
+      ctx.beginPath(); ctx.moveTo(0, shoulderY + 2); ctx.lineTo(0, hipY - 2); ctx.stroke();
+      ctx.restore();
+    }
 
+    // Joints
     ctx.fillStyle = bodyColor;
-    ctx.beginPath(); ctx.arc(-4, shoulderY, 2.5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(4, shoulderY, 2.5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(0, hipY, 2.5, 0, Math.PI * 2); ctx.fill();
+    const jr = skin.thickBody ? 3.2 : 2.8;
+    ctx.beginPath(); ctx.arc(-4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, hipY, jr, 0, Math.PI * 2); ctx.fill();
 
     if (skin.emblem) {
       const ey = (shoulderY + hipY) / 2;
