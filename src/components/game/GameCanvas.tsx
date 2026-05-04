@@ -274,7 +274,7 @@ function RotatePrompt() {
   );
 }
 
-function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onOpenAudio: () => void }) {
+function HUD({ snap, onRematch, onChange, muted, onOpenAudio, onFrenzyP1 }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onOpenAudio: () => void; onFrenzyP1: () => void }) {
   return (
     <>
       <div
@@ -282,7 +282,7 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
         style={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       >
         <div className="flex gap-3 sm:gap-6 items-start w-full px-3 sm:px-6" style={{ maxWidth: "min(1200px, 96vw)" }}>
-          <HpBar p={snap.p1} side="left" onFrenzy={() => engineRef.current?.pressFrenzy("p1")} />
+          <HpBar p={snap.p1} side="left" onFrenzy={onFrenzyP1} />
           <HpBar p={snap.p2} side="right" />
         </div>
       </div>
