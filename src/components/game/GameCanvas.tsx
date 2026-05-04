@@ -70,23 +70,36 @@ export function GameCanvas() {
     const canvas = canvasRef.current!;
 
     // Detect device tier: low-power gets simpler effects + lower DPR;
-    // high-end gets crisper rendering up to DPR 2.
+    // high-end gets crisper rendering up to DPR 3.
     const isTouchDev = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
     const cores = navigator.hardwareConcurrency || 8;
     const mem = (navigator as any).deviceMemory || 8;
     const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 700;
     const lowPower = (isTouchDev && (cores <= 4 || mem <= 3)) || smallScreen;
     const highEnd = !lowPower && cores >= 8 && mem >= 6;
-    const dprCap = lowPower ? 1 : highEnd ? 2 : 1.5;
+    const dprCap = lowPower ? 1.5 : highEnd ? 3 : 2;
 
     const resize = () => {
-      const r = canvas.getBoundingClientRect();
-      const dpr = Math.min(devicePixelRatio || 1, dprCap);
-      canvas.width = Math.floor(r.width * dpr);
-      canvas.height = Math.floor(r.height * dpr);
+      const parent = canvas.parentElement!;
+      const cssW = parent.clientWidth;
+      const cssH = parent.clientHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+      canvas.style.width = cssW + "px";
+      canvas.style.height = cssH + "px";
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+      }
     };
     resize();
     window.addEventListener("resize", resize);
+    window.addEventListener("orientationchange", resize);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", resize);
+    vv?.addEventListener("scroll", resize);
 
     const engine = new GameEngine(canvas);
     engineRef.current = engine;
