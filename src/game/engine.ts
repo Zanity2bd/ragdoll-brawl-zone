@@ -1150,6 +1150,15 @@ export class GameEngine {
       ctx.shadowBlur = 0;
     }
 
+    // Cinematic vignette (cheap full-screen radial overlay)
+    if (!this.lowPower) {
+      const grad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.7);
+      grad.addColorStop(0, "rgba(0,0,0,0)");
+      grad.addColorStop(1, "rgba(0,0,0,0.55)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+    }
+
     ctx.restore();
   }
 
