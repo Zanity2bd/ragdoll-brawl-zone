@@ -413,16 +413,21 @@ function FrenzyBar({ cd, max, active, side, onActivate, hint }: { cd: number; ma
   const pct = ready ? 100 : (1 - cd / max) * 100;
   const fill = active ? "oklch(0.78 0.22 30)" : ready ? "oklch(0.72 0.22 145)" : "oklch(0.55 0.10 145)";
   const glow = active ? "oklch(0.85 0.25 30)" : "oklch(0.78 0.22 145)";
+  const clickable = !!onActivate && ready && !active;
+  const Wrapper: any = clickable ? "button" : "div";
   return (
-    <div className={`flex flex-col gap-1 ${side === "right" ? "items-end" : ""}`}>
-      <div
-        className={`flex items-center gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}
-      >
+    <Wrapper
+      onClick={clickable ? onActivate : undefined}
+      className={`flex flex-col gap-1 ${side === "right" ? "items-end" : ""} ${clickable ? "pointer-events-auto cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-transform" : ""}`}
+      style={clickable ? { background: "transparent", border: "none", padding: 0 } : undefined}
+      aria-label={clickable ? "Activate Rage Frenzy" : undefined}
+    >
+      <div className={`flex items-center gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
         <span
           className="font-mono text-[10px] tracking-[0.2em] uppercase"
           style={{ color: ready ? glow : "oklch(0.65 0.04 145)" }}
         >
-          {active ? "RAGE FRENZY!" : ready ? "Rage Frenzy ▸ READY" : "Rage Frenzy"}
+          {active ? "RAGE FRENZY!" : ready ? `Rage Frenzy ▸ ${hint ?? "READY"}` : "Rage Frenzy"}
         </span>
         {!ready && !active && (
           <span className="font-mono text-[10px] text-foreground/50">{cd.toFixed(1)}s</span>
@@ -446,7 +451,7 @@ function FrenzyBar({ cd, max, active, side, onActivate, hint }: { cd: number; ma
           }}
         />
       </div>
-    </div>
+    </Wrapper>
   );
 }
 
