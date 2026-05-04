@@ -538,42 +538,68 @@ export class GameEngine {
 
   /** Signature Nightcrawler teleport puff: dense purple smoke + curling tendrils + sparks. */
   private bamfPuff(x: number, y: number, mode: "depart" | "arrive" | "strike") {
-    const layers = mode === "strike" ? 2 : 3;
-    for (let i = 0; i < layers; i++) {
-      const off = (Math.random() - 0.5) * 14;
+    // Realistic billowing brimstone: many small overlapping puffs that drift
+    // upward with turbulence rather than a few hard discs.
+    const puffs = mode === "strike" ? 10 : (mode === "arrive" ? 18 : 16);
+    for (let i = 0; i < puffs; i++) {
+      const ox = (Math.random() - 0.5) * 28;
+      const oy = (Math.random() - 0.5) * 22;
+      const rMax = 18 + Math.random() * 22 + (mode === "arrive" ? 6 : 0);
+      const life = 0.9 + Math.random() * 0.7;
+      // Hue: deep violet -> dusty grey-purple (brimstone)
+      const hue = 290 + Math.random() * 25;
       this.smokeClouds.push({
-        x: x + off, y: y + (Math.random() - 0.5) * 10,
-        r: 10 + i * 4,
-        rMax: 56 + i * 14 + (mode === "arrive" ? 8 : 0),
-        life: 0.55 + i * 0.12, maxLife: 0.55 + i * 0.12,
+        x: x + ox, y: y + oy,
+        r: 6 + Math.random() * 6,
+        rMax,
+        life, maxLife: life,
+        vx: (Math.random() - 0.5) * 28,
+        vy: -18 - Math.random() * 36,
+        hue,
+        seed: Math.random() * 1000,
+        dense: true,
       });
     }
-    this.burst(x, y, "oklch(0.55 0.22 305)", mode === "arrive" ? 28 : 22);
-    const count = mode === "strike" ? 10 : 18;
+    // Low ground hugging dark cloud
+    if (mode !== "strike") {
+      for (let i = 0; i < 6; i++) {
+        const ox = (Math.random() - 0.5) * 50;
+        this.smokeClouds.push({
+          x: x + ox, y: y + 10 + Math.random() * 8,
+          r: 8, rMax: 26 + Math.random() * 14,
+          life: 1.3, maxLife: 1.3,
+          vx: ox * 0.6, vy: -4 - Math.random() * 8,
+          hue: 285 + Math.random() * 10,
+          seed: Math.random() * 1000,
+          dense: true,
+        });
+      }
+    }
+    this.burst(x, y, "oklch(0.55 0.22 305)", mode === "arrive" ? 22 : 18);
+    // Glowing embers / sulphur sparks
+    const count = mode === "strike" ? 8 : 16;
     for (let i = 0; i < count; i++) {
       const ang = Math.random() * Math.PI * 2;
       const sp = 30 + Math.random() * 90;
       this.particles.push({
         x: x + (Math.random() - 0.5) * 14,
         y: y + (Math.random() - 0.5) * 14,
-        vx: Math.cos(ang) * sp * 0.6,
-        vy: Math.sin(ang) * sp * 0.4 - 40 - Math.random() * 30,
+        vx: Math.cos(ang) * sp * 0.7,
+        vy: Math.sin(ang) * sp * 0.4 - 60 - Math.random() * 40,
         life: 0.7 + Math.random() * 0.5, maxLife: 1.2,
-        color: i % 3 === 0
-          ? "oklch(0.78 0.22 305)"
-          : (i % 3 === 1 ? "oklch(0.4 0.16 295)" : "oklch(0.25 0.08 290)"),
-        size: 3 + Math.random() * 3.5,
+        color: i % 2 === 0 ? "oklch(0.78 0.22 305)" : "oklch(0.92 0.18 60)",
+        size: 1.6 + Math.random() * 2.2,
       });
     }
-    for (let i = 0; i < (mode === "arrive" ? 10 : 6); i++) {
+    for (let i = 0; i < (mode === "arrive" ? 12 : 6); i++) {
       const ang = Math.random() * Math.PI * 2;
-      const sp = 160 + Math.random() * 200;
+      const sp = 200 + Math.random() * 220;
       this.particles.push({
         x, y,
         vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 40,
-        life: 0.25 + Math.random() * 0.2, maxLife: 0.45,
-        color: "oklch(0.95 0.18 95)",
-        size: 1.4 + Math.random() * 1.6,
+        life: 0.22 + Math.random() * 0.18, maxLife: 0.45,
+        color: "oklch(0.97 0.18 95)",
+        size: 1.3 + Math.random() * 1.4,
       });
     }
   }
