@@ -791,7 +791,7 @@ function Joystick({
 
 function KickButton({ engine, snap, cpu }: { engine: GameEngine; snap: GameSnapshot; cpu: boolean }) {
   const fire = (p: PlayerId) => {
-    engine.pressKick(p);
+    engine.pressPunch(p);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(12);
   };
   const Btn = ({ side, p, color }: { side: "left" | "right"; p: PlayerId; color: string }) => (
