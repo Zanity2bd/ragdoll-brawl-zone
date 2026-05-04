@@ -2334,7 +2334,7 @@ export class GameEngine {
     const powerLocked = f.stunT > 0 || f.unibeamChargeT > 0 || f.unibeamFireT > 0 || f.heatVisionT > 0;
     if (powerLocked) {
       intent.left = false; intent.right = false;
-      intent.melee = false; intent.fire = false; intent.kick = false;
+      intent.melee = false; intent.fire = false; intent.punch = false;
       intent.ax = 0; intent.ay = 0;
     }
 
