@@ -4477,6 +4477,8 @@ export class GameEngine {
     const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
     if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
+    // Sprite-based attack FX overlays (charge ring, slash arc, impact star, shockwave).
+    drawFxPool(ctx, this.attackFx);
     // Web-swing tethers — silky double strand with glow + slight slack curve.
     for (const f of [this.p1, this.p2]) {
       if (!f.swing) continue;
