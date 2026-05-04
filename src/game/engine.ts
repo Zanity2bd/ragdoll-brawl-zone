@@ -1032,12 +1032,12 @@ export class GameEngine {
     if (!this.teleTargeting) return;
     const f = this.teleTargeting === "p1" ? this.p1 : this.p2;
     const { sx, sy } = this.cssToStage(canvasX, canvasY);
-    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
     Sfx.play("bamf", 0.9);
     f.x = Math.max(40, Math.min(W - 40, sx));
     f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy - FIGHTER_H / 2));
     f.vx = 0; f.vy = 0; f.teleporting = false;
-    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 32);
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
     this.teleTargeting = null;
     if (this.slowmoMode === "tele") { this.slowmoT = 0; this.slowmoMode = null; }
     this.emit();
