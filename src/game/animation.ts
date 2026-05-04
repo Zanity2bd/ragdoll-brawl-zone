@@ -135,7 +135,7 @@ export function computeWalkPose(
 
   // Arms counter-swing the legs; idle arms have a gentle micro-sway
   const sxL = -4, sxR = 4;
-  const armSwingMax = moving ? 14 : 0;
+  const armSwingMax = moving ? 16 + amp * 6 : 0;
   const idleSwayL = moving ? 0 : Math.sin(phase * 0.7) * 0.6;
   const idleSwayR = moving ? 0 : Math.sin(phase * 0.7 + Math.PI) * 0.6;
   // Arm L counter-swings R leg, and vice versa
