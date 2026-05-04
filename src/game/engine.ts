@@ -82,8 +82,10 @@ interface Fighter {
   hoverPhase: number;
   superCd: number;
   // ledge / drop-through state
-  dropT: number;            // ignore one-way platforms while > 0
-  ledgeFlash: number;       // brief glow on auto-grab landing
+  dropT: number;
+  ledgeFlash: number;
+  // soft-body wobble + partial ragdoll (stagger)
+  wobble: WobbleState;
   // super-dash
   dash: null | {
     t: number;
