@@ -3052,6 +3052,13 @@ export class GameEngine {
               x: cx, y: cy, r: 20, rMax: m.range * 1.6, life: 0.7, maxLife: 0.7,
               color: "oklch(0.55 0.20 25)",
             });
+            // Sprite shockwave ring overlay (additive) — sells the impact.
+            spawnFx(this.attackFx, "shockRing", cx, cy, {
+              size: m.range * 0.6, life: 0.55, grow: m.range * 1.4, blend: "lighter",
+            });
+            spawnFx(this.attackFx, "impactStar", cx, cy - 8, {
+              size: 44, life: 0.32, grow: 80,
+            });
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dist = Math.abs(target.x - cx);
             if (dist < m.range * 1.4) {
