@@ -880,7 +880,19 @@ export class GameEngine {
         else if (f.vx < 0) f.vx = Math.min(0, f.vx + fr);
       }
 
-      if (!locked && intent.jump && f.onGround) { f.vy = -JUMP_V; f.onGround = false; }
+      // Jump (with drop-through if pressing down on a one-way platform)
+      const wantsDrop = !locked && intent.jump && intent.ay > 0.5 && f.onGround;
+      if (wantsDrop) {
+        // Allow falling through one-way ledges briefly
+        f.dropT = 0.18;
+        f.onGround = false;
+        f.y += 2;
+      } else if (!locked && intent.jump && f.onGround) {
+        f.vy = -JUMP_V; f.onGround = false;
+      }
+      if (f.dropT > 0) f.dropT -= ldt;
+      if (f.ledgeFlash > 0) f.ledgeFlash -= ldt;
+
       if (!f.meleeKind) {
         const canFire = f.skin.id === "heatwave";
         const canTele = f.skin.id === "nightcrawler";
@@ -899,6 +911,8 @@ export class GameEngine {
         f.walkPhase += ldt * 1.2;
       }
 
+      const prevX = f.x;
+      const prevY = f.y;
       f.vy += GRAVITY * ldt;
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
@@ -906,22 +920,64 @@ export class GameEngine {
       if (f.x < 30) { f.x = 30; f.vx = 0; }
       if (f.x > W - 30) { f.x = W - 30; f.vx = 0; }
 
+      // Cover blocks: solid horizontal collision (lateral) — push fighter out.
+      for (const pl of this.platforms) {
+        if (pl.kind !== "cover") continue;
+        const hw = FIGHTER_W / 2;
+        const overlapX = f.x + hw > pl.x && f.x - hw < pl.x + pl.w;
+        const overlapY = f.y + FIGHTER_H > pl.y + 2 && f.y < pl.y + pl.h;
+        if (overlapX && overlapY) {
+          // Resolve along the smaller penetration axis
+          const fromLeft = (f.x + hw) - pl.x;
+          const fromRight = (pl.x + pl.w) - (f.x - hw);
+          if (fromLeft < fromRight) { f.x = pl.x - hw; if (f.vx > 0) f.vx = 0; }
+          else { f.x = pl.x + pl.w + hw; if (f.vx < 0) f.vx = 0; }
+        }
+      }
+
+      let landedOn: Platform | null = null;
+
       if (f.y + FIGHTER_H >= GROUND_Y) {
         f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
       } else { f.onGround = false; }
 
       for (const pl of this.platforms) {
-        const prevY = f.y - f.vy * ldt;
         const feet = f.y + FIGHTER_H;
         const prevFeet = prevY + FIGHTER_H;
-        if (
-          f.vy >= 0 &&
-          prevFeet <= pl.y + 2 &&
-          feet >= pl.y &&
-          f.x + FIGHTER_W / 2 > pl.x &&
-          f.x - FIGHTER_W / 2 < pl.x + pl.w
-        ) {
+        const hw = FIGHTER_W / 2;
+        const overX = f.x + hw > pl.x && f.x - hw < pl.x + pl.w;
+        if (!overX) continue;
+
+        // Standard top-landing (works for both kinds)
+        if (f.vy >= 0 && prevFeet <= pl.y + 2 && feet >= pl.y && f.dropT <= 0) {
           f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
+          landedOn = pl; continue;
+        }
+
+        // Auto ledge-grab: forgiving catch when arc clips a one-way ledge edge.
+        if (pl.kind === "platform" && f.vy >= -40 && f.dropT <= 0 && !f.onGround) {
+          const margin = 16; // forgiveness in px above the ledge
+          if (feet >= pl.y - margin && feet <= pl.y + 18 && prevFeet <= pl.y + margin + 4) {
+            // Snap onto the ledge — feels like an auto-grab
+            f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
+            f.ledgeFlash = 0.3;
+            landedOn = pl;
+          }
+        }
+      }
+
+      // Landing dust (only on fresh landings: was airborne last frame)
+      if (landedOn && Math.abs(prevY - f.y) > 4 && !this.lowPower) {
+        for (let i = 0; i < 5; i++) {
+          this.particles.push({
+            x: f.x + (Math.random() - 0.5) * 22,
+            y: landedOn.y - 2,
+            vx: (Math.random() - 0.5) * 70,
+            vy: -10 - Math.random() * 25,
+            life: 0.35, maxLife: 0.35,
+            color: "oklch(0.78 0.04 230)",
+            size: 1.6 + Math.random() * 1.6,
+          });
         }
       }
     }
