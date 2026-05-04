@@ -3525,15 +3525,13 @@ export class GameEngine {
     }
     ctx.translate(0, FIGHTER_H);
     ctx.rotate(pose.lean + (ghost ? 0 : f.bodyRoll));
-    // Yaw turn: facingT lags facing over ~125ms. Scaling X by (facingT * facing)
-    // makes the whole body — torso, limbs, head, features — visibly rotate
-    // through a flat midpoint when changing direction, like a 3D yaw. At rest
-    // the value is +1 so nothing changes; mid-turn it sweeps through 0.
+    // Yaw turn: pose is computed in the rendered facing (sign of facingT), so
+    // we scale X by |facingT| only — that gives a smooth squash through a flat
+    // mid-frame when changing direction, with no pose/render desync. At rest
+    // |facingT| = 1 so the body renders at full width.
     if (!ghost) {
-      const yaw = f.facingT * f.facing;
-      // Clamp away from exact zero so a degenerate transform never throws.
-      const yawSafe = Math.abs(yaw) < 0.05 ? Math.sign(yaw || 1) * 0.05 : yaw;
-      ctx.scale(yawSafe, 1);
+      const yawMag = Math.max(0.05, Math.abs(f.facingT));
+      ctx.scale(yawMag, 1);
     }
     ctx.translate(0, -FIGHTER_H);
 
