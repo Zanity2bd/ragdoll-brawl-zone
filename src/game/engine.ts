@@ -1126,6 +1126,7 @@ export class GameEngine {
     a.swing = null;
     a.onGround = false;
     Sfx.play("whoosh", 0.6);
+  }
 
   /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
   pressSuperDash(attacker: PlayerId): boolean {
