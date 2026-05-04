@@ -3976,27 +3976,24 @@ function drawLimb(
     return;
   }
 
-  // Tapered: split at elbow, stroke upper full width, lower thinner.
-  // Using midpoints on each half-curve keeps the join smooth.
-  const mUx = (sx + cx) / 2, mUy = (sy + cy) / 2;
-  const mLx = (cx + hx) / 2, mLy = (cy + hy) / 2;
+  // Tapered: split at elbow, stroke upper segment full width, lower thinner.
+  // We approximate by re-using the same quadratic but stopping/starting at the
+  // midpoint of the curve (the point on the curve at t=0.5).
+  const t = 0.5;
+  const midX = (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * cx + t * t * hx;
+  const midY = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * cy + t * t * hy;
 
+  // Upper half: start -> mid, with elbow control.
   ctx.lineWidth = upperW;
   ctx.beginPath();
   ctx.moveTo(sx, sy);
-  ctx.quadraticCurveTo((sx + mUx) / 2 * 0 + mUx * 0 + cx * 0 + sx * 0 + mUx, mUy, mLx, mLy);
-  // The triple-control noise above isn't needed; do a clean two-segment draw:
+  ctx.quadraticCurveTo(cx, cy, midX, midY);
   ctx.stroke();
 
-  // Re-draw cleanly (the prior beginPath was a placeholder that we discard via beginPath).
-  ctx.beginPath();
-  ctx.moveTo(sx, sy);
-  ctx.quadraticCurveTo(cx, cy, mLx, mLy);
-  ctx.stroke();
-
+  // Lower half: mid -> hand, same elbow control gives a continuous tangent.
   ctx.lineWidth = lowerW;
   ctx.beginPath();
-  ctx.moveTo(mLx, mLy);
+  ctx.moveTo(midX, midY);
   ctx.quadraticCurveTo(cx, cy, hx, hy);
   ctx.stroke();
 }
