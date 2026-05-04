@@ -4812,7 +4812,7 @@ export class GameEngine {
 
   private drawFighterAt(f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
     const ctx = this.ctx;
-    const skin = f.skin;
+    void f.skin; // skin colors/details intentionally unused — minimal white style
 
     // ---- Bamf strike depth FX (perspective scale + z-shadow) ----
     // Drives a punch-in zoom toward the camera plus a darker offset shadow underfoot
