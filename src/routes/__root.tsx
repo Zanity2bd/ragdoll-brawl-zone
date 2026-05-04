@@ -28,15 +28,14 @@ export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" },
+      { name: "theme-color", content: "#0a0a14" },
+      { title: "Stickman Neon Duel — Offline 1v1 Fighting Game" },
+      { name: "description", content: "Two stickmen, one arena. An offline 1v1 neon stickman fighting game with hero skins and animated battle maps." },
+      { property: "og:title", content: "Stickman Neon Duel" },
+      { property: "og:description", content: "Offline 1v1 neon stickman fighting game with animated battle maps and hero skins." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
