@@ -526,6 +526,7 @@ export class GameEngine {
     if (f.teleCd > 0 || f.teleporting) return;
     f.teleCd = TELE_CD;
     this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
+    Sfx.play("bamf", 0.9);
     f.x = Math.max(40, Math.min(W - 40, sx));
     f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy));
     f.vx = 0; f.vy = 0; f.teleporting = false;
@@ -980,6 +981,7 @@ export class GameEngine {
     const f = this.teleTargeting === "p1" ? this.p1 : this.p2;
     const { sx, sy } = this.cssToStage(canvasX, canvasY);
     this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
+    Sfx.play("bamf", 0.9);
     f.x = Math.max(40, Math.min(W - 40, sx));
     f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy - FIGHTER_H / 2));
     f.vx = 0; f.vy = 0; f.teleporting = false;
