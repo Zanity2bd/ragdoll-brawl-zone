@@ -2,21 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import { GameEngine, type GameSnapshot, type PlayerId } from "@/game/engine";
 import { type MapId } from "@/game/maps";
 import { type SkinId } from "@/game/skins";
+import { Sfx } from "@/game/sfx";
 import { Lobby } from "./Lobby";
 import { SkinSelect } from "./SkinSelect";
 import { Splash } from "./Splash";
 
-const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" }> = {
+const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" | "melee" }> = {
   KeyA: { p: "p1", action: "left" },
   KeyD: { p: "p1", action: "right" },
   KeyW: { p: "p1", action: "jump" },
   KeyF: { p: "p1", action: "fire" },
   KeyG: { p: "p1", action: "teleport" },
+  KeyJ: { p: "p1", action: "melee" },
   ArrowLeft: { p: "p2", action: "left" },
   ArrowRight: { p: "p2", action: "right" },
   ArrowUp: { p: "p2", action: "jump" },
   KeyK: { p: "p2", action: "fire" },
   KeyL: { p: "p2", action: "teleport" },
+  Semicolon: { p: "p2", action: "melee" },
 };
 
 type Screen = "splash" | "map" | "skin" | "fight";
