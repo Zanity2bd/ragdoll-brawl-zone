@@ -97,4 +97,18 @@ export const MOVES: Record<SkinId, MoveSpec> = {
     hitstop: 0.24, slowmoT: 0.45, shake: 22, ragdollT: 0.7,
     windupSfx: "whoosh", hitSfx: "thud",
   },
+  heatwave: {
+    kind: "crowbar", name: "Flame Bash",
+    windup: 0.25, active: 0.18, recover: 0.3, cooldown: 1.4,
+    range: 60, damage: 20, knockbackX: 380, knockbackY: -220,
+    hitstop: 0.16, slowmoT: 0.2, shake: 16, ragdollT: 0.4,
+    windupSfx: "whoosh", hitSfx: "boom",
+  },
+  nightcrawler: {
+    kind: "phaseStrike", name: "Bamf Strike",
+    windup: 0.08, active: 0.05, recover: 0.35, cooldown: 1.5,
+    range: 36, damage: 22, knockbackX: 480, knockbackY: -220,
+    hitstop: 0.16, slowmoT: 0.35, shake: 16, ragdollT: 0.5,
+    windupSfx: "whoosh", hitSfx: "punch",
+  },
 };

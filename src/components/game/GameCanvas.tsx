@@ -299,9 +299,13 @@ function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
         />
       </div>
       <div className={`flex gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
-        <CdPill label={isP1 ? "F · Fire" : "K · Fire"} cd={p.fireCd} max={p.fireCdMax} color={color} />
+        {p.name === "Heatwave" && (
+          <CdPill label={isP1 ? "F · Fire" : "K · Fire"} cd={p.fireCd} max={p.fireCdMax} color={color} />
+        )}
+        {p.name === "Nightcrawler" && (
+          <CdPill label={isP1 ? "G · Tele" : "L · Tele"} cd={p.teleCd} max={p.teleCdMax} color={color} />
+        )}
         <CdPill label={`${isP1 ? "J" : ";"} · ${p.meleeName}`} cd={p.meleeCd} max={p.meleeCdMax} color={color} />
-        <CdPill label={isP1 ? "G · Tele" : "L · Tele"} cd={p.teleCd} max={p.teleCdMax} color={color} />
       </div>
     </div>
   );
@@ -375,23 +379,74 @@ function PlayerControls({
   onPunch: () => void;
   onTele: () => void;
 }) {
+  const isHeatwave = p.name === "Heatwave";
+  const isNightcrawler = p.name === "Nightcrawler";
+  const onSpecial = isHeatwave ? onFire : isNightcrawler ? onTele : onPunch;
+  const cd = isHeatwave ? p.fireCd : isNightcrawler ? p.teleCd : p.meleeCd;
+  const max = isHeatwave ? p.fireCdMax : isNightcrawler ? p.teleCdMax : p.meleeCdMax;
+  const label = isHeatwave ? "Fire" : isNightcrawler ? "Teleport" : p.meleeName;
   return (
-    <div className={`flex items-end gap-3 ${side === "right" ? "flex-row-reverse" : ""}`}>
-      <Joystick color={color} onMove={onMove} onJump={onJump} />
-      <div className="flex flex-col gap-1.5">
-        <PowerButton color={color} cd={p.meleeCd} max={p.meleeCdMax} label={p.meleeName} short="✊" onPress={onPunch} />
-        <PowerButton color={color} cd={p.fireCd} max={p.fireCdMax} label="Fire" short="⚡" onPress={onFire} />
-        <PowerButton color={color} cd={p.teleCd} max={p.teleCdMax} label="Tele" short="✦" onPress={onTele} />
-      </div>
+    <div className={`flex items-end ${side === "right" ? "flex-row-reverse" : ""}`}>
+      <Joystick
+        color={color}
+        onMove={onMove}
+        onJump={onJump}
+        onSpecial={onSpecial}
+        specialCd={cd}
+        specialMax={max}
+        specialLabel={label}
+      />
     </div>
   );
 }
 
-function Joystick({ color, onMove, onJump }: { color: string; onMove: (x: number) => void; onJump: () => void }) {
+function Joystick({
+  color, onMove, onJump, onSpecial, specialCd, specialMax, specialLabel,
+}: {
+  color: string;
+  onMove: (x: number) => void;
+  onJump: () => void;
+  onSpecial: () => void;
+  specialCd: number;
+  specialMax: number;
+  specialLabel: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const idRef = useRef<number | null>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const [charging, setCharging] = useState(0);
   const lastUpY = useRef(0);
+  const holdTimer = useRef<number | null>(null);
+  const chargeRaf = useRef<number | null>(null);
+  const pressStart = useRef(0);
+  const movedFar = useRef(false);
+  const HOLD_MS = 400;
+  const ready = specialCd <= 0;
+  const cdPct = ready ? 100 : (1 - specialCd / specialMax) * 100;
+
+  const cancelHold = () => {
+    if (holdTimer.current != null) { clearTimeout(holdTimer.current); holdTimer.current = null; }
+    if (chargeRaf.current != null) { cancelAnimationFrame(chargeRaf.current); chargeRaf.current = null; }
+    setCharging(0);
+  };
+
+  const startHold = () => {
+    cancelHold();
+    pressStart.current = performance.now();
+    const tick = () => {
+      const p = Math.min(1, (performance.now() - pressStart.current) / HOLD_MS);
+      setCharging(p);
+      if (p < 1) chargeRaf.current = requestAnimationFrame(tick);
+    };
+    chargeRaf.current = requestAnimationFrame(tick);
+    holdTimer.current = window.setTimeout(() => {
+      if (!movedFar.current && ready) {
+        onSpecial();
+        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(30);
+      }
+      cancelHold();
+    }, HOLD_MS);
+  };
 
   const update = (clientX: number, clientY: number) => {
     const el = ref.current; if (!el) return;
@@ -404,6 +459,10 @@ function Joystick({ color, onMove, onJump }: { color: string; onMove: (x: number
     const nx = (dx / d) * cl, ny = (dy / d) * cl;
     setKnob({ x: nx, y: ny });
     onMove(nx / max);
+    if (Math.hypot(nx, ny) / max > 0.22) {
+      movedFar.current = true;
+      cancelHold();
+    }
     if (ny / max < -0.55 && Date.now() - lastUpY.current > 350) {
       lastUpY.current = Date.now();
       onJump();
@@ -423,57 +482,70 @@ function Joystick({ color, onMove, onJump }: { color: string; onMove: (x: number
       onPointerDown={(e) => {
         (e.target as Element).setPointerCapture(e.pointerId);
         idRef.current = e.pointerId;
+        movedFar.current = false;
         update(e.clientX, e.clientY);
+        startHold();
       }}
       onPointerMove={(e) => { if (idRef.current === e.pointerId) update(e.clientX, e.clientY); }}
       onPointerUp={(e) => {
         if (idRef.current !== e.pointerId) return;
         idRef.current = null;
+        cancelHold();
+        movedFar.current = false;
         setKnob({ x: 0, y: 0 });
         onMove(0);
       }}
-      onPointerCancel={() => { idRef.current = null; setKnob({ x: 0, y: 0 }); onMove(0); }}
+      onPointerCancel={() => { idRef.current = null; cancelHold(); movedFar.current = false; setKnob({ x: 0, y: 0 }); onMove(0); }}
     >
       <span className={arrow} style={{ top: 6, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▲</span>
       <span className={arrow} style={{ bottom: 6, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▼</span>
       <span className={arrow} style={{ left: 6, top: "50%", transform: "translateY(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>◀</span>
       <span className={arrow} style={{ right: 6, top: "50%", transform: "translateY(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▶</span>
+
+      {/* Cooldown ring (subtle) */}
+      <svg className="absolute inset-0 pointer-events-none" viewBox="0 0 120 120">
+        <circle cx="60" cy="60" r="54" fill="none" stroke={color} strokeOpacity={0.18} strokeWidth="3" />
+        {!ready && (
+          <circle
+            cx="60" cy="60" r="54" fill="none" stroke={color}
+            strokeOpacity={0.55} strokeWidth="3" strokeLinecap="round"
+            strokeDasharray={`${(cdPct / 100) * 339.3} 339.3`}
+            transform="rotate(-90 60 60)"
+          />
+        )}
+        {charging > 0 && (
+          <circle
+            cx="60" cy="60" r="54" fill="none" stroke={color}
+            strokeWidth="5" strokeLinecap="round"
+            strokeDasharray={`${charging * 339.3} 339.3`}
+            transform="rotate(-90 60 60)"
+            style={{ filter: `drop-shadow(0 0 8px ${color})` }}
+          />
+        )}
+      </svg>
+
       <div
-        className="absolute top-1/2 left-1/2 w-14 h-14 -mt-7 -ml-7 rounded-full"
+        className="absolute top-1/2 left-1/2 w-14 h-14 -mt-7 -ml-7 rounded-full flex items-center justify-center"
         style={{
           background: `radial-gradient(circle at 35% 30%, color-mix(in oklab, ${color} 95%, white) 0%, ${color} 60%, color-mix(in oklab, ${color} 60%, black) 100%)`,
           boxShadow: `0 4px 10px rgba(0,0,0,0.4), inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.4)`,
-          transform: `translate(${knob.x}px, ${knob.y}px)`,
+          transform: `translate(${knob.x}px, ${knob.y}px) scale(${1 + charging * 0.08})`,
           transition: idRef.current == null ? "transform 0.15s ease-out" : "none",
+          opacity: ready ? 1 : 0.8,
         }}
-      />
-    </div>
-  );
-}
-
-function PowerButton({ color, cd, max, label, short, onPress }: { color: string; cd: number; max: number; label: string; short: string; onPress: () => void }) {
-  const ready = cd <= 0;
-  const pct = ready ? 100 : (1 - cd / max) * 100;
-  return (
-    <button
-      onPointerDown={(e) => { e.preventDefault(); if (ready) onPress(); }}
-      className="relative w-[58px] h-[58px] rounded-full border-2 backdrop-blur-md bg-background/30 pointer-events-auto touch-none flex flex-col items-center justify-center font-mono leading-none active:scale-95 transition-transform"
-      style={{
-        borderColor: ready ? color : "oklch(0.4 0.05 250)",
-        color: ready ? color : "oklch(0.55 0.03 250)",
-        opacity: ready ? 1 : 0.65,
-      }}
-      aria-label={label}
-    >
-      <div
-        className="absolute inset-0 rounded-full overflow-hidden pointer-events-none"
-        style={{ clipPath: "circle(50%)" }}
       >
-        <div className="absolute inset-x-0 bottom-0" style={{ height: `${pct}%`, background: `color-mix(in oklab, ${color} 22%, transparent)` }} />
+        <span className="font-mono text-[8px] tracking-widest uppercase" style={{ color: "rgba(0,0,0,0.6)" }}>
+          {ready ? "HOLD" : "···"}
+        </span>
       </div>
-      <span className="relative text-lg">{short}</span>
-      <span className="relative text-[8px] tracking-widest uppercase mt-0.5 truncate max-w-[52px]">{label}</span>
-    </button>
+
+      <div
+        className="absolute -top-5 left-1/2 -translate-x-1/2 font-mono text-[9px] tracking-widest uppercase whitespace-nowrap pointer-events-none"
+        style={{ color: ready ? color : "oklch(0.55 0.02 250)" }}
+      >
+        {specialLabel}
+      </div>
+    </div>
   );
 }
 
