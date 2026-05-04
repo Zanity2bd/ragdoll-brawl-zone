@@ -343,6 +343,9 @@ function Pad({
       </div>
       <div className="flex gap-2">
         <button className={btn} style={style}
+          onTouchStart={(e) => { e.preventDefault(); onPunch(); }}
+        >PUNCH</button>
+        <button className={btn} style={style}
           onTouchStart={(e) => { e.preventDefault(); onFire(); }}
         >FIRE</button>
         <button className={btn} style={style}
