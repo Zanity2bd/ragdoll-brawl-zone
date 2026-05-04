@@ -675,6 +675,58 @@ export class GameEngine {
     f.teleCd = Math.max(0, f.teleCd - dt);
     f.meleeCd = Math.max(0, f.meleeCd - dt);
     f.superCd = Math.max(0, f.superCd - dt);
+    f.frenzyCd = Math.max(0, f.frenzyCd - dt);
+
+    // ---- Hulk Rage Frenzy: cinematic clip drives positions, ticks damage ----
+    if (f.frenzy) {
+      const fr = f.frenzy;
+      fr.t += dt;
+      fr.transitionT = Math.min(0.25, fr.transitionT + dt);
+      const target = fr.target === "p1" ? this.p1 : this.p2;
+      // Lock both fighters in place
+      f.vx = 0; f.vy = 0; f.onGround = true;
+      target.vx = 0; target.vy = 0; target.onGround = true;
+      target.y = GROUND_Y - FIGHTER_H;
+      target.x = f.x + f.facing * 48;
+      // Suppress target actions
+      target.meleeKind = null; target.meleeT = 0;
+      target.iframeT = 0; target.ragdollT = 0; target.downedT = 0; target.getUpT = 0;
+      // Damage ticks + screen shake during punches
+      fr.nextTick -= dt;
+      if (fr.nextTick <= 0) {
+        fr.nextTick = FRENZY_TICK;
+        target.hp = Math.max(0, target.hp - FRENZY_TICK_DMG);
+        target.hitFlash = 0.25;
+        this.shake = Math.max(this.shake, 14);
+        this.impactFlash = Math.max(this.impactFlash, 0.55);
+        this.burst(target.x, target.y + 40, "oklch(0.95 0.18 30)", 8);
+        Sfx.play("punch", 0.7);
+        if (target.hp <= 0 && this.phase === "fight") {
+          this.phase = "ko"; this.winner = f.id;
+        }
+      }
+      if (fr.t >= fr.dur) {
+        // Final knockback to sell the impact
+        const dir = f.facing;
+        target.vx = dir * 720;
+        target.vy = -380;
+        target.onGround = false;
+        target.ragdollT = 1.2;
+        target.ragdollEnergy = 1;
+        target.ragdollAV = dir * 6;
+        target.ragdollImmuneT = 1.5;
+        this.shake = Math.max(this.shake, 36);
+        this.hitstopT = Math.max(this.hitstopT, 0.18);
+        this.slowmoT = Math.max(this.slowmoT, 0.45);
+        this.slowmoMode = "impact";
+        this.impactFlash = 1;
+        this.shockwaves.push({ x: target.x, y: target.y + 40, r: 10, rMax: 320, life: 0.7, maxLife: 0.7, color: "oklch(0.7 0.18 145)" });
+        Sfx.play("boom", 1);
+        f.frenzy = null;
+      }
+      return;
+    }
+
     f.hitFlash = Math.max(0, f.hitFlash - dt);
     f.attackAnim = Math.max(0, f.attackAnim - dt);
     f.slowedT = Math.max(0, f.slowedT - dt);
