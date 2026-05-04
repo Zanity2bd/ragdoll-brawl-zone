@@ -2370,6 +2370,54 @@ export class GameEngine {
           });
         }
       }
+    } else if (f.swing) {
+      // ---- Spider-Man Web Swing: pendulum physics ----
+      const sw = f.swing;
+      sw.t += ldt;
+      // Steering: left/right input pumps the pendulum (like a child on a swing)
+      let pump = 0;
+      if (intent.left) pump -= 1;
+      if (intent.right) pump += 1;
+      pump += intent.ax;
+      // Gravity-driven angular accel: a = -(g/len) * sin(angle)
+      const g = 1500;
+      const angA = -(g / sw.len) * Math.sin(sw.angle) + pump * 6.5;
+      sw.angV += angA * ldt;
+      // Light damping for stability — feels alive but never explodes
+      sw.angV *= Math.exp(-0.6 * ldt);
+      // Clamp angular velocity so the pendulum stays controllable
+      const maxAngV = 7.5;
+      if (sw.angV > maxAngV) sw.angV = maxAngV;
+      else if (sw.angV < -maxAngV) sw.angV = -maxAngV;
+      sw.angle += sw.angV * ldt;
+      // Position from pendulum
+      const newX = sw.ax + Math.sin(sw.angle) * sw.len;
+      const newY = sw.ay + Math.cos(sw.angle) * sw.len;
+      // Track linear velocity for smooth release
+      f.vx = (newX - f.x) / Math.max(ldt, 1e-4);
+      f.vy = (newY - f.y) / Math.max(ldt, 1e-4);
+      f.x = newX;
+      f.y = newY - FIGHTER_H * 0.35;
+      f.onGround = false;
+      f.facing = sw.angV >= 0 ? 1 : -1;
+      // Jump = release with momentum boost
+      if (intent.jump && f.jumpBufferT > 0) {
+        f.jumpBufferT = 0;
+        this.releaseSwing(f, true);
+      }
+      // Auto-release if anchor too far / fighter hits ground
+      if (f.y + FIGHTER_H >= GROUND_Y - 1 || sw.t > 4.5) {
+        this.releaseSwing(f, false);
+      }
+      // Subtle motion trail
+      if (!this.lowPower && Math.random() < 0.4) {
+        this.particles.push({
+          x: f.x + (Math.random() - 0.5) * 6,
+          y: f.y + 30,
+          vx: 0, vy: 0, life: 0.25, maxLife: 0.25,
+          color: "oklch(0.95 0.02 240 / 0.6)", size: 1.2,
+        });
+      }
     } else {
       // ---- Ground / standard physics ----
       let move = 0;
