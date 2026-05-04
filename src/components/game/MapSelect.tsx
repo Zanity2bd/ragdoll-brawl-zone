@@ -1,0 +1,62 @@
+import { MAPS, type MapId } from "@/game/maps";
+import { useEffect, useRef } from "react";
+
+export function MapSelect({ onPick }: { onPick: (id: MapId) => void }) {
+  return (
+    <div className="absolute inset-0 z-20 bg-background/95 backdrop-blur-md flex flex-col items-center justify-center p-6 overflow-auto">
+      <div className="font-mono text-xs tracking-[0.4em] text-foreground/60 uppercase mb-2">Select Arena</div>
+      <h2 className="text-3xl md:text-5xl font-black tracking-widest text-foreground mb-10">CHOOSE YOUR BATTLEGROUND</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-6xl">
+        {MAPS.map((m) => (
+          <MapCard key={m.id} mapId={m.id} onPick={() => onPick(m.id)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MapCard({ mapId, onPick }: { mapId: MapId; onPick: () => void }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const map = MAPS.find((m) => m.id === mapId)!;
+
+  useEffect(() => {
+    const c = ref.current!;
+    const ctx = c.getContext("2d")!;
+    let raf = 0;
+    const t0 = performance.now();
+    const loop = () => {
+      const t = (performance.now() - t0) / 1000;
+      const W = 1280, H = 720, GROUND_Y = 600;
+      ctx.save();
+      ctx.setTransform(c.width / W, 0, 0, c.height / H, 0, 0);
+      map.drawBackground(ctx, t, W, H, GROUND_Y);
+      ctx.restore();
+      raf = requestAnimationFrame(loop);
+    };
+    const resize = () => {
+      const r = c.getBoundingClientRect();
+      c.width = Math.floor(r.width * devicePixelRatio);
+      c.height = Math.floor(r.height * devicePixelRatio);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    raf = requestAnimationFrame(loop);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, [map]);
+
+  return (
+    <button
+      onClick={onPick}
+      className="group relative aspect-video rounded-lg overflow-hidden border border-foreground/15 hover:border-foreground/60 transition-all hover:scale-[1.02]"
+      style={{ boxShadow: `0 0 30px -10px ${map.accent}` }}
+    >
+      <canvas ref={ref} className="absolute inset-0 w-full h-full" />
+      <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-background/95 to-transparent text-left">
+        <div className="font-black text-xl tracking-wider" style={{ color: map.accent, textShadow: `0 0 12px ${map.accent}` }}>
+          {map.name}
+        </div>
+        <div className="font-mono text-[11px] tracking-widest text-foreground/70 uppercase mt-1">{map.tagline}</div>
+      </div>
+    </button>
+  );
+}

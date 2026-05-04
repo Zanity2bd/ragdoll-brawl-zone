@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { GameEngine, type GameSnapshot, type PlayerId } from "@/game/engine";
+import { type MapId } from "@/game/maps";
+import { type SkinId } from "@/game/skins";
+import { MapSelect } from "./MapSelect";
+import { SkinSelect } from "./SkinSelect";
 
 const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" }> = {
   KeyA: { p: "p1", action: "left" },
@@ -14,11 +18,17 @@ const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" |
   KeyL: { p: "p2", action: "teleport" },
 };
 
+type Screen = "map" | "skin" | "fight";
+
 export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const [snap, setSnap] = useState<GameSnapshot | null>(null);
   const [isTouch, setIsTouch] = useState(false);
+  const [screen, setScreen] = useState<Screen>("map");
+  const [mapId, setMapId] = useState<MapId>("neon-city");
+  const [p1Skin, setP1Skin] = useState<SkinId>("spiderman");
+  const [p2Skin, setP2Skin] = useState<SkinId>("homelander");
 
   useEffect(() => {
     setIsTouch(window.matchMedia("(hover: none) and (pointer: coarse)").matches);
@@ -43,11 +53,7 @@ export function GameCanvas() {
       const m = KEY_MAP[e.code];
       if (!m) return;
       e.preventDefault();
-      if (m.action === "fire" || m.action === "teleport" || m.action === "jump") {
-        engine.setIntent(m.p, { [m.action]: true });
-      } else {
-        engine.setIntent(m.p, { [m.action]: true });
-      }
+      engine.setIntent(m.p, { [m.action]: true });
     };
     const up = (e: KeyboardEvent) => {
       const m = KEY_MAP[e.code];
@@ -86,6 +92,11 @@ export function GameCanvas() {
 
   const engine = engineRef.current;
 
+  const startFight = (m: MapId, p1: SkinId, p2: SkinId) => {
+    engine?.configure(m, p1, p2);
+    setScreen("fight");
+  };
+
   return (
     <div className="relative w-full h-full select-none">
       <canvas
@@ -93,13 +104,29 @@ export function GameCanvas() {
         className="absolute inset-0 w-full h-full"
         style={{ touchAction: "none" }}
       />
-      {snap && <HUD snap={snap} onRematch={() => engine?.reset()} />}
-      {isTouch && engine && <TouchControls engine={engine} />}
+      {screen === "fight" && snap && (
+        <HUD
+          snap={snap}
+          onRematch={() => engine?.reset()}
+          onChange={() => setScreen("map")}
+        />
+      )}
+      {screen === "fight" && isTouch && engine && <TouchControls engine={engine} />}
+
+      {screen === "map" && (
+        <MapSelect onPick={(id) => { setMapId(id); setScreen("skin"); }} />
+      )}
+      {screen === "skin" && (
+        <SkinSelect
+          onBack={() => setScreen("map")}
+          onConfirm={(p1, p2) => { setP1Skin(p1); setP2Skin(p2); startFight(mapId, p1, p2); }}
+        />
+      )}
     </div>
   );
 }
 
-function HUD({ snap, onRematch }: { snap: GameSnapshot; onRematch: () => void }) {
+function HUD({ snap, onRematch, onChange }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void }) {
   return (
     <>
       <div className="pointer-events-none absolute top-0 left-0 right-0 p-4 flex gap-4 items-start">
@@ -138,13 +165,21 @@ function HUD({ snap, onRematch }: { snap: GameSnapshot; onRematch: () => void })
             <div className="text-2xl text-foreground/80 mb-6 font-mono">
               {snap.winner === "p1" ? snap.p1.name : snap.p2.name} wins
             </div>
-            <button
-              onClick={onRematch}
-              className="px-8 py-3 rounded-md font-mono uppercase tracking-widest text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors"
-              style={{ color: "oklch(0.95 0.05 250)" }}
-            >
-              Rematch
-            </button>
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={onRematch}
+                className="px-8 py-3 rounded-md font-mono uppercase tracking-widest text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors"
+                style={{ color: "oklch(0.95 0.05 250)" }}
+              >
+                Rematch
+              </button>
+              <button
+                onClick={onChange}
+                className="px-8 py-3 rounded-md font-mono uppercase tracking-widest text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors text-foreground/70"
+              >
+                Change setup
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -254,28 +289,23 @@ function Pad({
   return (
     <div className={`flex gap-3 ${mirror ? "flex-row-reverse" : ""}`}>
       <div className="flex gap-2">
-        <button
-          className={btn} style={style}
+        <button className={btn} style={style}
           onTouchStart={(e) => { e.preventDefault(); onLeft(true); }}
           onTouchEnd={(e) => { e.preventDefault(); onLeft(false); }}
         >◀</button>
-        <button
-          className={btn} style={style}
+        <button className={btn} style={style}
           onTouchStart={(e) => { e.preventDefault(); onRight(true); }}
           onTouchEnd={(e) => { e.preventDefault(); onRight(false); }}
         >▶</button>
-        <button
-          className={btn} style={style}
+        <button className={btn} style={style}
           onTouchStart={(e) => { e.preventDefault(); onJump(); }}
         >▲</button>
       </div>
       <div className="flex gap-2">
-        <button
-          className={btn} style={style}
+        <button className={btn} style={style}
           onTouchStart={(e) => { e.preventDefault(); onFire(); }}
         >FIRE</button>
-        <button
-          className={btn} style={style}
+        <button className={btn} style={style}
           onTouchStart={(e) => { e.preventDefault(); onTele(); }}
         >TELE</button>
       </div>
