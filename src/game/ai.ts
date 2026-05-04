@@ -142,7 +142,7 @@ export class CpuController {
 
     if (ranged.has(opp.meleeKind!)) {
       // Sidestep + jump: lasers don't track verticals well; also hide behind cover.
-      this.moveDir = -dir;
+      this.moveDir = (dir === 1 ? -1 : 1);
       this.commitT = 0.35;
       if (me.onGround) this.wantJump = true;
       this.retreatT = 0.4;
