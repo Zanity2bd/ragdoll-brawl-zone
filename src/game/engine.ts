@@ -1,7 +1,7 @@
 // OgunArena — Canvas 2D engine v3 (a Blkdom production)
 // Per-skin signature melees with impact frames, ragdoll, slow-mo, SFX.
 
-import { computeWalkPose, computeAttackPose, computeRagdollPose, computeFlightPose, type Pose } from "./animation";
+import { computeWalkPose, computeAttackPose, computeRagdollPose, computeFlightPose, blendPose, type Pose } from "./animation";
 import { getMap, type MapId } from "./maps";
 import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
@@ -58,9 +58,18 @@ interface Fighter {
   meleeDur: number;        // total (windup+active+recover)
   meleeKind: string | null;
   meleeHitMask: Set<number>; // for multi-hit (flurry) — counts hits applied
-  // ragdoll
-  ragdollT: number;
-  ragdollPhase: number;
+  // ragdoll / recovery
+  ragdollT: number;        // active tumble timer (airborne)
+  ragdollPhase: number;    // pose driver
+  ragdollAng: number;      // current body angle (rad)
+  ragdollAV: number;       // angular velocity (rad/s)
+  ragdollEnergy: number;   // 0..1, drives tumble intensity, decays
+  downedT: number;         // laydown duration on ground (locked)
+  getUpT: number;          // remaining rise animation
+  getUpDur: number;        // total rise duration
+  iframeT: number;         // invulnerability after rise
+  ragdollImmuneT: number;  // chain-prevention: still takes damage, no re-ragdoll
+  lastLean: number;        // last applied torso lean (for blend)
   // victim slow (a-train)
   slowedT: number;
   // afterimage trail
@@ -312,7 +321,9 @@ export class GameEngine {
       walkPhase: 0, attackAnim: 0, skin,
       move, meleeCd: 0, meleeT: 0, meleeDur: 0, meleeKind: null,
       meleeHitMask: new Set(),
-      ragdollT: 0, ragdollPhase: 0, slowedT: 0,
+      ragdollT: 0, ragdollPhase: 0, ragdollAng: 0, ragdollAV: 0, ragdollEnergy: 0,
+      downedT: 0, getUpT: 0, getUpDur: 0, iframeT: 0, ragdollImmuneT: 0, lastLean: 0,
+      slowedT: 0,
       trail: [],
       canFly, flying: canFly, hoverPhase: 0, superCd: 0,
       dash: null,
@@ -358,7 +369,7 @@ export class GameEngine {
     const a = attacker === "p1" ? this.p1 : this.p2;
     const t = attacker === "p1" ? this.p2 : this.p1;
     if (!a.canFly || !a.flying) return false;
-    if (a.dash || a.meleeKind || a.ragdollT > 0) return false;
+    if (a.dash || a.meleeKind || a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
     if (a.superCd > 0) return false;
     a.superCd = SUPER_CD;
     const x0 = a.x, y0 = a.y + FIGHTER_H * 0.4;
@@ -441,8 +452,8 @@ export class GameEngine {
     if (this.phase === "fight") {
       this.updateFighter(this.p1, sdt);
       this.updateFighter(this.p2, sdt);
-      if (!this.p1.ragdollT) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
-      if (!this.p2.ragdollT) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
+      if (!this.p1.ragdollT && !this.p1.downedT && !this.p1.getUpT) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
+      if (!this.p2.ragdollT && !this.p2.downedT && !this.p2.getUpT) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
       this.resolveMelees();
     }
     for (const f of [this.p1, this.p2]) {
@@ -474,6 +485,7 @@ export class GameEngine {
       if (this.phase !== "fight") continue;
       const hitR = pr.kind === "batarang" ? 18 : (pr.kind === "web" ? 14 : FIGHTER_W);
       if (Math.abs(pr.x - target.x) < hitR && pr.y > target.y && pr.y < target.y + FIGHTER_H) {
+        if (target.iframeT > 0 || target.downedT > 0 || target.getUpT > 0) { pr.life = 0; continue; }
         const dmg = pr.damage ?? FIRE_DAMAGE;
         target.hp = Math.max(0, target.hp - dmg);
         target.hitFlash = 0.25;
@@ -541,20 +553,97 @@ export class GameEngine {
     const localScale = f.slowedT > 0 ? 0.25 : 1;
     const ldt = dt * localScale;
 
-    // Ragdoll mode bypasses input
+    // Decay timers (always)
+    if (f.iframeT > 0) f.iframeT = Math.max(0, f.iframeT - dt);
+    if (f.ragdollImmuneT > 0) f.ragdollImmuneT = Math.max(0, f.ragdollImmuneT - dt);
+
+    // Ragdoll mode bypasses input — physics-driven tumble
     if (f.ragdollT > 0) {
       f.ragdollT -= dt;
       f.ragdollPhase += dt;
-      f.vy += GRAVITY * ldt;
+      f.vy += GRAVITY * 0.95 * ldt;
+      // Air drag
+      f.vx *= Math.pow(0.985, dt * 60);
+      f.vy *= Math.pow(0.995, dt * 60);
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
-      f.vx *= 0.985;
-      if (f.x < 30) { f.x = 30; f.vx = -f.vx * 0.4; }
-      if (f.x > W - 30) { f.x = W - 30; f.vx = -f.vx * 0.4; }
+      // Angular: torque from horizontal speed; damp gradually
+      const targetAV = Math.sign(f.vx) * Math.min(12, Math.abs(f.vx) * 0.02);
+      f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 2);
+      f.ragdollAV *= Math.pow(0.97, dt * 60);
+      f.ragdollAng += f.ragdollAV * dt;
+      // Walls — bounce with energy loss
+      if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
+      if (f.x > W - 30) { f.x = W - 30; f.vx = -Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
+      // Ground impact
       if (f.y + FIGHTER_H >= GROUND_Y) {
         f.y = GROUND_Y - FIGHTER_H;
-        if (Math.abs(f.vy) > 80) { f.vy = -f.vy * 0.35; this.shake = Math.max(this.shake, 8); Sfx.play("thud", 0.4); }
-        else { f.vy = 0; f.onGround = true; }
+        const impact = Math.abs(f.vy);
+        if (impact > 120) {
+          // Bounce, lose energy
+          f.vy = -impact * 0.32;
+          f.vx *= 0.55;
+          f.ragdollAV *= 0.4;
+          f.ragdollEnergy = Math.max(0, f.ragdollEnergy - 0.25);
+          this.shake = Math.max(this.shake, Math.min(14, impact * 0.05));
+          Sfx.play("thud", Math.min(0.6, impact / 600));
+          // Dust puff
+          if (!this.lowPower) {
+            for (let i = 0; i < 6; i++) {
+              this.particles.push({
+                x: f.x + (Math.random() - 0.5) * 24,
+                y: GROUND_Y - 4,
+                vx: (Math.random() - 0.5) * 80,
+                vy: -20 - Math.random() * 40,
+                life: 0.4, maxLife: 0.4,
+                color: "oklch(0.7 0.02 60)",
+                size: 2 + Math.random() * 2,
+              });
+            }
+          }
+        } else {
+          f.vy = 0;
+          f.vx *= Math.pow(0.6, dt * 60);
+          f.ragdollAV *= Math.pow(0.7, dt * 60);
+          f.onGround = true;
+          // Settle when slow enough
+          if (Math.abs(f.vx) < 30 && Math.abs(f.ragdollAV) < 1.2) {
+            // Transition: ragdoll → downed (laydown)
+            f.ragdollT = 0;
+            f.downedT = 0.55; // brief lay on ground
+            // Snap ragdoll angle toward nearest 90° (face-down/up) for stable laydown
+            const target = Math.abs(Math.sin(f.ragdollAng)) > 0.5 ? Math.PI / 2 * Math.sign(Math.sin(f.ragdollAng)) : 0;
+            f.ragdollAng = target;
+            f.ragdollAV = 0;
+          }
+        }
+      }
+      return;
+    }
+
+    // Downed (laying on ground) — locked, then triggers get-up
+    if (f.downedT > 0) {
+      f.downedT -= dt;
+      f.vx *= Math.pow(0.5, dt * 60);
+      f.vy = 0;
+      f.onGround = true;
+      if (f.downedT <= 0) {
+        f.getUpDur = 0.45;
+        f.getUpT = f.getUpDur;
+      }
+      return;
+    }
+
+    // Get-up animation — locked but visually rising
+    if (f.getUpT > 0) {
+      f.getUpT -= dt;
+      f.vx *= Math.pow(0.4, dt * 60);
+      f.vy = 0;
+      f.onGround = true;
+      if (f.getUpT <= 0) {
+        f.iframeT = 1.0;            // 1s post-rise invulnerability
+        f.ragdollImmuneT = 2.0;     // additional anti-chain window (no re-ragdoll)
+        f.ragdollAng = 0; f.ragdollAV = 0; f.ragdollEnergy = 0;
       }
       return;
     }
@@ -873,7 +962,7 @@ export class GameEngine {
 
   private resolveMelees() {
     for (const f of [this.p1, this.p2]) {
-      if (!f.meleeKind || f.ragdollT > 0) continue;
+      if (!f.meleeKind || f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) continue;
       const m = f.move;
       const t = f.meleeT;
       const inActive = t >= m.windup && t < m.windup + m.active;
@@ -922,6 +1011,7 @@ export class GameEngine {
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
             if (!f.meleeHitMask.has(tick) && dx > -10 && dx < m.range && Math.abs(target.y - f.y) < FIGHTER_H) {
+              if (target.iframeT > 0 || target.downedT > 0 || target.getUpT > 0) { f.meleeHitMask.add(tick); break; }
               f.meleeHitMask.add(tick);
               target.hp = Math.max(0, target.hp - m.damage);
               target.hitFlash = 0.18;
@@ -959,7 +1049,9 @@ export class GameEngine {
             const ang = Math.abs(((angle - desired + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
             if (ang < 0.18 && Math.hypot(dx, dy) < m.range) {
               const dps = m.damage; // per active second
-              target.hp = Math.max(0, target.hp - dps * (1 / 60));
+              if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
+                target.hp = Math.max(0, target.hp - dps * (1 / 60));
+              }
               target.hitFlash = 0.15;
               this.particles.push({
                 x: target.x + (Math.random() - 0.5) * 20, y: target.y + 20 + Math.random() * 30,
@@ -981,21 +1073,30 @@ export class GameEngine {
   }
 
   private applyMeleeHit(f: Fighter, target: Fighter, m: MoveSpec, fx: number, fy: number) {
+    // I-frames: ignore hit entirely
+    if (target.iframeT > 0) return;
+    // During downed/getup the target is on the floor — skip melee hits (mercy)
+    if (target.downedT > 0 || target.getUpT > 0) return;
     target.hp = Math.max(0, target.hp - m.damage);
     target.hitFlash = 0.35;
-    target.vx = f.facing * m.knockbackX;
-    target.vy = m.knockbackY;
+    // Anti-chain: reduced knockback if recently ragdolled
+    const kbScale = target.ragdollImmuneT > 0 ? 0.45 : 1;
+    target.vx = f.facing * m.knockbackX * kbScale;
+    target.vy = m.knockbackY * kbScale;
     target.onGround = false;
-    if (m.ragdollT > 0) {
+    // Only ragdoll if not in chain-immune window
+    if (m.ragdollT > 0 && target.ragdollImmuneT <= 0) {
       target.ragdollT = m.ragdollT;
       target.ragdollPhase = 0;
+      target.ragdollAng = 0;
+      target.ragdollAV = (Math.random() - 0.5) * 4 + f.facing * 3;
+      target.ragdollEnergy = 1;
     }
     this.shake = Math.max(this.shake, m.shake);
     this.hitstopT = Math.max(this.hitstopT, m.hitstop);
     if (m.slowmoT > 0) { this.slowmoT = Math.max(this.slowmoT, m.slowmoT); this.slowmoMode = "impact"; }
     this.impactFlash = 1;
     this.burst(fx, fy, f.skin.glow, 28);
-    // radial impact ring
     this.shockwaves.push({ x: fx, y: fy, r: 6, rMax: 80, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.05 80)" });
     Sfx.play(m.hitSfx, 1);
     if (target.hp <= 0 && this.phase === "fight") {
@@ -1006,14 +1107,20 @@ export class GameEngine {
   private resolveSuperPunch(attacker: Fighter, targetId: PlayerId) {
     const t = targetId === "p1" ? this.p1 : this.p2;
     if (t.id === attacker.id) return;
+    if (t.iframeT > 0) return;
     t.hp = Math.max(0, t.hp - SUPER_DAMAGE);
     t.hitFlash = 0.55;
     const dir = Math.sign(t.x - attacker.x) || attacker.facing;
-    t.vx = dir * SUPER_KB_X;
-    t.vy = SUPER_KB_Y;
+    const kbScale = t.ragdollImmuneT > 0 ? 0.6 : 1;
+    t.vx = dir * SUPER_KB_X * kbScale;
+    t.vy = SUPER_KB_Y * kbScale;
     t.onGround = false;
-    t.ragdollT = SUPER_RAGDOLL;
+    // Super always ragdolls (cinematic), but slightly shorter if anti-chain active
+    t.ragdollT = t.ragdollImmuneT > 0 ? SUPER_RAGDOLL * 0.6 : SUPER_RAGDOLL;
     t.ragdollPhase = 0;
+    t.ragdollAng = 0;
+    t.ragdollAV = dir * 6 + (Math.random() - 0.5) * 3;
+    t.ragdollEnergy = 1;
     this.shake = Math.max(this.shake, SUPER_SHAKE);
     this.hitstopT = SUPER_HITSTOP;
     this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
@@ -1108,7 +1215,27 @@ export class GameEngine {
 
   // ---------------- POSE ----------------
   private poseFor(f: Fighter): Pose {
-    if (f.ragdollT > 0) return computeRagdollPose(f.ragdollPhase, FIGHTER_H);
+    if (f.ragdollT > 0) {
+      const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H);
+      // Override lean with physical body angle for stable visual
+      return { ...p, lean: f.ragdollAng };
+    }
+    if (f.downedT > 0) {
+      const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H);
+      // Lay flat — snap angle to ±90°, freeze tumble
+      const targetAng = f.ragdollAng >= 0 ? Math.PI / 2 : -Math.PI / 2;
+      return { ...p, lean: targetAng };
+    }
+    if (f.getUpT > 0) {
+      // Blend from laydown back to upright walk pose
+      const t = 1 - (f.getUpT / Math.max(0.001, f.getUpDur));
+      const ease = t * t * (3 - 2 * t);
+      const flat = computeRagdollPose(f.ragdollPhase, FIGHTER_H);
+      const stand = computeWalkPose(0, 0, true, 0, false, f.facing, FIGHTER_H);
+      const targetAng = f.ragdollAng >= 0 ? Math.PI / 2 : -Math.PI / 2;
+      const lean = targetAng * (1 - ease);
+      return blendPose(flat, stand, ease, lean);
+    }
     const base = f.flying
       ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, f.facing, FIGHTER_H)
       : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, f.facing, FIGHTER_H);
