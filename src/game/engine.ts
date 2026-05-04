@@ -662,6 +662,7 @@ export class GameEngine {
     this.beamWasActive = { p1: false, p2: false };
     // Restore any platforms destroyed by overload from a previous round
     for (const pl of this.platforms) pl.destroyed = false;
+    this.props = this.buildPropsForMap(this.mapId);
     this.pendingSfx = [];
     this.timeFreezeT = 0; this.timeFreezer = null;
     this.teleTargeting = null;
