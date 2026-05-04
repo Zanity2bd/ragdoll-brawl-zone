@@ -24,6 +24,11 @@ export interface PlayerState {
   meleeCdMax: number;
   meleeName: string;
   teleporting: boolean;
+  // Hulk-only "Rage Frenzy" cinematic special
+  frenzyCd: number;
+  frenzyCdMax: number;
+  hasFrenzy: boolean;
+  frenzyActive: boolean;
 }
 
 export interface GameSnapshot {
