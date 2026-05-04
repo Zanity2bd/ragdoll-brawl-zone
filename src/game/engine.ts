@@ -240,8 +240,8 @@ export class GameEngine {
     if (!this.teleTargeting) return;
     const f = this.teleTargeting === "p1" ? this.p1 : this.p2;
     const rect = this.canvas.getBoundingClientRect();
-    // Match the contain-fit used in render(): map CSS pixels -> stage coords.
-    const scale = Math.min(rect.width / W, rect.height / H);
+    // Match the cover-fit used in render(): map CSS pixels -> stage coords.
+    const scale = Math.max(rect.width / W, rect.height / H);
     const offX = (rect.width - W * scale) / 2;
     const offY = (rect.height - H * scale) / 2;
     const sx = (canvasX - offX) / scale;
@@ -740,7 +740,9 @@ export class GameEngine {
     // Uniform-fit (contain) the 1280x720 stage into the actual canvas so
     // characters and arena keep correct proportions on every device.
     const cw = this.canvas.width, ch = this.canvas.height;
-    const scale = Math.min(cw / W, ch / H);
+    // Cover-fit: fill the screen so characters/arena read large on mobile.
+    // Overflow on the long axis is clipped (stage stays centered).
+    const scale = Math.max(cw / W, ch / H);
     const offX = (cw - W * scale) / 2 + sx;
     const offY = (ch - H * scale) / 2 + sy;
 
