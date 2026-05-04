@@ -254,6 +254,59 @@ interface LightningOrb {
   tickAcc: number;  // sub-second accumulator for tick damage
 }
 
+// ---- Batch-1 powers: Superman / Iron Man / Heatwave ----
+// Superman
+const SOLAR_FLARE_CD = 12;
+const SOLAR_FLARE_RADIUS = 320;
+const SOLAR_FLARE_DMG = 18;
+const SOLAR_FLARE_STUN = 1.6;
+const HEAT_VISION_CD = 6;
+const HEAT_VISION_DUR = 0.75;
+const HEAT_VISION_DPS = 38;
+// Iron Man
+const UNIBEAM_CD = 10;
+const UNIBEAM_CHARGE = 0.45;
+const UNIBEAM_FIRE = 0.75;
+const UNIBEAM_DPS = 50;
+const UNIBEAM_RANGE = 720;
+const MICRO_MISSILE_CD = 7;
+const MICRO_MISSILE_COUNT = 5;
+const MICRO_MISSILE_DMG = 7;
+// Heatwave
+const INFERNO_WALL_CD = 11;
+const INFERNO_WALL_DUR = 4.0;
+const INFERNO_WALL_TICK_DMG = 4;     // per 0.25s while opponent stands inside
+const MAGMA_BLAST_CD = 5;
+const MAGMA_BLAST_DMG = 22;
+const MAGMA_BLAST_RADIUS = 110;
+
+interface Missile {
+  owner: PlayerId; target: PlayerId;
+  x: number; y: number; vx: number; vy: number;
+  life: number; maxLife: number;
+  delay: number;        // seconds until launch
+  phase: number;
+}
+
+interface FireWall {
+  owner: PlayerId;
+  x: number;            // center x
+  yTop: number;         // top of flame column
+  yBottom: number;      // bottom (ground)
+  width: number;        // full width
+  life: number; maxLife: number;
+  tickAcc: number;
+}
+
+interface MagmaBlast {
+  owner: PlayerId;
+  x: number; y: number; vx: number; vy: number;
+  life: number; maxLife: number;   // until impact/expiry
+  phase: number;
+  exploded: boolean;
+  explosionT: number;   // post-impact growth
+}
+
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
