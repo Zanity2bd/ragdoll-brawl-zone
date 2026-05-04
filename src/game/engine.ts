@@ -196,9 +196,16 @@ export class GameEngine {
   private particles: Particle[] = [];
   private shockwaves: Shockwave[] = [];
   private beams: Beam[] = [];
+  // Multi-tier interactive level: low cover blocks, mid ledges, a high vantage.
   private platforms: Platform[] = [
-    { x: 280, y: 440, w: 220, h: 12 },
-    { x: 780, y: 440, w: 220, h: 12 },
+    // Low cover blocks (solid) — partial cover / tactical positioning
+    { x: 180, y: 540, w: 90, h: 60, kind: "cover", accent: "oklch(0.55 0.10 250)" },
+    { x: 1010, y: 540, w: 90, h: 60, kind: "cover", accent: "oklch(0.55 0.10 250)" },
+    // Mid ledges (one-way, jump-through, drop-through)
+    { x: 280, y: 460, w: 220, h: 12, kind: "platform" },
+    { x: 780, y: 460, w: 220, h: 12, kind: "platform" },
+    // High vantage center
+    { x: 540, y: 340, w: 200, h: 12, kind: "platform" },
   ];
 
   private intents: Record<PlayerId, Intents> = {
