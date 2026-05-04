@@ -141,18 +141,21 @@ function Slider({ label, value, onChange, hue }: { label: string; value: number;
         <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: `oklch(0.85 0.08 ${hue})` }}>{label}</span>
         <span className="font-mono text-[10px] text-foreground/60">{Math.round(value * 100)}</span>
       </div>
-      <div className="relative h-2 rounded-full overflow-hidden" style={{ background: "oklch(0.18 0.03 275 / 0.8)", border: "1px solid oklch(0.4 0.08 280 / 0.3)" }}>
-        <div className="absolute inset-y-0 left-0" style={{ width: `${value * 100}%`, background: `linear-gradient(90deg, oklch(0.55 0.22 ${hue}), oklch(0.75 0.20 ${hue + 30}))`, boxShadow: `0 0 12px oklch(0.65 0.22 ${hue})` }} />
+      <div className="relative h-3">
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2 rounded-full overflow-hidden pointer-events-none"
+          style={{ background: "oklch(0.18 0.03 275 / 0.8)", border: "1px solid oklch(0.4 0.08 280 / 0.3)" }}>
+          <div className="absolute inset-y-0 left-0"
+            style={{
+              width: `${value * 100}%`,
+              background: `linear-gradient(90deg, oklch(0.55 0.22 ${hue}), oklch(0.75 0.20 ${hue + 30}))`,
+              boxShadow: `0 0 12px oklch(0.65 0.22 ${hue})`,
+            }} />
+        </div>
+        <input type="range" min={0} max={100} value={Math.round(value * 100)}
+          onChange={(e) => onChange(Number(e.target.value) / 100)}
+          className="absolute inset-0 w-full opacity-0 cursor-pointer"
+        />
       </div>
-      <input type="range" min={0} max={100} value={Math.round(value * 100)}
-        onChange={(e) => onChange(Number(e.target.value) / 100)}
-        className="w-full mt-1 accent-foreground opacity-0 -translate-y-4 h-3 cursor-pointer"
-        style={{ opacity: 0.001 }}
-      />
-      <input type="range" min={0} max={100} value={Math.round(value * 100)}
-        onChange={(e) => onChange(Number(e.target.value) / 100)}
-        className="w-full mt-[-18px] accent-foreground"
-      />
     </div>
   );
 }
