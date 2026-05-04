@@ -3241,7 +3241,27 @@ export class GameEngine {
       }
     }
 
-    // Ledge-grab flash on fighters
+    // Debris chunks (cover/platforms shattered by laser overload)
+    if (this.debris.length) {
+      ctx.globalCompositeOperation = "source-over";
+      for (const d of this.debris) {
+        const a = Math.min(1, d.life / 0.6);
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.rot);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = d.color;
+        ctx.fillRect(-d.w / 2, -d.h / 2, d.w, d.h);
+        if (d.life > d.maxLife - 0.5) {
+          ctx.fillStyle = "oklch(0.85 0.22 50 / 0.7)";
+          ctx.fillRect(-d.w / 2, -d.h / 2, d.w, 1.5);
+        }
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+
     if (!this.lowPower) {
       ctx.globalCompositeOperation = "lighter";
       for (const f of [this.p1, this.p2]) {
