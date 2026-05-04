@@ -1654,6 +1654,50 @@ export class GameEngine {
     f.slowedT = Math.max(0, f.slowedT - dt);
     f.hoverPhase += dt * HOVER_RATE * Math.PI * 2;
 
+    // ---- Cape & body secondary motion (spring-mass) ----
+    // Drives a heavier, more grounded feel during turns, accel changes, and impacts.
+    {
+      const turn = f.facing !== f.prevFacing ? 1 : 0;
+      f.prevFacing = f.facing;
+      // New impact this frame? (hitFlash spikes upward on hit)
+      const impact = f.hitFlash > f.prevHitFlash + 0.05 ? Math.min(1, f.hitFlash) : 0;
+      f.prevHitFlash = f.hitFlash;
+
+      // Cape horizontal swing — wind drag + spring back to rest, plus turn whip & impact kick
+      const windTarget = -f.facing * Math.min(18, Math.abs(f.vx) * 0.045) + (f.flying ? -f.facing * 6 : 0);
+      const k = 42;     // stiffness
+      const c = 6.5;    // damping
+      const accel = (windTarget - f.capeSwingX) * k - f.capeSwingV * c;
+      f.capeSwingV += accel * dt;
+      // Turn whip: snap a strong impulse opposite the new facing
+      if (turn) f.capeSwingV += -f.facing * 38;
+      // Impact: shove cape back from impact direction
+      if (impact > 0) f.capeSwingV += -f.facing * 26 * impact;
+      f.capeSwingX += f.capeSwingV * dt;
+      f.capeSwingX = Math.max(-26, Math.min(26, f.capeSwingX));
+
+      // Cape lift (flares up under fast horizontal motion / flight)
+      const liftTarget = Math.min(1, Math.abs(f.vx) / 360 + (f.flying ? 0.35 : 0));
+      f.capeLift += (liftTarget - f.capeLift) * Math.min(1, dt * 5);
+
+      // Body translation lag (impacts only, decays fast)
+      const bk = 80, bc = 11;
+      const ba = (0 - f.bodyLagX) * bk - f.bodyLagV * bc;
+      f.bodyLagV += ba * dt;
+      if (impact > 0) f.bodyLagV += -f.facing * 90 * impact;
+      f.bodyLagX += f.bodyLagV * dt;
+
+      // Body roll from turn whip & impact (radians)
+      const rk = 60, rc = 9;
+      const ra = (0 - f.bodyRoll) * rk - f.bodyRollV * rc;
+      f.bodyRollV += ra * dt;
+      if (turn) f.bodyRollV += f.facing * 5.5;
+      if (impact > 0) f.bodyRollV += -f.facing * 4.2 * impact;
+      f.bodyRoll += f.bodyRollV * dt;
+      f.bodyRoll = Math.max(-0.55, Math.min(0.55, f.bodyRoll));
+    }
+
+
     // Per-fighter slow (a-train flurry victim)
     const localScale = f.slowedT > 0 ? 0.25 : 1;
     const ldt = dt * localScale;
