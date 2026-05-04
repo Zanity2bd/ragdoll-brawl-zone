@@ -4197,6 +4197,27 @@ export class GameEngine {
     const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
     if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
+    // Web-swing tethers
+    for (const f of [this.p1, this.p2]) {
+      if (!f.swing) continue;
+      const ctx = this.ctx; if (!ctx) continue;
+      const hx = f.x; const hy = f.y + 28;
+      ctx.save();
+      ctx.strokeStyle = "oklch(0.95 0.02 240 / 0.95)";
+      ctx.lineWidth = 1.6;
+      ctx.shadowColor = "oklch(0.95 0.02 240)";
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.moveTo(f.swing.ax, f.swing.ay);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      // Anchor pulse
+      ctx.fillStyle = "oklch(0.95 0.02 240 / 0.85)";
+      ctx.beginPath();
+      ctx.arc(f.swing.ax, f.swing.ay, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
 
     // Frenzy overlay — prefer frame sequence for mobile reliability, fall back to video.
     if (frenzyAttacker) {
