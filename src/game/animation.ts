@@ -338,6 +338,67 @@ export function computeAttackPose(
       out.headOffsetY -= 1;
       break;
     }
+    case "bamfPunch": {
+      // Lightning-fast straight cross. Cock back briefly, then snap forward with full extension.
+      if (inWind) {
+        setCock(14 + 6 * wt, -4 - 2 * wt);
+        // Off-hand guards the face
+        const gx = -facing * 6, gy = sy - 2;
+        if (facing > 0) { out.armL = [-sxF, sy, -facing * 4, sy - 4, gx, gy]; out.handL = [gx, gy]; }
+        else { out.armR = [-sxF, sy, -facing * 4, sy - 4, gx, gy]; out.handR = [gx, gy]; }
+      } else if (inActive) {
+        const reach = 30 + 10 * at;
+        setStrike(reach, -1);
+        // Lean into the punch
+        out.lean = (out.lean ?? 0) + facing * 0.18;
+      } else {
+        setStrike(28, 2);
+      }
+      break;
+    }
+    case "bamfKick": {
+      // Spinning roundhouse: lead leg arcs from low → horizontal → follow-through.
+      const hipY = walk.hipY;
+      // Arc angle: starts cocked back-low (~-0.6), sweeps forward to ~+1.4 during active
+      const a = inWind
+        ? -0.6 + 0.5 * wt
+        : (inActive ? -0.1 + 1.5 * at : 1.4);
+      const r = 26;
+      const footX = facing * Math.cos(a) * r;
+      const footY = hipY + 8 + Math.sin(a) * r * 0.6;
+      const kneeX = facing * Math.cos(a) * (r * 0.5);
+      const kneeY = hipY + 10 + Math.sin(a) * r * 0.3;
+      // Lead leg = back leg whips forward (use legR for facing right, legL for left)
+      if (facing > 0) {
+        out.legR = [3, hipY, kneeX, kneeY, footX, footY];
+        out.footR = [footX, footY];
+        // Plant leg slightly bent
+        out.legL = [-3, hipY, -4, hipY + 14, -6, hipY + 24];
+        out.footL = [-6, hipY + 24];
+      } else {
+        out.legL = [-3, hipY, kneeX, kneeY, footX, footY];
+        out.footL = [footX, footY];
+        out.legR = [3, hipY, 4, hipY + 14, 6, hipY + 24];
+        out.footR = [6, hipY + 24];
+      }
+      // Arms: one out for balance, one tucked
+      const balX = -facing * 16, balY = sy + 2;
+      if (facing > 0) {
+        out.armL = [-sxF, sy, -facing * 8, sy + 2, balX, balY];
+        out.handL = [balX, balY];
+        out.armR = [sxF, sy, facing * 4, sy + 4, facing * 6, sy + 8];
+        out.handR = [facing * 6, sy + 8];
+      } else {
+        out.armR = [-sxF, sy, -facing * 8, sy + 2, balX, balY];
+        out.handR = [balX, balY];
+        out.armL = [sxF, sy, facing * 4, sy + 4, facing * 6, sy + 8];
+        out.handL = [facing * 6, sy + 8];
+      }
+      // Body lean into the spin
+      out.lean = (out.lean ?? 0) + facing * 0.22 * (inActive ? 1 : 0.4);
+      out.headOffsetY -= 1;
+      break;
+    }
   }
   return out;
 }
