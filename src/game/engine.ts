@@ -3333,6 +3333,111 @@ export class GameEngine {
     }
   }
 
+  /** Apply damage to a prop. Triggers shatter when depleted. */
+  private damageProp(p: Prop, amount: number, sx: number, sy: number) {
+    if (p.destroyed || amount <= 0) return;
+    p.hp = Math.max(0, p.hp - amount);
+    p.damageFlash = Math.min(1, p.damageFlash + 0.6);
+    // Small chip burst — premium feedback without spam
+    if (!this.lowPower) {
+      const cx = p.x + p.w / 2, cy = p.y + p.h / 2;
+      const hue = p.hue ?? 250;
+      const n = Math.min(8, 2 + Math.round(amount / 6));
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = 80 + Math.random() * 160;
+        this.particles.push({
+          x: cx + (Math.random() - 0.5) * p.w * 0.6,
+          y: cy + (Math.random() - 0.5) * p.h * 0.6,
+          vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40,
+          life: 0.32, maxLife: 0.32,
+          color: `oklch(0.65 0.10 ${hue})`,
+          size: 1.4 + Math.random() * 1.6,
+        });
+      }
+    }
+    if (p.hp <= 0) this.shatterProp(p, sx, sy);
+  }
+
+  /** True if (x,y) is inside the walkable door rect of a building. */
+  private pointInDoor(p: Prop, x: number, y: number): boolean {
+    if (p.kind !== "building" || !p.hasDoor || p.doorX == null) return false;
+    return x > p.doorX && x < p.doorX + (p.doorW ?? 0)
+      && y > (p.doorY ?? 0) && y < (p.doorY ?? 0) + (p.doorH ?? 0);
+  }
+
+  /** True if the fighter's hitbox overlaps the door (used to allow walk-through). */
+  private fighterInDoor(p: Prop, fx: number, fy: number): boolean {
+    if (p.kind !== "building" || !p.hasDoor || p.doorX == null) return false;
+    const hw = FIGHTER_W / 2;
+    const dy = p.doorY ?? 0;
+    const dh = p.doorH ?? 0;
+    const dx = p.doorX;
+    const dw = p.doorW ?? 0;
+    // Fighter's feet must be inside the door arch range
+    const feet = fy + FIGHTER_H;
+    const overlapX = fx + hw > dx - 4 && fx - hw < dx + dw + 4;
+    const overlapY = feet > dy && fy < dy + dh;
+    return overlapX && overlapY;
+  }
+
+  /** Find first non-destroyed prop the segment hits. Returns prop + dist. */
+  private firstPropHit(sx: number, sy: number, ex: number, ey: number): { prop: Prop; t: number } | null {
+    let best: { prop: Prop; t: number } | null = null;
+    for (const p of this.props) {
+      if (p.destroyed) continue;
+      const t = this.segmentRectEntryT(sx, sy, ex, ey, p.x, p.y, p.w, p.h);
+      if (t == null) continue;
+      if (best == null || t < best.t) best = { prop: p, t };
+    }
+    return best;
+  }
+
+  /** Returns parametric t in [0,1] of segment entry into rect, or null. */
+  private segmentRectEntryT(sx: number, sy: number, ex: number, ey: number,
+                            rx: number, ry: number, rw: number, rh: number): number | null {
+    const dx = ex - sx, dy = ey - sy;
+    let tmin = 0, tmax = 1;
+    if (Math.abs(dx) < 1e-6) {
+      if (sx < rx || sx > rx + rw) return null;
+    } else {
+      let t1 = (rx - sx) / dx, t2 = (rx + rw - sx) / dx;
+      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+      tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+      if (tmin > tmax) return null;
+    }
+    if (Math.abs(dy) < 1e-6) {
+      if (sy < ry || sy > ry + rh) return null;
+    } else {
+      let t1 = (ry - sy) / dy, t2 = (ry + rh - sy) / dy;
+      if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
+      tmin = Math.max(tmin, t1); tmax = Math.min(tmax, t2);
+      if (tmin > tmax) return null;
+    }
+    return Math.max(0, tmin);
+  }
+
+  /**
+   * Returns the FIRST solid prop blocking a melee swing from attacker `f` to a
+   * point at offset `range` in front of them. Buildings count as cover unless
+   * the attacker is standing in the door. Flying attackers ignore cover.
+   * If a prop is in the way, it is damaged for `damage` and we return true so
+   * the caller can SKIP applying damage to the opponent (cover absorbs the hit).
+   */
+  private meleeBlockedByProp(f: Fighter, range: number, damage: number): boolean {
+    if (f.flying) return false;
+    const sx = f.x, sy = f.y + FIGHTER_H * 0.45;
+    const ex = f.x + f.facing * range, ey = sy;
+    const hit = this.firstPropHit(sx, sy, ex, ey);
+    if (!hit) return false;
+    const p = hit.prop;
+    // Allow ground fighters to attack THROUGH the doorway
+    if (this.fighterInDoor(p, f.x, f.y)) return false;
+    this.damageProp(p, damage, sx, sy);
+    return true;
+  }
+
+
   /** Render all map props with kind-specific premium look. Walk-through; pulses if has door. */
   private drawProps(ctx: CanvasRenderingContext2D) {
     if (!this.props.length) return;
