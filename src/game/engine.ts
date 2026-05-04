@@ -168,6 +168,7 @@ export class GameEngine {
   private running = false;
   private elapsed = 0;
   private lowPower = false;
+  private slowFrames = 0;
   private snapAccum = 0;
 
   private mapId: MapId = "neon-city";
@@ -321,6 +322,9 @@ export class GameEngine {
       if (!this.running) return;
       const dt = Math.min(0.033, (t - this.last) / 1000);
       this.last = t;
+      // Adaptive perf guard: if frames consistently exceed ~22ms, drop to lowPower
+      if (dt > 1 / 45) this.slowFrames++; else this.slowFrames = Math.max(0, this.slowFrames - 1);
+      if (!this.lowPower && this.slowFrames > 30) this.lowPower = true;
       this.update(dt);
       this.render();
       this.raf = requestAnimationFrame(loop);
@@ -1144,6 +1148,15 @@ export class GameEngine {
       ctx.strokeRect(20, 20, W - 40, H - 40);
       ctx.setLineDash([]);
       ctx.shadowBlur = 0;
+    }
+
+    // Cinematic vignette (cheap full-screen radial overlay)
+    if (!this.lowPower) {
+      const grad = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.7);
+      grad.addColorStop(0, "rgba(0,0,0,0)");
+      grad.addColorStop(1, "rgba(0,0,0,0.55)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
     }
 
     ctx.restore();

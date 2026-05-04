@@ -70,23 +70,36 @@ export function GameCanvas() {
     const canvas = canvasRef.current!;
 
     // Detect device tier: low-power gets simpler effects + lower DPR;
-    // high-end gets crisper rendering up to DPR 2.
+    // high-end gets crisper rendering up to DPR 3.
     const isTouchDev = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
     const cores = navigator.hardwareConcurrency || 8;
     const mem = (navigator as any).deviceMemory || 8;
     const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 700;
     const lowPower = (isTouchDev && (cores <= 4 || mem <= 3)) || smallScreen;
     const highEnd = !lowPower && cores >= 8 && mem >= 6;
-    const dprCap = lowPower ? 1 : highEnd ? 2 : 1.5;
+    const dprCap = lowPower ? 1.5 : highEnd ? 3 : 2;
 
     const resize = () => {
-      const r = canvas.getBoundingClientRect();
-      const dpr = Math.min(devicePixelRatio || 1, dprCap);
-      canvas.width = Math.floor(r.width * dpr);
-      canvas.height = Math.floor(r.height * dpr);
+      const parent = canvas.parentElement!;
+      const cssW = parent.clientWidth;
+      const cssH = parent.clientHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+      canvas.style.width = cssW + "px";
+      canvas.style.height = cssH + "px";
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+      }
     };
     resize();
     window.addEventListener("resize", resize);
+    window.addEventListener("orientationchange", resize);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", resize);
+    vv?.addEventListener("scroll", resize);
 
     const engine = new GameEngine(canvas);
     engineRef.current = engine;
@@ -176,6 +189,9 @@ export function GameCanvas() {
     return () => {
       engine.stop();
       window.removeEventListener("resize", resize);
+      window.removeEventListener("orientationchange", resize);
+      vv?.removeEventListener("resize", resize);
+      vv?.removeEventListener("scroll", resize);
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
       document.removeEventListener("visibilitychange", onVis);
@@ -195,11 +211,14 @@ export function GameCanvas() {
   };
 
   return (
-    <div className="relative w-full h-full select-none">
+    <div
+      className="relative select-none overflow-hidden"
+      style={{ width: "100%", height: "100%", minHeight: "100dvh" }}
+    >
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
-        style={{ touchAction: "none" }}
+        className="absolute inset-0 block"
+        style={{ width: "100%", height: "100%", touchAction: "none", imageRendering: "auto" }}
       />
       {screen === "fight" && snap && (
         <HUD
@@ -213,8 +232,13 @@ export function GameCanvas() {
       {screen === "fight" && engine && engine.canFly("p1") && (
         <button
           onPointerDown={(e) => { e.preventDefault(); engine.pressToggleFlight("p1"); }}
-          className="absolute left-2 bottom-36 z-30 w-14 h-14 rounded-full border-2 backdrop-blur-md bg-background/40 font-mono text-xl flex items-center justify-center pointer-events-auto active:scale-95 transition-transform"
+          className="absolute z-30 rounded-full border-2 backdrop-blur-md bg-background/40 font-mono flex items-center justify-center pointer-events-auto active:scale-95 transition-transform"
           style={{
+            left: "calc(env(safe-area-inset-left, 0px) + 12px)",
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + 9rem)",
+            width: "min(14vw, 56px)",
+            height: "min(14vw, 56px)",
+            fontSize: "min(5vw, 22px)",
             borderColor: "oklch(0.85 0.18 210)",
             color: "oklch(0.85 0.18 210)",
             boxShadow: `0 0 18px -4px oklch(0.85 0.18 210)`,
@@ -265,14 +289,26 @@ function RotatePrompt() {
 function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onOpenAudio: () => void }) {
   return (
     <>
-      <div className="pointer-events-none absolute top-0 left-0 right-0 p-2 sm:p-4 flex gap-2 sm:gap-4 items-start">
-        <HpBar p={snap.p1} side="left" />
-        <HpBar p={snap.p2} side="right" />
+      <div
+        className="pointer-events-none absolute left-0 right-0 flex justify-center"
+        style={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+      >
+        <div className="flex gap-3 sm:gap-6 items-start w-full px-3 sm:px-6" style={{ maxWidth: "min(1200px, 96vw)" }}>
+          <HpBar p={snap.p1} side="left" />
+          <HpBar p={snap.p2} side="right" />
+        </div>
       </div>
       <button
         onClick={onOpenAudio}
         aria-label="Audio settings"
-        className="absolute top-2 right-2 sm:top-3 sm:right-3 w-9 h-9 rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-30"
+        className="absolute rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-30"
+        style={{
+          top: "calc(env(safe-area-inset-top, 0px) + 8px)",
+          right: "calc(env(safe-area-inset-right, 0px) + 8px)",
+          width: "min(10vw, 40px)",
+          height: "min(10vw, 40px)",
+          fontSize: "min(4vw, 16px)",
+        }}
       >
         {muted ? "🔇" : "🔊"}
       </button>
@@ -280,8 +316,9 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
       {snap.phase === "intro" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div
-            className="text-7xl font-black tracking-widest"
+            className="font-black tracking-widest"
             style={{
+              fontSize: "clamp(2.5rem, 12vw, 6rem)",
               color: "oklch(0.95 0.15 60)",
               textShadow: "0 0 30px oklch(0.75 0.22 45)",
               animation: "fade-in 0.4s ease-out",
@@ -293,31 +330,32 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
       )}
 
       {snap.phase === "ko" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-          <div className="text-center">
+        <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm px-4">
+          <div className="text-center" style={{ animation: "fade-in 0.35s ease-out" }}>
             <div
-              className="text-8xl font-black tracking-widest mb-4"
+              className="font-black tracking-widest mb-4"
               style={{
+                fontSize: "clamp(3.5rem, 16vw, 8rem)",
                 color: snap.winner === "p1" ? "oklch(0.85 0.18 210)" : "oklch(0.72 0.28 340)",
                 textShadow: `0 0 40px ${snap.winner === "p1" ? "oklch(0.75 0.22 215)" : "oklch(0.65 0.30 345)"}`,
               }}
             >
               K.O.
             </div>
-            <div className="text-2xl text-foreground/80 mb-6 font-mono">
+            <div className="text-foreground/80 mb-6 font-mono" style={{ fontSize: "clamp(0.95rem, 3vw, 1.5rem)" }}>
               {snap.winner === "p1" ? snap.p1.name : snap.p2.name} wins
             </div>
-            <div className="flex gap-3 justify-center">
+            <div className="flex gap-3 justify-center flex-wrap">
               <button
                 onClick={onRematch}
-                className="px-8 py-3 rounded-md font-mono uppercase tracking-widest text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors"
+                className="px-6 sm:px-8 py-3 rounded-md font-mono uppercase tracking-widest text-xs sm:text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors"
                 style={{ color: "oklch(0.95 0.05 250)" }}
               >
                 Rematch
               </button>
               <button
                 onClick={onChange}
-                className="px-8 py-3 rounded-md font-mono uppercase tracking-widest text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors text-foreground/70"
+                className="px-6 sm:px-8 py-3 rounded-md font-mono uppercase tracking-widest text-xs sm:text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors text-foreground/70"
               >
                 Change setup
               </button>
@@ -328,7 +366,7 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
 
       {snap.slowmo && (
         <div className="pointer-events-none absolute inset-0 flex items-end justify-center pb-32">
-          <div className="font-mono text-sm tracking-widest text-foreground/70 animate-pulse">
+          <div className="font-mono text-xs sm:text-sm tracking-widest text-foreground/70 animate-pulse">
             ◇ SELECT TELEPORT TARGET ◇
           </div>
         </div>
@@ -398,9 +436,13 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
   return (
     <div
       className="absolute inset-x-0 bottom-0 pointer-events-none"
-      style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+      style={{
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+        paddingLeft: "env(safe-area-inset-left, 0px)",
+        paddingRight: "env(safe-area-inset-right, 0px)",
+      }}
     >
-      <div className={`flex ${cpu ? "justify-start" : "justify-between"} items-end px-4`}>
+      <div className={`flex ${cpu ? "justify-start" : "justify-between"} items-end px-3 sm:px-6`}>
         <PlayerControls
           side="left"
           color="oklch(0.85 0.18 210)"
@@ -538,8 +580,11 @@ function Joystick({
   return (
     <div
       ref={ref}
-      className="relative w-[120px] h-[120px] rounded-full pointer-events-auto touch-none"
+      className="relative rounded-full pointer-events-auto touch-none"
+      // size scales with viewport so it never feels too small or too big
       style={{
+        width: "clamp(110px, 28vw, 160px)",
+        height: "clamp(110px, 28vw, 160px)",
         background: `radial-gradient(circle at 50% 45%, color-mix(in oklab, ${color} 55%, transparent) 0%, color-mix(in oklab, ${color} 28%, transparent) 60%, color-mix(in oklab, ${color} 12%, transparent) 100%)`,
         border: `3px solid color-mix(in oklab, ${color} 75%, transparent)`,
         boxShadow: `0 6px 20px color-mix(in oklab, ${color} 35%, transparent), inset 0 -4px 12px rgba(0,0,0,0.25), inset 0 2px 6px rgba(255,255,255,0.15)`,
