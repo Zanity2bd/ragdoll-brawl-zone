@@ -208,6 +208,17 @@ class SfxEngine {
         env(0.3, 0.002, 0.08); stopAt(o, 0.1);
         break;
       }
+      case "bamf": {
+        const sample = this.samples["bamf"];
+        if (!sample) break;
+        const src = ctx.createBufferSource();
+        src.buffer = sample;
+        const g = ctx.createGain(); g.gain.value = 0.9 * vol;
+        src.connect(g); g.connect(this.sfxGain);
+        src.start(t);
+        setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch { /* */ } }, (sample.duration + 0.1) * 1000);
+        break;
+      }
     }
   }
 }
