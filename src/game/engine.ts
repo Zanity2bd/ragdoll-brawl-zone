@@ -5009,11 +5009,13 @@ export class GameEngine {
     ctx.lineJoin = "round";
 
     // ---- Size-driven dimensions ----
-    const baseW = skin.thickBody ? 7.0 : 5.5;
-    const lowerW = baseW * 0.62;                                     // taper contrast
-    const torsoW = skin.thickBody ? 7 : 5.5;
-    const outlineW = Math.max(1.8, Math.min(3.4, baseW * 0.42));
-    const torsoOutlineW = Math.max(1.8, Math.min(3.0, torsoW * 0.38));
+    // Chunky silhouette proportions (matches reference run-cycle artstyle):
+    // thicker limbs, beefier torso. Iconic accents (cape, ears, mask) layer on top.
+    const baseW = skin.thickBody ? 9.5 : 8.0;
+    const lowerW = baseW * 0.72;                                     // less taper, chunkier shins/forearms
+    const torsoW = skin.thickBody ? 11 : 9;
+    const outlineW = Math.max(2.0, Math.min(3.6, baseW * 0.42));
+    const torsoOutlineW = Math.max(2.2, Math.min(3.4, torsoW * 0.36));
     const overlap = baseW * 0.45;
     const outlineColor = "oklch(0.10 0.02 250)";
 
