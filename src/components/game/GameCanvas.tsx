@@ -161,8 +161,8 @@ export function GameCanvas() {
       if (Math.abs(sx - opp.x) < hitW / 2 && sy > opp.y - 15 && sy < opp.y + hitH) {
         const p1Name = engine.getSkinIdFor("p1");
         if (p1Name === "hulk") return true;
-        // Flash: tap on opponent → Lightning Blast
-        if (p1Name === "flash") {
+        // Characters with a Power 2 payload → tap-opponent fires it.
+        if (p1Name === "flash" || p1Name === "superman" || p1Name === "ironman" || p1Name === "heatwave") {
           if (engine.pressPower2("p1")) return true;
         }
         if (engine.canFly("p1") && engine.isFlying("p1")) {
@@ -393,14 +393,22 @@ function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "r
           }}
         />
       </div>
-      <div className={`flex gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
-        {p.name === "Heatwave" && (
+      <div className={`flex flex-wrap gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
+        {p.hasPower1 && (
+          <CdPill label={`HOLD · ${p.power1Name}`} cd={p.power1Cd} max={p.power1CdMax} color={color} />
+        )}
+        {p.hasPower2 && (
+          <CdPill label={`TAP · ${p.power2Name}`} cd={p.power2Cd} max={p.power2CdMax} color={color} />
+        )}
+        {p.name === "Heatwave" && !p.hasPower1 && (
           <CdPill label={isP1 ? "F · Fire" : "K · Fire"} cd={p.fireCd} max={p.fireCdMax} color={color} />
         )}
         {p.name === "Nightcrawler" && (
           <CdPill label={isP1 ? "G · Tele" : "L · Tele"} cd={p.teleCd} max={p.teleCdMax} color={color} />
         )}
-        <CdPill label={`${isP1 ? "J" : ";"} · ${p.meleeName}`} cd={p.meleeCd} max={p.meleeCdMax} color={color} />
+        {!p.hasPower2 && (
+          <CdPill label={`${isP1 ? "J" : ";"} · ${p.meleeName}`} cd={p.meleeCd} max={p.meleeCdMax} color={color} />
+        )}
       </div>
       {p.hasFrenzy && (
         <FrenzyBar
@@ -528,6 +536,7 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
             onFire={() => engine.pressFire("p2")}
             onPunch={() => engine.pressMelee("p2")}
             onTele={() => engine.pressTeleport("p2")}
+            onPower1={() => engine.pressPower1("p2")}
             canFly={engine.canFly("p2")}
           />
         )}
@@ -553,13 +562,14 @@ function PlayerControls({
   const isHeatwave = p.name === "Heatwave";
   const isNightcrawler = p.name === "Nightcrawler";
   const isFlash = p.name === "The Flash";
-  // Flash: HOLD activates Time Freeze (power1) instead of basic melee.
-  const onSpecial = isFlash && onPower1
-    ? onPower1
+  // HOLD joystick = signature setup ability for characters that have a power1.
+  const useHoldPower1 = !!onPower1 && p.hasPower1 && (isFlash || p.name === "Superman" || p.name === "Iron Man" || isHeatwave);
+  const onSpecial = useHoldPower1
+    ? onPower1!
     : (isHeatwave ? onFire : isNightcrawler ? onTele : onPunch);
-  const cd = isFlash ? p.power1Cd : isHeatwave ? p.fireCd : isNightcrawler ? p.teleCd : p.meleeCd;
-  const max = isFlash ? p.power1CdMax : isHeatwave ? p.fireCdMax : isNightcrawler ? p.teleCdMax : p.meleeCdMax;
-  const label = isFlash ? "Time Freeze" : isHeatwave ? "Fire" : isNightcrawler ? "Teleport" : p.meleeName;
+  const cd = useHoldPower1 ? p.power1Cd : isHeatwave ? p.fireCd : isNightcrawler ? p.teleCd : p.meleeCd;
+  const max = useHoldPower1 ? p.power1CdMax : isHeatwave ? p.fireCdMax : isNightcrawler ? p.teleCdMax : p.meleeCdMax;
+  const label = useHoldPower1 ? p.power1Name : isHeatwave ? "Fire" : isNightcrawler ? "Teleport" : p.meleeName;
   return (
     <div className={`flex items-end ${side === "right" ? "flex-row-reverse" : ""}`}>
       <Joystick
