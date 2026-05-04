@@ -170,12 +170,8 @@ export function GameCanvas() {
         }
         if (p1Name === "heatwave") engine.pressFire("p1");
         else if (p1Name === "nightcrawler") {
-          // Instant teleport next to the opponent's flank.
-          const side = engine.getFighterRect("p1") && opp.x >= (engine.getFighterRect("p1") as { x: number }).x ? -1 : 1;
           const r = canvas.getBoundingClientRect();
-          // Convert opponent stage coords to a CSS-relative offset for tapTeleport.
-          // Easier: call a stage-space variant via tapTeleport using a synthetic click near opp.
-          engine.tapTeleport("p1", cx - r.left + side * 60, cy - r.top);
+          engine.tapTeleport("p1", cx - r.left, cy - r.top);
         }
         else engine.pressMelee("p1");
         return true;
