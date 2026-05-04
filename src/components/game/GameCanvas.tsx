@@ -585,9 +585,9 @@ function Joystick({
         cancelHold();
         movedFar.current = false;
         setKnob({ x: 0, y: 0 });
-        onMove(0);
+        onMove(0, 0);
       }}
-      onPointerCancel={() => { idRef.current = null; cancelHold(); movedFar.current = false; setKnob({ x: 0, y: 0 }); onMove(0); }}
+      onPointerCancel={() => { idRef.current = null; cancelHold(); movedFar.current = false; setKnob({ x: 0, y: 0 }); onMove(0, 0); }}
     >
       <span className={arrow} style={{ top: 6, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▲</span>
       <span className={arrow} style={{ bottom: 6, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▼</span>
