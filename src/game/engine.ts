@@ -1906,6 +1906,7 @@ export class GameEngine {
       }
 
       if (!this.lowPower && this.particles.length < 240) {
+        // Soft body aura that bleeds downward (read as warmth/lift)
         if (Math.random() < (idle ? 0.55 : 0.3)) {
           this.particles.push({
             x: f.x + (Math.random() - 0.5) * 18,
@@ -1918,21 +1919,38 @@ export class GameEngine {
           });
         }
         if (cruising) {
+          // Trailing speed sparks behind the fighter
           const back = -Math.sign(f.vx || f.facing);
-          const sparkN = Math.min(3, 1 + Math.floor(flySpeed / 140));
+          const sparkN = Math.min(4, 1 + Math.floor(flySpeed / 110));
           for (let i = 0; i < sparkN; i++) {
             this.particles.push({
-              x: f.x + back * (8 + Math.random() * 14),
-              y: f.y + FIGHTER_H * 0.45 + (Math.random() - 0.5) * 18,
-              vx: -f.vx * 0.18 + (Math.random() - 0.5) * 30,
-              vy: -f.vy * 0.18 + (Math.random() - 0.5) * 30,
-              life: 0.32, maxLife: 0.32,
+              x: f.x + back * (8 + Math.random() * 18),
+              y: f.y + FIGHTER_H * 0.45 + (Math.random() - 0.5) * 22,
+              vx: -f.vx * 0.22 + (Math.random() - 0.5) * 30,
+              vy: -f.vy * 0.22 + (Math.random() - 0.5) * 30,
+              life: 0.34, maxLife: 0.34,
               color: i === 0 ? "oklch(0.97 0.05 80)" : f.skin.glow,
               size: 1.6 + Math.random() * 2,
             });
           }
+          // Lead-fist contrail: tight bright streak from the punched-forward hand
+          if (Math.random() < 0.7) {
+            const fwd = Math.sign(f.vx || f.facing);
+            const handX = f.x + fwd * 26;
+            const handY = f.y + 30 - flySpeed * 0.02;
+            this.particles.push({
+              x: handX + (Math.random() - 0.5) * 4,
+              y: handY + (Math.random() - 0.5) * 4,
+              vx: -f.vx * 0.35 + (Math.random() - 0.5) * 14,
+              vy: -f.vy * 0.35 + (Math.random() - 0.5) * 14,
+              life: 0.28, maxLife: 0.28,
+              color: "oklch(0.99 0.04 80)",
+              size: 1.4 + Math.random() * 1.4,
+            });
+          }
         }
         if (ascending) {
+          // Downward jet wash from the feet
           for (let i = 0; i < 2; i++) {
             this.particles.push({
               x: f.x + (Math.random() - 0.5) * 14,
