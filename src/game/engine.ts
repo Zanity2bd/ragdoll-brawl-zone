@@ -3504,8 +3504,19 @@ export class GameEngine {
 
     if (skin.cape) {
       ctx.save();
+      // Counter-rotate the cape so it hangs/trails in WORLD space (gravity + wind),
+      // not perpendicular to a pitched body. We pivot at the shoulders.
+      const bodyAngle = pose.lean + (ghost ? 0 : f.bodyRoll);
+      ctx.translate(0, shoulderY - 2);
+      ctx.rotate(-bodyAngle);
+      // Cape's own hang angle in world space: gravity pulls down, wind pushes
+      // opposite the facing direction proportional to speed.
+      const windAngle = -f.facing * Math.min(0.9, Math.abs(f.vx) / 520) + (f.flying ? -f.facing * 0.15 : 0);
+      ctx.rotate(windAngle);
+      ctx.translate(0, -(shoulderY - 2));
+
       const wobble = Math.sin(f.walkPhase * 0.6) * 2;
-      const sw = f.capeSwingX + wobble;        // bottom horizontal sway
+      const sw = f.capeSwingX + wobble;        // bottom horizontal sway (spring)
       const swMid = sw * 0.55;                 // anchored near shoulders
       const lift = f.capeLift * 14;            // raises bottom edge in flight/sprints
       const curl = -Math.sign(sw) * Math.min(6, Math.abs(sw) * 0.35); // trailing whip curl
