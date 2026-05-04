@@ -1336,14 +1336,17 @@ export class GameEngine {
     const base = f.flying
       ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, f.facing, FIGHTER_H)
       : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, f.facing, FIGHTER_H);
+    let posed: Pose;
     if (f.meleeKind) {
       const m = f.move;
       const wp = m.windup / f.meleeDur;
       const ap = m.active / f.meleeDur;
       const prog = f.meleeT / f.meleeDur;
-      return computeAttackPose(base, f.meleeKind, prog, { wp, ap }, f.facing);
+      posed = computeAttackPose(base, f.meleeKind, prog, { wp, ap }, f.facing);
+    } else {
+      posed = base;
     }
-    return base;
+    return applyWobble(posed, f.wobble, this.lowPower, f.onGround && !f.flying);
   }
 
   // ---------------- RENDER ----------------
