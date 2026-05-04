@@ -2409,8 +2409,25 @@ export class GameEngine {
     a.attackAnim = stepDur;
     Sfx.play("whoosh", 0.5);
 
-    // Apply hit
-    if (t.iframeT <= 0 && t.downedT <= 0 && t.getUpT <= 0) {
+    // ---- Depth-aware hit alignment ----
+    // The visible strike limb extends ~38–40px (perspective-stretched) from the
+    // attacker's shoulder/hip toward the camera-facing direction. Place the hit
+    // and impact FX at that projected limb tip rather than at target.x so the
+    // 3D z-offset illusion lines up with the actual hitbox.
+    const reachWorld = s.kind === "bamfPunch" ? 40 : 36;
+    const limbTipX = a.x + a.facing * reachWorld;
+    // Strike Y matches limb height: punch ~ shoulder (head/upper-torso),
+    // kick ~ hip / mid-torso. Account for perspective scale lift (~6-8px up).
+    const shoulderWorldY = a.y + 28; // shoulder approx
+    const hipWorldY = a.y + 56;
+    const limbTipY = (s.kind === "bamfPunch" ? shoulderWorldY : hipWorldY) - 4;
+    // Hit only if depth-aware hitbox actually overlaps the target body
+    const hitsTarget =
+      Math.abs(limbTipX - t.x) < 38 &&
+      limbTipY > t.y - 8 &&
+      limbTipY < t.y + FIGHTER_H + 8;
+
+    if (hitsTarget && t.iframeT <= 0 && t.downedT <= 0 && t.getUpT <= 0) {
       t.ragdollImmuneT = 0;
       t.hp = Math.max(0, t.hp - s.dmg);
       t.hitFlash = 0.55;
@@ -2429,7 +2446,9 @@ export class GameEngine {
       this.slowmoT = Math.max(this.slowmoT, s.slow);
       this.slowmoMode = "impact";
 
-      const ix = t.x, iy = t.y + 40;
+      // Impact spawns AT the projected limb tip (pulled slightly toward target body)
+      const ix = limbTipX * 0.4 + t.x * 0.6;
+      const iy = limbTipY * 0.5 + (t.y + (s.kind === "bamfPunch" ? 32 : 50)) * 0.5;
       this.burst(ix, iy, "oklch(0.96 0.06 80)", 26);
       this.burst(ix, iy, "oklch(0.7 0.22 305)", 22);
       this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 70, life: 0.4, maxLife: 0.4, color: "oklch(0.95 0.18 95)" });
