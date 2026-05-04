@@ -43,8 +43,11 @@ export const MOVES: Record<SkinId, MoveSpec> = {
   },
   homelander: {
     kind: "laserSweep", name: "Laser Sweep",
-    windup: 0.3, active: 0.55, recover: 0.25, cooldown: 4.8,
-    range: 520, damage: 3, knockbackX: 60, knockbackY: -40,
+    // 10s sustained beam, 20s cooldown. Damage is per active second (1 dps),
+    // so a full hold deals ~10 damage. Final 3s overload phase pierces cover
+    // and deals heavier damage (handled in engine.ts laserSweep tick).
+    windup: 0.3, active: 10.0, recover: 0.4, cooldown: 20.0,
+    range: 520, damage: 1, knockbackX: 60, knockbackY: -40,
     hitstop: 0.0, slowmoT: 0, shake: 4, ragdollT: 0,
     windupSfx: "blip", hitSfx: "laser",
   },
