@@ -911,7 +911,6 @@ export class GameEngine {
         f.walkPhase += ldt * 1.2;
       }
 
-      const prevX = f.x;
       const prevY = f.y;
       f.vy += GRAVITY * ldt;
       f.x += f.vx * ldt;
