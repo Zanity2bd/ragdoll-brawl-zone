@@ -58,9 +58,18 @@ interface Fighter {
   meleeDur: number;        // total (windup+active+recover)
   meleeKind: string | null;
   meleeHitMask: Set<number>; // for multi-hit (flurry) — counts hits applied
-  // ragdoll
-  ragdollT: number;
-  ragdollPhase: number;
+  // ragdoll / recovery
+  ragdollT: number;        // active tumble timer (airborne)
+  ragdollPhase: number;    // pose driver
+  ragdollAng: number;      // current body angle (rad)
+  ragdollAV: number;       // angular velocity (rad/s)
+  ragdollEnergy: number;   // 0..1, drives tumble intensity, decays
+  downedT: number;         // laydown duration on ground (locked)
+  getUpT: number;          // remaining rise animation
+  getUpDur: number;        // total rise duration
+  iframeT: number;         // invulnerability after rise
+  ragdollImmuneT: number;  // chain-prevention: still takes damage, no re-ragdoll
+  lastLean: number;        // last applied torso lean (for blend)
   // victim slow (a-train)
   slowedT: number;
   // afterimage trail
