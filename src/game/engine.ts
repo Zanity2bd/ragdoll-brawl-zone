@@ -113,6 +113,7 @@ interface Fighter {
     target: PlayerId;
     nextTick: number; // accumulator for damage ticks
     transitionT: number; // 0..0.25 transform-in
+    punchPulse: number;  // 0..1, bumped on each tick, decays — drives flash + blur
   };
   frenzyCd: number;
 }
@@ -468,7 +469,7 @@ export class GameEngine {
     t.meleeKind = null; t.meleeT = 0;
     // Lock target out: clear ragdoll/getup to keep them upright in scene
     t.ragdollT = 0; t.downedT = 0; t.getUpT = 0;
-    a.frenzy = { t: 0, dur: FRENZY_DUR, target: t.id, nextTick: 0, transitionT: 0 };
+    a.frenzy = { t: 0, dur: FRENZY_DUR, target: t.id, nextTick: 0, transitionT: 0, punchPulse: 0 };
     this.shake = Math.max(this.shake, 24);
     this.hitstopT = Math.max(this.hitstopT, 0.08);
     this.impactFlash = 1;
@@ -718,6 +719,8 @@ export class GameEngine {
       // Continuous low-amplitude jitter while attack is active
       const jitter = 6 + Math.sin(fr.t * 60) * 3;
       this.shake = Math.max(this.shake, jitter);
+      // Decay punch pulse (drives flash + motion blur in renderer)
+      fr.punchPulse = Math.max(0, fr.punchPulse - dt * 5);
       // Damage ticks + heavy shake on each punch
       fr.nextTick -= dt;
       if (fr.nextTick <= 0) {
@@ -728,8 +731,15 @@ export class GameEngine {
         target.x += (Math.random() - 0.5) * 6;
         this.shake = Math.max(this.shake, 22);
         this.hitstopT = Math.max(this.hitstopT, 0.04);
-        this.impactFlash = Math.max(this.impactFlash, 0.7);
-        this.burst(target.x, target.y + 40, "oklch(0.95 0.18 30)", 10);
+        this.impactFlash = Math.max(this.impactFlash, 0.85);
+        fr.punchPulse = 1;
+        // Radial impact flash ring at target
+        this.shockwaves.push({
+          x: target.x, y: target.y + 30, r: 6, rMax: 90,
+          life: 0.22, maxLife: 0.22, color: "oklch(0.95 0.18 35)",
+        });
+        this.burst(target.x, target.y + 40, "oklch(0.95 0.18 30)", 12);
+        this.burst(target.x + (Math.random() - 0.5) * 30, target.y + 20, "oklch(0.98 0.12 60)", 6);
         Sfx.play("punch", 0.8);
         if (target.hp <= 0 && this.phase === "fight") {
           this.phase = "ko"; this.winner = f.id;
@@ -1818,25 +1828,71 @@ export class GameEngine {
       const cx = frenzyAttacker.x + frenzyAttacker.facing * 6;
       const cy = frenzyAttacker.y + FIGHTER_H * 0.52;
       const facing = frenzyAttacker.facing;
+      const pulse = fr.punchPulse;
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.scale(facing * (0.68 + ease * 0.32), 0.68 + ease * 0.32);
-      ctx.globalAlpha = fade;
+      // Punch-driven micro punch-in zoom
+      const punchZoom = 1 + pulse * 0.08;
+      ctx.scale(facing * (0.68 + ease * 0.32) * punchZoom, (0.68 + ease * 0.32) * punchZoom);
       ctx.globalCompositeOperation = source === this.frenzyVideo ? "screen" : "source-over";
       // Subtle screen-shake driven jitter for impact
-      const jx = (Math.random() - 0.5) * 4;
-      const jy = (Math.random() - 0.5) * 4;
+      const jx = (Math.random() - 0.5) * (4 + pulse * 10);
+      const jy = (Math.random() - 0.5) * (4 + pulse * 10);
       if (source) {
         try {
+          // Motion blur trail: multiple offset passes during punch pulse
+          if (pulse > 0.05 && !this.lowPower) {
+            const blurPasses = 3;
+            for (let i = 1; i <= blurPasses; i++) {
+              const offset = (i / blurPasses) * 14 * pulse * facing;
+              ctx.globalAlpha = fade * pulse * 0.22;
+              ctx.drawImage(source, -targetW / 2 - offset + jx, -targetH / 2 + jy, targetW, targetH);
+            }
+          }
+          ctx.globalAlpha = fade;
           ctx.drawImage(source, -targetW / 2 + jx, -targetH / 2 + jy, targetW, targetH);
+          // White overlay flash on the sprite during punch impact
+          if (pulse > 0.1) {
+            ctx.globalCompositeOperation = "lighter";
+            ctx.globalAlpha = fade * pulse * 0.5;
+            ctx.drawImage(source, -targetW / 2 + jx, -targetH / 2 + jy, targetW, targetH);
+          }
         } catch { /* source may not be decode-ready */ }
       }
       ctx.restore();
+      // Per-punch radial flash centered on target
+      if (pulse > 0.05) {
+        const tx = frenzyAttacker.x + facing * 96;
+        const ty = frenzyAttacker.y + FIGHTER_H * 0.55;
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = pulse * 0.55;
+        const grad = ctx.createRadialGradient(tx, ty, 4, tx, ty, 140);
+        grad.addColorStop(0, "oklch(0.98 0.18 50)");
+        grad.addColorStop(0.5, "oklch(0.85 0.20 30)");
+        grad.addColorStop(1, "oklch(0.20 0.15 25 / 0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(tx, ty, 140, 0, Math.PI * 2); ctx.fill();
+        // White streaks emanating outward
+        ctx.strokeStyle = "oklch(1 0.05 80)";
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = pulse * 0.7;
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + fr.t * 4;
+          const r1 = 30 + (1 - pulse) * 20;
+          const r2 = 70 + pulse * 50;
+          ctx.beginPath();
+          ctx.moveTo(tx + Math.cos(a) * r1, ty + Math.sin(a) * r1);
+          ctx.lineTo(tx + Math.cos(a) * r2, ty + Math.sin(a) * r2);
+          ctx.stroke();
+        }
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      }
       // Transition flash burst on the first frames
       if (trans < 1) {
         ctx.globalCompositeOperation = "lighter";
         ctx.globalAlpha = 1 - ease;
-        ctx.fillStyle = "oklch(0.85 0.22 145)";
+        ctx.fillStyle = "oklch(0.78 0.22 25)";
         ctx.beginPath();
         ctx.arc(cx, cy, 80 + ease * 120, 0, Math.PI * 2);
         ctx.fill();
