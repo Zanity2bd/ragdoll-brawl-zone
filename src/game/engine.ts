@@ -154,6 +154,8 @@ interface Fighter {
   speedBoostT: number;   // A-Train Sonic Sprint
   // Nightcrawler Bamf Combo — scripted 3-hit teleport sequence
   bamfCombo: null | { step: number; t: number; nextAt: number; targetId: PlayerId };
+  // Spider-Man Web Swing — pendulum physics
+  swing: null | { ax: number; ay: number; len: number; angle: number; angV: number; t: number };
 }
 
 interface SmokeCloud {
