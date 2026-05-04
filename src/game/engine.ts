@@ -1057,6 +1057,241 @@ export class GameEngine {
     }
     this.lightnings = this.lightnings.filter(lo => lo.life > 0 && lo.x > -100 && lo.x < W + 100 && lo.y > -100 && lo.y < H + 100);
 
+    // ---- Heat Vision sustained beam (Superman) ----
+    for (const f of [this.p1, this.p2]) {
+      if (freezeActive && f.id !== this.timeFreezer) continue;
+      if (f.heatVisionT > 0) {
+        f.heatVisionT -= dt;
+        const tgt = f.id === "p1" ? this.p2 : this.p1;
+        const sx = f.x + f.facing * 8;
+        const sy = f.y + 16;
+        const dxh = (tgt.x + 0) - sx;
+        const dyh = (tgt.y + 30) - sy;
+        const ang = Math.atan2(dyh, dxh);
+        // Auto-track but clamp toward facing
+        const clampedAng = f.facing > 0
+          ? Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, ang))
+          : (Math.abs(ang) > Math.PI / 2 ? ang : (ang >= 0 ? Math.PI - 0.01 : -Math.PI + 0.01));
+        const beamLen = Math.min(680, Math.hypot(dxh, dyh) + 60);
+        this.beams.push({ owner: f.id, x: sx, y: sy, angle: clampedAng, length: beamLen, life: 0.05 });
+        // Apply tick damage if target is in cone
+        const targAng = Math.atan2(dyh, dxh);
+        const dAng = Math.abs(((targAng - clampedAng + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        if (dAng < 0.18 && Math.hypot(dxh, dyh) < beamLen && tgt.iframeT <= 0 && tgt.downedT <= 0 && tgt.getUpT <= 0) {
+          tgt.hp = Math.max(0, tgt.hp - HEAT_VISION_DPS * dt);
+          tgt.hitFlash = 0.2;
+          if (Math.random() < 0.5) {
+            this.particles.push({
+              x: tgt.x + (Math.random() - 0.5) * 18, y: tgt.y + 20 + Math.random() * 30,
+              vx: (Math.random() - 0.5) * 60, vy: -50 - Math.random() * 90,
+              life: 0.45, maxLife: 0.45,
+              color: "oklch(0.92 0.20 30)", size: 1.6 + Math.random() * 1.6,
+            });
+          }
+          if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
+        }
+        if (f.heatVisionT <= 0) f.heatVisionT = 0;
+      }
+    }
+
+    // ---- Iron Man Unibeam (charge → fire) ----
+    for (const f of [this.p1, this.p2]) {
+      if (freezeActive && f.id !== this.timeFreezer) continue;
+      if (f.unibeamChargeT > 0) {
+        f.unibeamChargeT -= dt;
+        // Pulsing chest charge particles
+        if (!this.lowPower && Math.random() < 0.6) {
+          const a = Math.random() * Math.PI * 2;
+          const r = 30 + Math.random() * 18;
+          this.particles.push({
+            x: f.x + Math.cos(a) * r, y: f.y + 30 + Math.sin(a) * r * 0.6,
+            vx: -Math.cos(a) * 80, vy: -Math.sin(a) * 80,
+            life: 0.3, maxLife: 0.3,
+            color: "oklch(0.92 0.18 220)", size: 2 + Math.random() * 2,
+          });
+        }
+        if (f.unibeamChargeT <= 0) {
+          f.unibeamChargeT = 0;
+          f.unibeamFireT = UNIBEAM_FIRE;
+          this.impactFlash = Math.max(this.impactFlash, 0.7);
+          this.shake = Math.max(this.shake, 18);
+          this.shockwaves.push({ x: f.x + f.facing * 10, y: f.y + 30, r: 8, rMax: 160, life: 0.45, maxLife: 0.45, color: "oklch(0.95 0.18 220)" });
+          Sfx.play("boom", 0.7); Sfx.play("laser", 0.9);
+        }
+      }
+      if (f.unibeamFireT > 0) {
+        f.unibeamFireT -= dt;
+        const tgt = f.id === "p1" ? this.p2 : this.p1;
+        const sx = f.x + f.facing * 4;
+        const sy = f.y + 30;
+        const ang = f.facing > 0 ? 0 : Math.PI;
+        // Hit any obstacle
+        const blockHit = this.raycastPlatforms(sx, sy, ang, UNIBEAM_RANGE);
+        const beamLen = blockHit ? blockHit.dist : UNIBEAM_RANGE;
+        this.beams.push({ owner: f.id, x: sx, y: sy, angle: ang, length: beamLen, life: 0.05 });
+        // Wide column hit: any target along line within ±28px y
+        const dxu = tgt.x - sx;
+        if (Math.sign(dxu) === f.facing && Math.abs(dxu) < beamLen && Math.abs((tgt.y + 30) - sy) < 50) {
+          if (tgt.iframeT <= 0 && tgt.downedT <= 0 && tgt.getUpT <= 0) {
+            tgt.hp = Math.max(0, tgt.hp - UNIBEAM_DPS * dt);
+            tgt.hitFlash = 0.25;
+            tgt.vx = f.facing * 320;
+            if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
+          }
+        }
+        // Impact sparks at end
+        if (!this.lowPower && Math.random() < 0.7) {
+          const ex = sx + Math.cos(ang) * beamLen, ey = sy + Math.sin(ang) * beamLen;
+          this.particles.push({
+            x: ex + (Math.random() - 0.5) * 14, y: ey + (Math.random() - 0.5) * 14,
+            vx: -f.facing * (60 + Math.random() * 120), vy: -50 - Math.random() * 100,
+            life: 0.4, maxLife: 0.4,
+            color: "oklch(0.95 0.18 220)", size: 2 + Math.random() * 2,
+          });
+        }
+        this.shake = Math.max(this.shake, 6);
+        if (f.unibeamFireT <= 0) f.unibeamFireT = 0;
+      }
+    }
+
+    // ---- Iron Man Micro-Missiles ----
+    for (const ms of this.missiles) {
+      if (freezeActive && ms.owner !== this.timeFreezer) continue;
+      if (ms.delay > 0) { ms.delay -= dt; continue; }
+      ms.life -= dt; ms.phase += dt * 12;
+      const tgt = ms.target === "p1" ? this.p1 : this.p2;
+      const dxm = tgt.x - ms.x, dym = (tgt.y + 35) - ms.y;
+      const d = Math.hypot(dxm, dym) || 1;
+      const desiredVx = (dxm / d) * 380;
+      const desiredVy = (dym / d) * 380;
+      const k = Math.min(1, sdt * 5);
+      ms.vx += (desiredVx - ms.vx) * k;
+      ms.vy += (desiredVy - ms.vy) * k;
+      ms.x += ms.vx * sdt; ms.y += ms.vy * sdt;
+      // Smoke trail
+      if (!this.lowPower && Math.random() < 0.85) {
+        this.particles.push({
+          x: ms.x + (Math.random() - 0.5) * 4, y: ms.y + (Math.random() - 0.5) * 4,
+          vx: -ms.vx * 0.1 + (Math.random() - 0.5) * 20,
+          vy: -ms.vy * 0.1 + (Math.random() - 0.5) * 20,
+          life: 0.5, maxLife: 0.5,
+          color: "oklch(0.85 0.10 60)", size: 2 + Math.random() * 1.6,
+        });
+      }
+      // Collision
+      if (Math.abs(dxm) < FIGHTER_W * 0.7 && ms.y > tgt.y && ms.y < tgt.y + FIGHTER_H && tgt.iframeT <= 0 && tgt.downedT <= 0 && tgt.getUpT <= 0) {
+        tgt.hp = Math.max(0, tgt.hp - MICRO_MISSILE_DMG);
+        tgt.hitFlash = 0.25;
+        tgt.vx += Math.sign(ms.vx || 1) * 120;
+        tgt.vy = Math.min(tgt.vy, -120);
+        tgt.onGround = false;
+        this.shake = Math.max(this.shake, 8);
+        this.impactFlash = Math.max(this.impactFlash, 0.4);
+        this.shockwaves.push({ x: ms.x, y: ms.y, r: 4, rMax: 60, life: 0.3, maxLife: 0.3, color: "oklch(0.92 0.18 60)" });
+        this.burst(ms.x, ms.y, "oklch(0.92 0.18 60)", 10);
+        Sfx.play("boom", 0.5);
+        ms.life = 0;
+        if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = ms.owner; }
+      }
+    }
+    this.missiles = this.missiles.filter(m => m.life > 0 && m.x > -100 && m.x < W + 100 && m.y > -100 && m.y < H + 100);
+
+    // ---- Heatwave Inferno Wall (area denial) ----
+    for (const fw of this.fireWalls) {
+      if (freezeActive && fw.owner !== this.timeFreezer) continue;
+      fw.life -= dt;
+      fw.tickAcc += dt;
+      // Spawn flame particles continuously
+      if (!this.lowPower) {
+        const n = 3;
+        for (let i = 0; i < n; i++) {
+          const px = fw.x + (Math.random() - 0.5) * fw.width * 0.85;
+          this.particles.push({
+            x: px, y: fw.yBottom - Math.random() * 20,
+            vx: (Math.random() - 0.5) * 40,
+            vy: -120 - Math.random() * 180,
+            life: 0.55 + Math.random() * 0.25, maxLife: 0.8,
+            color: i === 0 ? "oklch(0.96 0.18 80)" : (Math.random() < 0.5 ? "oklch(0.78 0.22 40)" : "oklch(0.62 0.22 25)"),
+            size: 2 + Math.random() * 2.5,
+          });
+        }
+      }
+      // Apply tick damage to opponents standing in the column
+      if (fw.tickAcc >= 0.25) {
+        fw.tickAcc = 0;
+        const tgt = fw.owner === "p1" ? this.p2 : this.p1;
+        if (tgt.iframeT <= 0 && tgt.downedT <= 0 && tgt.getUpT <= 0) {
+          if (Math.abs(tgt.x - fw.x) < fw.width * 0.5 && tgt.y + FIGHTER_H > fw.yTop) {
+            tgt.hp = Math.max(0, tgt.hp - INFERNO_WALL_TICK_DMG);
+            tgt.hitFlash = 0.25;
+            tgt.vy = Math.min(tgt.vy, -160);
+            tgt.onGround = false;
+            this.shake = Math.max(this.shake, 6);
+            if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = fw.owner; }
+          }
+        }
+      }
+    }
+    this.fireWalls = this.fireWalls.filter(fw => fw.life > 0);
+
+    // ---- Heatwave Magma Blast ----
+    for (const mb of this.magmas) {
+      if (freezeActive && mb.owner !== this.timeFreezer) continue;
+      mb.phase += dt * 10;
+      if (!mb.exploded) {
+        mb.life -= dt;
+        mb.vy += GRAVITY * 0.7 * sdt;
+        mb.x += mb.vx * sdt; mb.y += mb.vy * sdt;
+        // Trail
+        if (!this.lowPower) {
+          this.particles.push({
+            x: mb.x, y: mb.y,
+            vx: (Math.random() - 0.5) * 50, vy: 40 + Math.random() * 50,
+            life: 0.45, maxLife: 0.45,
+            color: Math.random() < 0.5 ? "oklch(0.96 0.18 80)" : "oklch(0.78 0.22 40)",
+            size: 3 + Math.random() * 2,
+          });
+        }
+        const tgt = mb.owner === "p1" ? this.p2 : this.p1;
+        const groundHit = mb.y >= GROUND_Y - 4;
+        const directHit = Math.abs(mb.x - tgt.x) < FIGHTER_W && mb.y > tgt.y && mb.y < tgt.y + FIGHTER_H;
+        if (groundHit || directHit || mb.life <= 0) {
+          mb.exploded = true;
+          mb.explosionT = 0;
+          // Radial damage
+          const ex = mb.x, ey = Math.min(GROUND_Y - 10, mb.y);
+          const dist = Math.hypot(tgt.x - ex, (tgt.y + 40) - ey);
+          if (dist < MAGMA_BLAST_RADIUS && tgt.iframeT <= 0 && tgt.downedT <= 0 && tgt.getUpT <= 0) {
+            const fall = 1 - Math.min(1, dist / MAGMA_BLAST_RADIUS);
+            tgt.hp = Math.max(0, tgt.hp - MAGMA_BLAST_DMG * (0.5 + fall * 0.5));
+            tgt.hitFlash = 0.4;
+            const dir = Math.sign(tgt.x - ex) || 1;
+            tgt.vx = dir * 480 * fall;
+            tgt.vy = -340 * fall;
+            tgt.onGround = false;
+            if (fall > 0.3 && tgt.ragdollImmuneT <= 0) {
+              tgt.ragdollT = 0.6;
+              tgt.ragdollEnergy = 1;
+              tgt.ragdollAV = dir * 4;
+            }
+            if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = mb.owner; }
+          }
+          this.shockwaves.push({ x: ex, y: ey, r: 10, rMax: MAGMA_BLAST_RADIUS, life: 0.5, maxLife: 0.5, color: "oklch(0.96 0.18 60)" });
+          this.shockwaves.push({ x: ex, y: ey, r: 18, rMax: MAGMA_BLAST_RADIUS * 1.4, life: 0.7, maxLife: 0.7, color: "oklch(0.62 0.22 25)" });
+          this.burst(ex, ey, "oklch(0.96 0.18 80)", 28);
+          this.burst(ex, ey, "oklch(0.78 0.22 40)", 22);
+          this.shake = Math.max(this.shake, 22);
+          this.impactFlash = Math.max(this.impactFlash, 0.7);
+          this.hitstopT = Math.max(this.hitstopT, 0.08);
+          Sfx.play("boom", 0.9);
+        }
+      } else {
+        mb.explosionT += dt;
+        if (mb.explosionT > 0.5) mb.life = 0;
+      }
+    }
+    this.magmas = this.magmas.filter(mb => mb.life > 0 && mb.x > -100 && mb.x < W + 100);
+
     this.shake = Math.max(0, this.shake - dt * 40);
 
     this.snapAccum += dt;
