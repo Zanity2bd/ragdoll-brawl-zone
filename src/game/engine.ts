@@ -554,8 +554,11 @@ export class GameEngine {
       const d = f.dash;
       d.t += dt;
       const u = Math.min(1, d.t / d.dur);
-      // Quadratic bezier, eased.
-      const e = u * u * (3 - 2 * u); // smoothstep for cinematic curve
+      // Cinematic ease: slow wind-up, explosive accel into target.
+      // Cubic ease-in for the first 70%, then snap forward.
+      const e = u < 0.7
+        ? (u / 0.7) * (u / 0.7) * 0.55
+        : 0.55 + ((u - 0.7) / 0.3) * 0.45;
       const om = 1 - e;
       const px = om * om * d.x0 + 2 * om * e * d.cx + e * e * d.tx;
       const py = om * om * d.y0 + 2 * om * e * d.cy + e * e * d.ty;
@@ -565,22 +568,35 @@ export class GameEngine {
       f.x = px; f.y = py;
       f.facing = (d.tx - d.x0) >= 0 ? 1 : -1;
       f.onGround = false;
-      // Drop a dense afterimage trail every frame.
+      // Mild slow-mo during the dash for cinematic feel
+      if (u < 0.92) this.slowmoT = Math.max(this.slowmoT, 0.05);
+      // Dense afterimage trail every frame.
       f.trail.push({
         x: f.x, y: f.y, phase: f.walkPhase, vx: f.vx, vy: f.vy,
         onGround: false, facing: f.facing, pose: this.poseFor(f),
       });
-      const cap = this.lowPower ? 6 : 12;
+      const cap = this.lowPower ? 8 : 18;
       while (f.trail.length > cap) f.trail.shift();
-      // Burst sparks
-      if (!this.lowPower && Math.random() < 0.85) {
+      // Burst sparks — denser cone behind the fighter
+      const sparkN = this.lowPower ? 1 : 3;
+      for (let i = 0; i < sparkN; i++) {
         this.particles.push({
-          x: f.x + (Math.random() - 0.5) * 18,
-          y: f.y + FIGHTER_H * 0.5 + (Math.random() - 0.5) * 18,
-          vx: -f.vx * 0.05 + (Math.random() - 0.5) * 60,
-          vy: -f.vy * 0.05 + (Math.random() - 0.5) * 60,
-          life: 0.45, maxLife: 0.45,
-          color: f.skin.glow, size: 2 + Math.random() * 2,
+          x: f.x + (Math.random() - 0.5) * 22,
+          y: f.y + FIGHTER_H * 0.5 + (Math.random() - 0.5) * 22,
+          vx: -f.vx * 0.08 + (Math.random() - 0.5) * 80,
+          vy: -f.vy * 0.08 + (Math.random() - 0.5) * 80,
+          life: 0.55, maxLife: 0.55,
+          color: i === 0 ? "oklch(0.95 0.08 80)" : f.skin.glow,
+          size: 2 + Math.random() * 3,
+        });
+      }
+      // Leading-edge glow particle (front of fist)
+      if (!this.lowPower) {
+        this.particles.push({
+          x: f.x + f.facing * 22, y: f.y + FIGHTER_H * 0.42,
+          vx: f.vx * 0.15, vy: f.vy * 0.15,
+          life: 0.25, maxLife: 0.25,
+          color: "oklch(0.98 0.05 80)", size: 5 + Math.random() * 3,
         });
       }
       if (u >= 1 && !d.landed) {
