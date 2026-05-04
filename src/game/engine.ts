@@ -237,7 +237,7 @@ const FIGHTER_H = 90;
 const FIGHTER_W = 30;
 
 const FIRE_CD = 0.8;
-const TELE_CD = 8.0;
+const TELE_CD = 2.0;
 const FIRE_DAMAGE = 12;
 const FIRE_KNOCKBACK = 320;
 
