@@ -2439,10 +2439,15 @@ export class GameEngine {
             const activeT = t - m.windup;
             // Final 3 seconds: OVERLOAD — thicker red beam, pierces all cover, heavier dps
             const overload = activeT > Math.max(0, m.active - 3);
-            const sx = f.x + f.facing * 6; const sy = f.y + 14;
-            const dx = target.x - sx; const dy = (target.y + 30) - sy;
-            const angle = Math.atan2(dy, dx);
-            const desired = f.facing > 0 ? Math.atan2(dy, Math.abs(dx) || 1) : Math.PI - Math.atan2(dy, Math.abs(dx) || 1);
+            // Compute world-space eye position (mid-point between both eyes) so
+            // the beam stays anchored to Homelander's face through lean / roll / flight.
+            const eye = this.getEyeWorldPos(f);
+            const sx = eye.x; const sy = eye.y;
+            // Aim straight at the opponent's chest — beam can angle freely up/down/back.
+            const tx = target.x; const ty = target.y + 30;
+            const dx = tx - sx; const dy = ty - sy;
+            const desired = Math.atan2(dy, dx);
+            const angle = desired;
             // Normal beam: blocked by cover. Overload: pierces everything.
             const beamMaxLen = m.range;
             const blockHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
