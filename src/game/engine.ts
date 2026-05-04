@@ -1195,7 +1195,6 @@ export class GameEngine {
     ctx.globalCompositeOperation = "source-over";
 
     // Switch to screen space for full-screen overlays
-    const cw = this.canvas.width, ch = this.canvas.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     // Impact flash vignette
