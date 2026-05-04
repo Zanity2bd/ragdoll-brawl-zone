@@ -461,3 +461,27 @@ export function computeFlightPose(
   };
 }
 
+
+// Linear blend between two poses (a→b by t in 0..1). Optionally override lean.
+export function blendPose(a: Pose, b: Pose, t: number, leanOverride?: number): Pose {
+  const u = Math.max(0, Math.min(1, t));
+  const lerp = (x: number, y: number) => x + (y - x) * u;
+  const lerp6 = (
+    A: [number, number, number, number, number, number],
+    B: [number, number, number, number, number, number],
+  ): [number, number, number, number, number, number] =>
+    [lerp(A[0], B[0]), lerp(A[1], B[1]), lerp(A[2], B[2]), lerp(A[3], B[3]), lerp(A[4], B[4]), lerp(A[5], B[5])];
+  const lerp2 = (A: [number, number], B: [number, number]): [number, number] =>
+    [lerp(A[0], B[0]), lerp(A[1], B[1])];
+  return {
+    headOffsetY: lerp(a.headOffsetY, b.headOffsetY),
+    shoulderY: lerp(a.shoulderY, b.shoulderY),
+    hipY: lerp(a.hipY, b.hipY),
+    legL: lerp6(a.legL, b.legL), legR: lerp6(a.legR, b.legR),
+    armL: lerp6(a.armL, b.armL), armR: lerp6(a.armR, b.armR),
+    handL: lerp2(a.handL, b.handL), handR: lerp2(a.handR, b.handR),
+    footL: lerp2(a.footL, b.footL), footR: lerp2(a.footR, b.footR),
+    lean: leanOverride ?? lerp(a.lean, b.lean),
+    shoulderRoll: lerp(a.shoulderRoll, b.shoulderRoll),
+  };
+}
