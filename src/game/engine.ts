@@ -113,6 +113,7 @@ interface Fighter {
     target: PlayerId;
     nextTick: number; // accumulator for damage ticks
     transitionT: number; // 0..0.25 transform-in
+    punchPulse: number;  // 0..1, bumped on each tick, decays — drives flash + blur
   };
   frenzyCd: number;
 }
