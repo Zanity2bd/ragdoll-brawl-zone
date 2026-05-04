@@ -1314,6 +1314,20 @@ export class GameEngine {
             break;
           }
         }
+        // Bolts also damage props (with door pass-through for buildings)
+        if (pr.life > 0) {
+          for (const p of this.props) {
+            if (p.destroyed) continue;
+            if (pr.x > p.x && pr.x < p.x + p.w && pr.y > p.y && pr.y < p.y + p.h) {
+              if (this.pointInDoor(p, pr.x, pr.y)) continue;
+              this.damageProp(p, pr.damage ?? FIRE_DAMAGE, pr.x, pr.y);
+              this.burst(pr.x, pr.y, pr.glow, 14);
+              this.shake = Math.max(this.shake, 6);
+              pr.life = 0;
+              break;
+            }
+          }
+        }
       }
       if (pr.kind === "bolt" && (!this.lowPower || Math.random() < 0.5)) {
         this.particles.push({
