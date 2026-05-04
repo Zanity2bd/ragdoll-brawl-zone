@@ -263,6 +263,14 @@ const COYOTE_T = 0.10;             // post-leave grace
 const JUMP_BUFFER_T = 0.13;        // press buffer
 const MAX_AIR_JUMPS = 1;            // double-jump for non-flyers
 const FIGHTER_H = 90;
+// Universal basic kick — light, snappy melee available to all ground fighters.
+const KICK_WINDUP = 0.07;
+const KICK_ACTIVE = 0.09;
+const KICK_RECOVER = 0.18;
+const KICK_DUR = KICK_WINDUP + KICK_ACTIVE + KICK_RECOVER;
+const KICK_CD = 0.55;
+const KICK_RANGE = 56;
+const KICK_DMG = 1;
 const FIGHTER_W = 30;
 
 const FIRE_CD = 0.8;
