@@ -346,6 +346,7 @@ export class GameEngine {
       trail: [],
       canFly, flying: canFly, hoverPhase: 0, superCd: 0,
       dropT: 0, ledgeFlash: 0,
+      wobble: createWobble(),
       dash: null,
     };
   }
