@@ -2067,9 +2067,18 @@ export class GameEngine {
     // because those branches return early above and own the body completely.
     stepWobble(f.wobble, dt, f.vx, f.vy, f.onGround, f.flying, this.lowPower);
 
-    // Maintain afterimage trail for fast skins
+    // Maintain afterimage trail for fast skins (and during Bamf strikes for depth motion-blur)
     const fast = f.skin.id === "flash" || f.skin.id === "atrain";
-    if (fast && (Math.abs(f.vx) > 200 || f.meleeKind)) {
+    const bamfStrike = f.meleeKind === "bamfPunch" || f.meleeKind === "bamfKick";
+    if (bamfStrike) {
+      // Push every frame so the swing leaves a dense smear toward the camera
+      f.trail.push({
+        x: f.x, y: f.y, phase: f.walkPhase, vx: f.vx, vy: f.vy,
+        onGround: f.onGround, facing: f.facing, pose: this.poseFor(f),
+      });
+      const cap = this.lowPower ? 5 : 10;
+      while (f.trail.length > cap) f.trail.shift();
+    } else if (fast && (Math.abs(f.vx) > 200 || f.meleeKind)) {
       f.trail.push({
         x: f.x, y: f.y, phase: f.walkPhase, vx: f.vx, vy: f.vy,
         onGround: f.onGround, facing: f.facing, pose: this.poseFor(f),
