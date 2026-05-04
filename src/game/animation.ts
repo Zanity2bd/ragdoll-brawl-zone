@@ -234,7 +234,8 @@ export function computeWalkPose(
   // Arms counter-swing the legs; idle arms have a gentle micro-sway.
   // Shoulder anchor counter-sways the hips for natural balance.
   const sxL = -4 - hipSwayX * 0.5, sxR = 4 - hipSwayX * 0.5;
-  const armSwingMax = moving ? 14 * amp + 10 * amp * amp : 0;
+  // Big deep arm pump at run speed — fists swing high in front, far behind back.
+  const armSwingMax = moving ? 18 * amp + 18 * amp * amp : 0;
   const idleSwayL = moving ? 0 : Math.sin(phase * 0.7) * 0.6;
   const idleSwayR = moving ? 0 : Math.sin(phase * 0.7 + Math.PI) * 0.6;
   // Arm L counter-swings R leg, and vice versa
