@@ -120,6 +120,11 @@ export interface Intents {
   fire: boolean;
   teleport: boolean;
   melee: boolean;
+  // Analog flight steering, -1..1. When flying, replaces ground walk input.
+  ax: number;
+  ay: number;
+  // Toggle flight on/off (edge-triggered)
+  toggleFlight: boolean;
 }
 
 const W = 1280;
