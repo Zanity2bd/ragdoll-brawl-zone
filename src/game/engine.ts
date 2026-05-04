@@ -195,6 +195,13 @@ interface Platform {
   // "cover"    = solid block: lands on top AND blocks horizontal movement & projectiles.
   kind: "platform" | "cover";
   accent?: string;
+  destroyed?: boolean;
+}
+
+interface Debris {
+  x: number; y: number; vx: number; vy: number;
+  w: number; h: number; rot: number; rotV: number;
+  life: number; maxLife: number; color: string;
 }
 
 export interface Intents {
@@ -395,8 +402,11 @@ export class GameEngine {
   private fireWalls: FireWall[] = [];
   private magmas: MagmaBlast[] = [];
   private smokeClouds: SmokeCloud[] = [];
+  private debris: Debris[] = [];
   // One-shot VO flags — reset each match.
   private homelanderVoPlayed = false;
+  // Beam edge-trigger tracking for start/end recoil + shake + audio.
+  private beamWasActive: Record<PlayerId, boolean> = { p1: false, p2: false };
   // Deferred SFX cues — fire at engine-time T (survives pause; cleared on reset).
   private pendingSfx: Array<{ at: number; name: import("./sfx").SfxName; vol: number }> = [];
   // Global time-freeze (Flash power 1): freezes everything except the freezer.
@@ -631,7 +641,11 @@ export class GameEngine {
     this.fireWalls = [];
     this.magmas = [];
     this.smokeClouds = [];
+    this.debris = [];
     this.homelanderVoPlayed = false;
+    this.beamWasActive = { p1: false, p2: false };
+    // Restore any platforms destroyed by overload from a previous round
+    for (const pl of this.platforms) pl.destroyed = false;
     this.pendingSfx = [];
     this.timeFreezeT = 0; this.timeFreezer = null;
     this.teleTargeting = null;
@@ -1196,6 +1210,7 @@ export class GameEngine {
       // Cover blocks projectiles (web/batarang excluded — web is a tether, batarang homes)
       if (pr.kind === "bolt") {
         for (const pl of this.platforms) {
+          if (pl.destroyed) continue;
           if (pl.kind !== "cover") continue;
           if (pr.x > pl.x && pr.x < pl.x + pl.w && pr.y > pl.y && pr.y < pl.y + pl.h) {
             this.burst(pr.x, pr.y, pr.glow, 14);
@@ -1435,7 +1450,57 @@ export class GameEngine {
       }
     }
 
-    // ---- Iron Man Micro-Missiles ----
+    // ---- Beam start/end edge-triggers (recoil + camera shake + audio) ----
+    // Unified for Homelander laserSweep, Superman heat vision, Iron Man unibeam fire.
+    for (const f of [this.p1, this.p2]) {
+      const isHomelaserActive = f.meleeKind === "laserSweep" && f.meleeT >= f.move.windup && f.meleeT < f.move.windup + f.move.active;
+      const active = isHomelaserActive || f.heatVisionT > 0 || f.unibeamFireT > 0;
+      const wasActive = this.beamWasActive[f.id];
+      if (active && !wasActive) {
+        // START: body recoil away from beam direction + camera shake + audio
+        f.bodyLagV -= f.facing * 220;
+        f.wobble.bvx -= f.facing * 180;
+        f.wobble.bvy -= 60;
+        f.wobble.squashV -= 5;
+        f.bodyRollV -= f.facing * 1.6;
+        this.shake = Math.max(this.shake, 18);
+        this.impactFlash = Math.max(this.impactFlash, 0.45);
+        this.shockwaves.push({
+          x: f.x + f.facing * 16, y: f.y + 28, r: 6, rMax: 110,
+          life: 0.35, maxLife: 0.35,
+          color: f.skin.glow ?? "oklch(0.95 0.18 60)",
+        });
+        // Always play the homelander laser sample whenever any laser starts.
+        Sfx.play("homelanderLaser", 0.95);
+      } else if (!active && wasActive) {
+        // END: settling recoil pop + smaller shake
+        f.bodyLagV += f.facing * 110;
+        f.wobble.bvx += f.facing * 80;
+        f.wobble.squashV += 3;
+        this.shake = Math.max(this.shake, 10);
+        this.impactFlash = Math.max(this.impactFlash, 0.25);
+      }
+      this.beamWasActive[f.id] = active;
+    }
+
+    // ---- Debris physics (cover blocks shattered by overload) ----
+    if (this.debris.length) {
+      for (const d of this.debris) {
+        d.life -= dt;
+        d.vy += GRAVITY * dt * 0.6;
+        d.x += d.vx * dt;
+        d.y += d.vy * dt;
+        d.rot += d.rotV * dt;
+        if (d.y > GROUND_Y - d.h * 0.5) {
+          d.y = GROUND_Y - d.h * 0.5;
+          d.vy *= -0.32; d.vx *= 0.7; d.rotV *= 0.6;
+          if (Math.abs(d.vy) < 30) d.vy = 0;
+        }
+      }
+      this.debris = this.debris.filter(d => d.life > 0);
+    }
+
+
     for (const ms of this.missiles) {
       if (freezeActive && ms.owner !== this.timeFreezer) continue;
       if (ms.delay > 0) { ms.delay -= dt; continue; }
@@ -2187,6 +2252,7 @@ export class GameEngine {
 
       // Cover blocks: solid horizontal collision (lateral) — push fighter out.
       for (const pl of this.platforms) {
+        if (pl.destroyed) continue;
         if (pl.kind !== "cover") continue;
         const hw = FIGHTER_W / 2;
         const overlapX = f.x + hw > pl.x && f.x - hw < pl.x + pl.w;
@@ -2210,6 +2276,7 @@ export class GameEngine {
       } else { f.onGround = false; }
 
       for (const pl of this.platforms) {
+        if (pl.destroyed) continue;
         const feet = f.y + FIGHTER_H;
         const prevFeet = prevY + FIGHTER_H;
         const hw = FIGHTER_W / 2;
@@ -2293,12 +2360,8 @@ export class GameEngine {
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
-    // Homelander laser SFX — plays once per match, synced to the beam's first
-    // active frame (after the windup) so the audio onset matches the visual.
-    if (m.kind === "laserSweep" && f.skin.id === "homelander" && !this.homelanderVoPlayed) {
-      this.homelanderVoPlayed = true;
-      this.pendingSfx.push({ at: this.elapsed + m.windup, name: "homelanderLaser", vol: 1.0 });
-    }
+    // (Homelander laser SFX is played on every beam start via the beam edge-trigger
+    //  in update(), so it plays for any laser/heat-vision/unibeam in any match.)
     // Flash blink: instantly teleport behind opponent
     if (m.kind === "phaseStrike") {
       const t = f.id === "p1" ? this.p2 : this.p1;
@@ -2493,6 +2556,64 @@ export class GameEngine {
                   });
                   void inX;
                 }
+              }
+            }
+            // Overload's "destroyer" pass: melt any platform the beam crosses
+            // and shatter it into fluid debris chunks. Runs only during overload.
+            if (overload) {
+              const ex = sx + Math.cos(desired) * beamLen;
+              const ey = sy + Math.sin(desired) * beamLen;
+              for (const pl of this.platforms) {
+                if (pl.destroyed) continue;
+                if (!this.segmentIntersectsRect(sx, sy, ex, ey, pl.x, pl.y, pl.w, pl.h)) continue;
+                pl.destroyed = true;
+                this.shake = Math.max(this.shake, 22);
+                this.impactFlash = Math.max(this.impactFlash, 0.6);
+                this.shockwaves.push({
+                  x: pl.x + pl.w / 2, y: pl.y + pl.h / 2,
+                  r: 8, rMax: Math.max(pl.w, pl.h) * 1.6,
+                  life: 0.5, maxLife: 0.5, color: "oklch(0.85 0.22 40)",
+                });
+                // Shatter into a grid of chunks for a fluid breakup
+                const cols = Math.max(3, Math.round(pl.w / 18));
+                const rows = Math.max(2, Math.round(Math.max(pl.h, 14) / 16));
+                const cw = pl.w / cols;
+                const ch = Math.max(8, pl.h / rows);
+                for (let cy = 0; cy < rows; cy++) {
+                  for (let cx = 0; cx < cols; cx++) {
+                    const px = pl.x + cx * cw + cw / 2;
+                    const py = pl.y + cy * ch + ch / 2;
+                    const blast = 240 + Math.random() * 220;
+                    const ang2 = Math.atan2(py - sy, px - sx);
+                    this.debris.push({
+                      x: px, y: py,
+                      vx: Math.cos(ang2) * blast + (Math.random() - 0.5) * 80,
+                      vy: Math.sin(ang2) * blast - 120 - Math.random() * 140,
+                      w: cw * (0.7 + Math.random() * 0.4),
+                      h: ch * (0.7 + Math.random() * 0.4),
+                      rot: Math.random() * Math.PI,
+                      rotV: (Math.random() - 0.5) * 12,
+                      life: 1.4 + Math.random() * 0.6,
+                      maxLife: 2.0,
+                      color: pl.kind === "cover"
+                        ? (Math.random() < 0.5 ? "oklch(0.40 0.04 250)" : "oklch(0.28 0.04 250)")
+                        : "oklch(0.45 0.16 230)",
+                    });
+                  }
+                }
+                // Molten ember burst
+                for (let i = 0; i < 18; i++) {
+                  const a = Math.random() * Math.PI * 2;
+                  const s = 80 + Math.random() * 220;
+                  this.particles.push({
+                    x: pl.x + pl.w / 2, y: pl.y + pl.h / 2,
+                    vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60,
+                    life: 0.6, maxLife: 0.6,
+                    color: Math.random() < 0.5 ? "oklch(0.80 0.26 30)" : "oklch(0.95 0.20 70)",
+                    size: 2 + Math.random() * 2.4,
+                  });
+                }
+                Sfx.play("boom", 0.6);
               }
             }
             // Hit if target is within beam cone AND closer than the blocker (or overload pierces)
@@ -2814,11 +2935,29 @@ export class GameEngine {
     }
   }
 
+  /** Liang-Barsky segment-vs-AABB test. */
+  private segmentIntersectsRect(x1: number, y1: number, x2: number, y2: number, rx: number, ry: number, rw: number, rh: number): boolean {
+    const dx = x2 - x1, dy = y2 - y1;
+    let t0 = 0, t1 = 1;
+    const p = [-dx, dx, -dy, dy];
+    const q = [x1 - rx, (rx + rw) - x1, y1 - ry, (ry + rh) - y1];
+    for (let i = 0; i < 4; i++) {
+      if (p[i] === 0) { if (q[i] < 0) return false; }
+      else {
+        const r = q[i] / p[i];
+        if (p[i] < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+        else { if (r < t0) return false; if (r < t1) t1 = r; }
+      }
+    }
+    return true;
+  }
+
   /** Raycast against blocking platforms (cover blocks fully; thin platforms also block lasers). Returns nearest hit or null. */
   private raycastPlatforms(sx: number, sy: number, angle: number, maxLen: number): { dist: number } | null {
     const dx = Math.cos(angle), dy = Math.sin(angle);
     let best: number | null = null;
     for (const pl of this.platforms) {
+      if (pl.destroyed) continue;
       // Slab method: ray vs AABB
       const minX = pl.x, maxX = pl.x + pl.w;
       const minY = pl.y, maxY = pl.y + pl.h;
@@ -3066,6 +3205,7 @@ export class GameEngine {
 
     // Platforms — different look per kind
     for (const pl of this.platforms) {
+      if (pl.destroyed) continue;
       if (pl.kind === "cover") {
         // Solid cover block — beveled stone with metallic rim
         const g = ctx.createLinearGradient(pl.x, pl.y, pl.x, pl.y + pl.h);
@@ -3097,7 +3237,27 @@ export class GameEngine {
       }
     }
 
-    // Ledge-grab flash on fighters
+    // Debris chunks (cover/platforms shattered by laser overload)
+    if (this.debris.length) {
+      ctx.globalCompositeOperation = "source-over";
+      for (const d of this.debris) {
+        const a = Math.min(1, d.life / 0.6);
+        ctx.save();
+        ctx.translate(d.x, d.y);
+        ctx.rotate(d.rot);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = d.color;
+        ctx.fillRect(-d.w / 2, -d.h / 2, d.w, d.h);
+        if (d.life > d.maxLife - 0.5) {
+          ctx.fillStyle = "oklch(0.85 0.22 50 / 0.7)";
+          ctx.fillRect(-d.w / 2, -d.h / 2, d.w, 1.5);
+        }
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+
     if (!this.lowPower) {
       ctx.globalCompositeOperation = "lighter";
       for (const f of [this.p1, this.p2]) {
