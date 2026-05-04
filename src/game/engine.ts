@@ -1049,7 +1049,9 @@ export class GameEngine {
             const ang = Math.abs(((angle - desired + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
             if (ang < 0.18 && Math.hypot(dx, dy) < m.range) {
               const dps = m.damage; // per active second
-              target.hp = Math.max(0, target.hp - dps * (1 / 60));
+              if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
+                target.hp = Math.max(0, target.hp - dps * (1 / 60));
+              }
               target.hitFlash = 0.15;
               this.particles.push({
                 x: target.x + (Math.random() - 0.5) * 20, y: target.y + 20 + Math.random() * 30,
