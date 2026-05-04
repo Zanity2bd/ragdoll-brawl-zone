@@ -143,6 +143,23 @@ const TELE_CD = 4.0;
 const FIRE_DAMAGE = 12;
 const FIRE_KNOCKBACK = 320;
 
+// Flight tuning
+const FLY_ACCEL = 1300;          // px/s^2 toward target velocity
+const FLY_MAX = 360;             // top airspeed (px/s)
+const FLY_DAMP = 2.6;            // velocity damping per second when no input
+const HOVER_AMP = 4.5;           // pixels of idle hover bob
+const HOVER_RATE = 1.6;          // hover frequency (Hz-ish)
+
+// Super-Punch
+const SUPER_CD = 4.5;
+const SUPER_DAMAGE = 38;
+const SUPER_KB_X = 980;
+const SUPER_KB_Y = -380;
+const SUPER_HITSTOP = 0.26;
+const SUPER_SLOWMO = 0.45;
+const SUPER_RAGDOLL = 1.0;
+const SUPER_SHAKE = 36;
+
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
