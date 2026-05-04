@@ -917,27 +917,82 @@ export class GameEngine {
       const staggered = f.wobble.staggerT > 0;
       const moveMul = staggered ? 0.65 : 1;
       const accelMul = staggered ? 0.7 : 1;
+      // Air control: reduced accel & friction when airborne for natural arcs
+      const airMul = f.onGround ? 1 : AIR_CONTROL;
       if (move !== 0) {
         const target = move * MOVE_SPEED * moveMul;
-        const a = ACCEL * accelMul * ldt;
+        const a = ACCEL * accelMul * airMul * ldt;
         if (f.vx < target) f.vx = Math.min(target, f.vx + a);
         else if (f.vx > target) f.vx = Math.max(target, f.vx - a);
       } else {
-        const fr = FRICTION * ldt;
+        const fr = FRICTION * (f.onGround ? 1 : 0.25) * ldt;
         if (f.vx > 0) f.vx = Math.max(0, f.vx - fr);
         else if (f.vx < 0) f.vx = Math.min(0, f.vx + fr);
       }
 
-      // Jump (with drop-through if pressing down on a one-way platform)
+      // ---- Jump feel: coyote time + buffered press + variable height + 1 air-jump ----
+      if (f.onGround) { f.coyoteT = COYOTE_T; f.airJumps = MAX_AIR_JUMPS; }
+      else f.coyoteT = Math.max(0, f.coyoteT - ldt);
+      if (f.jumpBufferT > 0) f.jumpBufferT = Math.max(0, f.jumpBufferT - ldt);
+      if (f.jumpHeldT > 0) f.jumpHeldT = Math.max(0, f.jumpHeldT - ldt);
+
       const wantsDrop = !locked && intent.jump && intent.ay > 0.5 && f.onGround;
       if (wantsDrop) {
-        // Allow falling through one-way ledges briefly
         f.dropT = 0.18;
         f.onGround = false;
         f.y += 2;
-      } else if (!locked && intent.jump && f.onGround) {
-        f.vy = -JUMP_V; f.onGround = false;
+        f.jumpBufferT = 0;
+      } else if (!locked && f.jumpBufferT > 0 && (f.onGround || f.coyoteT > 0)) {
+        // Ground / coyote jump
+        f.vy = -JUMP_V;
+        f.onGround = false;
+        f.coyoteT = 0;
+        f.jumpBufferT = 0;
+        f.jumpHeldT = JUMP_HOLD_T;
+        // Launch squash: compress slightly, springs into stretch
+        f.wobble.squashV -= 5;
+        // Dust puff
+        if (!this.lowPower) {
+          for (let i = 0; i < 5; i++) {
+            this.particles.push({
+              x: f.x + (Math.random() - 0.5) * 18,
+              y: f.y + FIGHTER_H - 2,
+              vx: (Math.random() - 0.5) * 90,
+              vy: -10 - Math.random() * 30,
+              life: 0.32, maxLife: 0.32,
+              color: "oklch(0.8 0.04 230)",
+              size: 1.5 + Math.random() * 1.4,
+            });
+          }
+        }
+      } else if (!locked && f.jumpBufferT > 0 && f.airJumps > 0 && !f.onGround) {
+        // Mid-air double jump
+        f.airJumps--;
+        f.vy = -JUMP_V * 0.85;
+        f.jumpBufferT = 0;
+        f.jumpHeldT = JUMP_HOLD_T * 0.7;
+        // Air-jump shockwave puff
+        if (!this.lowPower) {
+          for (let i = 0; i < 8; i++) {
+            const a = (i / 8) * Math.PI * 2;
+            this.particles.push({
+              x: f.x + Math.cos(a) * 4,
+              y: f.y + FIGHTER_H - 4,
+              vx: Math.cos(a) * 60,
+              vy: Math.sin(a) * 30 - 10,
+              life: 0.28, maxLife: 0.28,
+              color: f.skin.glow,
+              size: 1.4 + Math.random(),
+            });
+          }
+        }
       }
+
+      // Variable-height: if jump released early during ascent, kill upward velocity faster
+      if (!intent.jump && f.vy < 0 && f.jumpHeldT > 0) {
+        f.jumpHeldT = 0;
+      }
+
       if (f.dropT > 0) f.dropT -= ldt;
       if (f.ledgeFlash > 0) f.ledgeFlash -= ldt;
 
