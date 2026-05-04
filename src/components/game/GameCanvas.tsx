@@ -393,14 +393,22 @@ function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "r
           }}
         />
       </div>
-      <div className={`flex gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
-        {p.name === "Heatwave" && (
+      <div className={`flex flex-wrap gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
+        {p.hasPower1 && (
+          <CdPill label={`HOLD · ${p.power1Name}`} cd={p.power1Cd} max={p.power1CdMax} color={color} />
+        )}
+        {p.hasPower2 && (
+          <CdPill label={`TAP · ${p.power2Name}`} cd={p.power2Cd} max={p.power2CdMax} color={color} />
+        )}
+        {p.name === "Heatwave" && !p.hasPower1 && (
           <CdPill label={isP1 ? "F · Fire" : "K · Fire"} cd={p.fireCd} max={p.fireCdMax} color={color} />
         )}
         {p.name === "Nightcrawler" && (
           <CdPill label={isP1 ? "G · Tele" : "L · Tele"} cd={p.teleCd} max={p.teleCdMax} color={color} />
         )}
-        <CdPill label={`${isP1 ? "J" : ";"} · ${p.meleeName}`} cd={p.meleeCd} max={p.meleeCdMax} color={color} />
+        {!p.hasPower2 && (
+          <CdPill label={`${isP1 ? "J" : ";"} · ${p.meleeName}`} cd={p.meleeCd} max={p.meleeCdMax} color={color} />
+        )}
       </div>
       {p.hasFrenzy && (
         <FrenzyBar
