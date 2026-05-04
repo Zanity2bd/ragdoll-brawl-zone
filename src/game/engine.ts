@@ -3178,7 +3178,21 @@ export class GameEngine {
   private buildPropsForMap(mapId: MapId): Prop[] {
     const out: Prop[] = [];
     const gy = GROUND_Y;
-    const add = (p: Prop) => out.push(p);
+    const hpFor: Record<PropKind, number> = {
+      barrel: 35, trashcan: 25, crate: 45, lamppost: 30,
+      vending: 65, car: 110, pillar: 160, building: 260,
+    };
+    const add = (p: Omit<Prop, "hp" | "maxHp" | "damageFlash"> & { hp?: number; maxHp?: number }) => {
+      const max = p.maxHp ?? p.hp ?? hpFor[p.kind];
+      const full: Prop = { ...p, hp: p.hp ?? max, maxHp: max, damageFlash: 0 };
+      if (full.kind === "building" && full.hasDoor) {
+        full.doorW = 36;
+        full.doorH = 56;
+        full.doorX = full.x + full.w / 2 - 18;
+        full.doorY = full.y + full.h - 56;
+      }
+      out.push(full);
+    };
     switch (mapId) {
       case "neon-city": {
         // Cyber sedan + neon storefront w/ glowing door + lamppost
