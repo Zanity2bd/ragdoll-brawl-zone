@@ -66,6 +66,21 @@ interface Fighter {
   // afterimage trail
   trail: Array<{ x: number; y: number; phase: number; vx: number; onGround: boolean; vy: number; facing: 1 | -1; pose: Pose }>;
   skin: Skin;
+  // flight
+  canFly: boolean;
+  flying: boolean;
+  hoverPhase: number;
+  superCd: number;
+  // super-dash
+  dash: null | {
+    t: number;
+    dur: number;
+    x0: number; y0: number;
+    cx: number; cy: number;       // bezier control
+    tx: number; ty: number;       // target
+    target: PlayerId;
+    landed: boolean;
+  };
 }
 
 interface Projectile {
