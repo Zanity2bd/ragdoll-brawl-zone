@@ -3239,6 +3239,96 @@ export class GameEngine {
     ctx.restore();
   }
 
+  /** Layered VFX rendered under a flying fighter: ground shadow that scales
+   *  with altitude, sonic cone for high-speed cruise, and a soft heat aura. */
+  private drawFlightAura(f: Fighter) {
+    if (!f.flying) return;
+    const ctx = this.ctx;
+    const speed = Math.hypot(f.vx, f.vy);
+    const horiz = Math.min(1, speed / 320);
+
+    // ---- Ground shadow (scales with altitude — higher fighter, smaller/softer shadow) ----
+    const altitude = (GROUND_Y - (f.y + FIGHTER_H));
+    const altNorm = Math.min(1, altitude / 360);
+    const shW = 28 * (1 - altNorm * 0.55);
+    const shH = 5 * (1 - altNorm * 0.6);
+    const shAlpha = 0.32 * (1 - altNorm * 0.55);
+    if (shAlpha > 0.04) {
+      ctx.save();
+      ctx.fillStyle = `rgba(0,0,0,${shAlpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.ellipse(f.x + f.vx * 0.04, GROUND_Y - 1, shW, shH, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (this.lowPower) return;
+
+    // ---- Heat shimmer / hover aura ring (visible at low speed) ----
+    if (horiz < 0.55) {
+      const pulse = 0.5 + 0.5 * Math.sin(this.elapsed * 3 + (f.id === "p1" ? 0 : 1.3));
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = (0.18 + pulse * 0.12) * (1 - horiz);
+      const grad = ctx.createRadialGradient(f.x, f.y + FIGHTER_H * 0.55, 4, f.x, f.y + FIGHTER_H * 0.55, 48);
+      grad.addColorStop(0, f.skin.glow);
+      grad.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(f.x, f.y + FIGHTER_H * 0.55, 48, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // ---- Sonic cone: stretched glow behind the fighter at cruise speed ----
+    if (horiz > 0.45) {
+      const back = -Math.sign(f.vx || f.facing);
+      const len = 38 + horiz * 90;
+      const wid = 14 + horiz * 18;
+      const cx = f.x;
+      const cy = f.y + FIGHTER_H * 0.45;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.translate(cx, cy);
+      // Tilt the cone along velocity vector
+      const ang = Math.atan2(f.vy, f.vx) || 0;
+      ctx.rotate(ang + (back < 0 ? Math.PI : 0));
+      // Outer soft cone
+      const g = ctx.createLinearGradient(0, 0, -len, 0);
+      g.addColorStop(0, `${f.skin.glow}`);
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g;
+      ctx.globalAlpha = 0.35 * horiz;
+      ctx.beginPath();
+      ctx.moveTo(0, -wid * 0.5);
+      ctx.quadraticCurveTo(-len * 0.5, 0, -len, 0);
+      ctx.quadraticCurveTo(-len * 0.5, 0, 0, wid * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      // Bright inner streak
+      ctx.globalAlpha = 0.55 * horiz;
+      ctx.strokeStyle = "oklch(0.97 0.06 80)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-len * 0.85, 0); ctx.stroke();
+      ctx.restore();
+
+      // ---- Air-displacement ripples (curved arcs in front of the fighter) ----
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      const fwd = -back;
+      for (let i = 0; i < 2; i++) {
+        const off = 18 + i * 14 + (this.elapsed * 60 * horiz) % 16;
+        const rx = f.x + fwd * off;
+        const ry = f.y + FIGHTER_H * 0.45;
+        ctx.globalAlpha = 0.18 * horiz * (1 - i * 0.4);
+        ctx.strokeStyle = "oklch(0.95 0.04 220)";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(rx, ry, 12 + i * 5, fwd > 0 ? -1.0 : Math.PI - 1.0, fwd > 0 ? 1.0 : Math.PI + 1.0);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
   private drawFighter(f: Fighter) {
     const pose = this.poseFor(f);
     this.drawFighterAt(f, f.x, f.y, pose, false);
