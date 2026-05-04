@@ -1,17 +1,25 @@
 import { SKINS, type SkinId, type Universe, getSkin, type Skin } from "@/game/skins";
+import type { Difficulty } from "@/game/ai";
 import { useEffect, useRef, useState } from "react";
 
 const UNIVERSES: Universe[] = ["Marvel", "DC", "The Boys"];
+const DIFFS: { id: Difficulty; label: string }[] = [
+  { id: "easy", label: "Easy" },
+  { id: "hard", label: "Hard" },
+  { id: "extreme", label: "Extreme" },
+];
 
 export function SkinSelect({
   onConfirm,
   onBack,
 }: {
-  onConfirm: (p1: SkinId, p2: SkinId) => void;
+  onConfirm: (p1: SkinId, p2: SkinId, opts: { cpu: boolean; difficulty: Difficulty }) => void;
   onBack: () => void;
 }) {
   const [p1, setP1] = useState<SkinId>("spiderman");
   const [p2, setP2] = useState<SkinId>("homelander");
+  const [cpu, setCpu] = useState(true);
+  const [difficulty, setDifficulty] = useState<Difficulty>("hard");
 
   return (
     <div className="absolute inset-0 z-20 bg-background/95 backdrop-blur-md flex flex-col items-center justify-start sm:justify-center p-3 sm:p-4 overflow-auto">
@@ -26,11 +34,51 @@ export function SkinSelect({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 w-full max-w-5xl">
         <SkinPicker label="Player 1" accent="oklch(0.85 0.18 210)" value={p1} onChange={setP1} />
-        <SkinPicker label="Player 2" accent="oklch(0.72 0.28 340)" value={p2} onChange={setP2} />
+        <SkinPicker label={cpu ? "CPU Opponent" : "Player 2"} accent="oklch(0.72 0.28 340)" value={p2} onChange={setP2} />
+      </div>
+
+      <div className="w-full max-w-5xl mt-5 flex flex-col sm:flex-row gap-3 sm:gap-6 items-stretch sm:items-center justify-between rounded-lg border border-foreground/15 p-3">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[10px] tracking-widest uppercase text-foreground/60">Mode</span>
+          <div className="flex">
+            {[
+              { v: true, label: "VS CPU" },
+              { v: false, label: "Local 2P" },
+            ].map((o, i) => (
+              <button
+                key={i}
+                onClick={() => setCpu(o.v)}
+                className={`min-h-10 px-3 font-mono text-[10px] tracking-widest uppercase border transition-colors ${
+                  cpu === o.v ? "bg-foreground/15 border-foreground/40 text-foreground" : "border-foreground/10 text-foreground/60"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {cpu && (
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[10px] tracking-widest uppercase text-foreground/60">Difficulty</span>
+            <div className="flex">
+              {DIFFS.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => setDifficulty(d.id)}
+                  className={`min-h-10 px-3 font-mono text-[10px] tracking-widest uppercase border transition-colors ${
+                    difficulty === d.id ? "bg-foreground/15 border-foreground/40 text-foreground" : "border-foreground/10 text-foreground/60"
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <button
-        onClick={() => onConfirm(p1, p2)}
+        onClick={() => onConfirm(p1, p2, { cpu, difficulty })}
         className="mt-6 sm:mt-10 mb-4 px-10 py-4 rounded-md font-mono uppercase tracking-[0.3em] text-sm border border-foreground/30 sm:hover:bg-foreground/10 active:bg-foreground/15 transition-colors text-foreground min-h-12"
       >
         FIGHT →

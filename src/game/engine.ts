@@ -6,6 +6,7 @@ import { getMap, type MapId } from "./maps";
 import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
 import { Sfx } from "./sfx";
+import { CpuController, type Difficulty } from "./ai";
 
 export type PlayerId = "p1" | "p2";
 
@@ -165,6 +166,10 @@ export class GameEngine {
 
   public onSnapshot: ((s: GameSnapshot) => void) | null = null;
 
+  private cpuEnabled = false;
+  private cpuDifficulty: Difficulty = "hard";
+  private cpu: CpuController | null = null;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
@@ -173,11 +178,65 @@ export class GameEngine {
     this.reset();
   }
 
-  configure(mapId: MapId, p1Skin: SkinId, p2Skin: SkinId) {
+  configure(mapId: MapId, p1Skin: SkinId, p2Skin: SkinId, opts?: { cpu?: boolean; difficulty?: import("./ai").Difficulty }) {
     this.mapId = mapId;
     this.p1Skin = p1Skin;
     this.p2Skin = p2Skin;
+    if (opts) {
+      this.cpuEnabled = !!opts.cpu;
+      this.cpuDifficulty = opts.difficulty ?? this.cpuDifficulty;
+    }
     this.reset();
+    this.cpu = this.cpuEnabled ? new CpuController(this, "p2", this.cpuDifficulty) : null;
+  }
+
+  setDifficulty(d: import("./ai").Difficulty) {
+    this.cpuDifficulty = d;
+    this.cpu?.setDifficulty(d);
+  }
+
+  isCpuEnabled() { return this.cpuEnabled; }
+
+  // ---- AI helpers ----
+  getFighterRect(id: PlayerId) {
+    const f = id === "p1" ? this.p1 : this.p2;
+    return {
+      x: f.x, y: f.y, vx: f.vx, vy: f.vy,
+      onGround: f.onGround, facing: f.facing,
+      meleeKind: f.meleeKind, hp: f.hp,
+    };
+  }
+
+  getSkinIdFor(id: PlayerId): SkinId {
+    return (id === "p1" ? this.p1 : this.p2).skin.id;
+  }
+
+  // Returns horizontal distance to nearest hostile projectile heading at `id`,
+  // or null if none.
+  nearestProjectileTowards(id: PlayerId): number | null {
+    const f = id === "p1" ? this.p1 : this.p2;
+    let best: number | null = null;
+    for (const pr of this.projectiles) {
+      if (pr.owner === id) continue;
+      const dx = f.x - pr.x;
+      // Only count projectiles moving toward us
+      if (Math.sign(pr.vx) !== Math.sign(dx) && pr.vx !== 0) continue;
+      const ad = Math.abs(dx);
+      if (best == null || ad < best) best = ad;
+    }
+    return best;
+  }
+
+  // AI-driven teleport: skip the slow-mo aim flow.
+  aiTeleportTo(id: PlayerId, sx: number, sy: number) {
+    const f = id === "p1" ? this.p1 : this.p2;
+    if (f.teleCd > 0 || f.teleporting) return;
+    f.teleCd = TELE_CD;
+    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
+    f.x = Math.max(40, Math.min(W - 40, sx));
+    f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy));
+    f.vx = 0; f.vy = 0; f.teleporting = false;
+    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 32);
   }
 
   reset() {
@@ -287,6 +346,10 @@ export class GameEngine {
 
     // Ambient floor bubbles removed — kept the screen too busy.
     const maxParticles = this.lowPower ? 120 : 400;
+
+    if (this.cpu && this.phase === "fight") {
+      this.cpu.update(dt, this.buildSnapshot());
+    }
 
     if (this.phase === "fight") {
       this.updateFighter(this.p1, sdt);
@@ -696,14 +759,17 @@ export class GameEngine {
     }
   }
 
-  private emit() {
-    this.onSnapshot?.({
+  private buildSnapshot(): GameSnapshot {
+    return {
       p1: this.snapPlayer(this.p1),
       p2: this.snapPlayer(this.p2),
       winner: this.winner, phase: this.phase,
       slowmo: this.slowmoT > 0,
       teleTargeting: this.teleTargeting !== null,
-    });
+    };
+  }
+  private emit() {
+    this.onSnapshot?.(this.buildSnapshot());
   }
   private snapPlayer(f: Fighter): PlayerState {
     return {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GameEngine, type GameSnapshot, type PlayerId } from "@/game/engine";
 import { type MapId } from "@/game/maps";
 import { type SkinId } from "@/game/skins";
+import type { Difficulty } from "@/game/ai";
 import { Sfx } from "@/game/sfx";
 import { Lobby } from "./Lobby";
 import { SkinSelect } from "./SkinSelect";
@@ -38,6 +39,10 @@ export function GameCanvas() {
   const [musicVol, setMusicVol] = useState(0.35);
   const [audioOpen, setAudioOpen] = useState(false);
   const [needsLandscape, setNeedsLandscape] = useState(false);
+  const [cpuEnabled, setCpuEnabled] = useState(true);
+  const [difficulty, setDifficulty] = useState<Difficulty>("hard");
+  const cpuEnabledRef = useRef(true);
+  useEffect(() => { cpuEnabledRef.current = cpuEnabled; }, [cpuEnabled]);
 
   useEffect(() => {
     const touch = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
@@ -99,12 +104,14 @@ export function GameCanvas() {
     const down = (e: KeyboardEvent) => {
       const m = KEY_MAP[e.code];
       if (!m) return;
+      if (m.p === "p2" && cpuEnabledRef.current) return;
       e.preventDefault();
       engine.setIntent(m.p, { [m.action]: true });
     };
     const up = (e: KeyboardEvent) => {
       const m = KEY_MAP[e.code];
       if (!m) return;
+      if (m.p === "p2" && cpuEnabledRef.current) return;
       if (m.action === "left" || m.action === "right") {
         engine.setIntent(m.p, { [m.action]: false });
       }
@@ -112,17 +119,53 @@ export function GameCanvas() {
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
 
+    // Convert CSS coords -> stage coords (cover-fit, mirrors engine.render).
+    const toStage = (cx: number, cy: number) => {
+      const r = canvas.getBoundingClientRect();
+      const W = 1280, H = 720;
+      const scale = Math.max(r.width / W, r.height / H);
+      const offX = (r.width - W * scale) / 2;
+      const offY = (r.height - H * scale) / 2;
+      return { sx: (cx - r.left - offX) / scale, sy: (cy - r.top - offY) / scale };
+    };
+
+    // Tap on opponent fighter triggers P1's special.
+    const tryTapOpponent = (cx: number, cy: number) => {
+      if (!cpuEnabledRef.current) return false;
+      if (engine.isTeleTargeting()) return false;
+      const opp = engine.getFighterRect("p2");
+      if (!opp) return false;
+      const { sx, sy } = toStage(cx, cy);
+      // Generous hitbox around the stickman (W=30, H=90).
+      const hitW = 70, hitH = 120;
+      if (Math.abs(sx - opp.x) < hitW / 2 && sy > opp.y - 15 && sy < opp.y + hitH) {
+        const p1Name = engine.getSkinIdFor("p1");
+        if (p1Name === "heatwave") engine.pressFire("p1");
+        else if (p1Name === "nightcrawler") engine.pressTeleport("p1");
+        else engine.pressMelee("p1");
+        return true;
+      }
+      return false;
+    };
+
     const click = (e: MouseEvent) => {
       const r = canvas.getBoundingClientRect();
-      engine.handlePointer(e.clientX - r.left, e.clientY - r.top);
+      if (engine.isTeleTargeting()) {
+        engine.handlePointer(e.clientX - r.left, e.clientY - r.top);
+        return;
+      }
+      tryTapOpponent(e.clientX, e.clientY);
     };
     const touch = (e: TouchEvent) => {
-      if (!engine.isTeleTargeting()) return;
       const t = e.touches[0] || e.changedTouches[0];
       if (!t) return;
-      e.preventDefault();
-      const r = canvas.getBoundingClientRect();
-      engine.handlePointer(t.clientX - r.left, t.clientY - r.top);
+      if (engine.isTeleTargeting()) {
+        e.preventDefault();
+        const r = canvas.getBoundingClientRect();
+        engine.handlePointer(t.clientX - r.left, t.clientY - r.top);
+        return;
+      }
+      if (tryTapOpponent(t.clientX, t.clientY)) e.preventDefault();
     };
     canvas.addEventListener("click", click);
     canvas.addEventListener("touchstart", touch, { passive: false });
@@ -140,8 +183,11 @@ export function GameCanvas() {
 
   const engine = engineRef.current;
 
-  const startFight = (m: MapId, p1: SkinId, p2: SkinId) => {
-    engine?.configure(m, p1, p2);
+  const startFight = (m: MapId, p1: SkinId, p2: SkinId, opts: { cpu: boolean; difficulty: Difficulty }) => {
+    setCpuEnabled(opts.cpu);
+    setDifficulty(opts.difficulty);
+    cpuEnabledRef.current = opts.cpu;
+    engine?.configure(m, p1, p2, { cpu: opts.cpu, difficulty: opts.difficulty });
     setScreen("fight");
   };
 
@@ -169,7 +215,7 @@ export function GameCanvas() {
         onSfx={setSfxVol} onMusic={setMusicVol}
         onClose={() => setAudioOpen(false)}
       />
-      {screen === "fight" && isTouch && engine && snap && <TouchControls engine={engine} snap={snap} />}
+      {screen === "fight" && isTouch && engine && snap && <TouchControls engine={engine} snap={snap} cpu={cpuEnabled} />}
 
       {screen === "splash" && (
         <Splash onPlay={() => { Sfx.unlock(); setScreen("map"); }} />
@@ -180,7 +226,7 @@ export function GameCanvas() {
       {screen === "skin" && (
         <SkinSelect
           onBack={() => setScreen("map")}
-          onConfirm={(p1, p2) => { setP1Skin(p1); setP2Skin(p2); startFight(mapId, p1, p2); }}
+          onConfirm={(p1, p2, opts) => { setP1Skin(p1); setP2Skin(p2); startFight(mapId, p1, p2, opts); }}
         />
       )}
 
@@ -331,13 +377,13 @@ function CdPill({ label, cd, max, color }: { label: string; cd: number; max: num
   );
 }
 
-function TouchControls({ engine, snap }: { engine: GameEngine; snap: GameSnapshot }) {
+function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSnapshot; cpu: boolean }) {
   return (
     <div
       className="absolute inset-x-0 bottom-0 pointer-events-none"
       style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
     >
-      <div className="flex justify-between items-end px-4">
+      <div className={`flex ${cpu ? "justify-start" : "justify-between"} items-end px-4`}>
         <PlayerControls
           side="left"
           color="oklch(0.85 0.18 210)"
@@ -350,18 +396,20 @@ function TouchControls({ engine, snap }: { engine: GameEngine; snap: GameSnapsho
           onPunch={() => engine.pressMelee("p1")}
           onTele={() => engine.pressTeleport("p1")}
         />
-        <PlayerControls
-          side="right"
-          color="oklch(0.72 0.28 340)"
-          p={snap.p2}
-          onMove={(x) => {
-            engine.setIntent("p2", { left: x < -0.25, right: x > 0.25 });
-          }}
-          onJump={() => engine.pressJump("p2")}
-          onFire={() => engine.pressFire("p2")}
-          onPunch={() => engine.pressMelee("p2")}
-          onTele={() => engine.pressTeleport("p2")}
-        />
+        {!cpu && (
+          <PlayerControls
+            side="right"
+            color="oklch(0.72 0.28 340)"
+            p={snap.p2}
+            onMove={(x) => {
+              engine.setIntent("p2", { left: x < -0.25, right: x > 0.25 });
+            }}
+            onJump={() => engine.pressJump("p2")}
+            onFire={() => engine.pressFire("p2")}
+            onPunch={() => engine.pressMelee("p2")}
+            onTele={() => engine.pressTeleport("p2")}
+          />
+        )}
       </div>
     </div>
   );

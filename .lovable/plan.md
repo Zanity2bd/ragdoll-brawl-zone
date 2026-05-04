@@ -1,56 +1,85 @@
-## Premium Combat Specials — Per-Skin
+# Tap-to-Special + AI Opponent
 
-Each skin gets a signature melee special (in addition to the existing ranged "fire"). Specials trigger on a new MELEE input (J for P1, ; for P2; new on-screen "PUNCH" button on touch). They feature wind-up → impact frame (freeze + flash + radial shockwave) → ragdoll knockback for the victim, with skin-specific timing, range, damage, camera shake, and audio.
+Two changes: P1 can trigger their special by tapping the opposing fighter on screen, and P2 becomes a CPU with three difficulty modes that uses movement, jumps, melee, and its character-specific special at appropriate range.
 
-### Per-skin specials
+## 1. Tap opponent → trigger special
 
-| Skin | Move | Behaviour |
-|---|---|---|
-| Superman | Heat-Punch | Long wind-up. Massive impact, victim ragdolls across screen. Big shake + white flash impact frame. |
-| Homelander | Laser Sweep | Beam from eyes, sweeps as he turns. Continuous DPS, brief blind-flash on hit. |
-| Hulk | Ground Smash | Downward fist creates radial shockwave that knocks both grounded fighters up. |
-| A-Train | Speed Flurry | 6 rapid jabs in 0.6s. Self at full speed, victim slowed to 0.25x for the duration. Speed streaks. |
-| Flash | Phase Strike | Vanishes, blink-teleports behind opponent, single crit hit + multi-image afterimage trail. |
-| Spider-Man | Web Yank | Web line grabs opponent and pulls them in for a kick. |
-| Iron Man | Repulsor Burst | Short-range AoE blast cone from palm; light knockback, double-tap to chain. |
-| Batman | Batarang Combo | Throws batarang (homing arc) then dashes in for 2-hit kick combo on connect. |
-| Butcher | Crowbar Swing | Short range, heavy single hit, brutal hit-stun on victim (longer slow-mo on impact). |
+In `GameCanvas.tsx`, add a tap handler on the canvas (already wired for teleport targeting) that, when not in tele-targeting mode and the touched point is over the P2 fighter's body, fires P1's special:
 
-### Impact frame system (engine.ts)
+- Convert tap CSS coords → stage coords using the same cover-fit math the engine already uses (`Math.max(cw/W, ch/H)`).
+- Hit-test against the engine snapshot's P2 position (expose `getFighterRect("p2")` on `GameEngine`).
+- Route to `pressMelee("p1")`, or `pressFire("p1")` for Heatwave, or `pressTeleport("p1")` for Nightcrawler — same dispatch as the joystick hold.
+- Brief tap-ring VFX at the touch point so users see the input register.
+- Works with both mouse click and touch. The existing joystick long-press still works.
 
-- New `hitstop` global timer: when set (e.g. 0.08s on light hit, 0.18s on heavy), `update()` returns early so positions freeze while render still runs (white vignette flash + radial line burst).
-- New `slowmo` extension: heavy moves invoke `slowmoT = 0.4` *without* entering teleport-targeting mode (current slowmo is bound to teleport — refactor into `slowmoMode: 'tele' | 'impact' | null`).
-- Ragdoll: on heavy hit, victim enters `ragdoll` state (timer ~0.7s) — `computeWalkPose` is bypassed; engine uses a tumbling pose (continuous spin angle + sprawled limbs) and physics keeps gravity + bounce on ground contact.
-- Camera: `shake` boost + brief `chromaticOffset` (cheap 2px R/B offset on render, skipped on lowPower).
+## 2. AI opponent with 3 difficulties
 
-### Animation additions (animation.ts)
+Add a `Difficulty` selector ("Easy", "Hard", "Extreme") to the `SkinSelect` screen below the P2 picker. Default = Hard. Choice flows through `startFight()` into `engine.configure(...)` and is stored on the engine.
 
-- New `computeAttackPose(skinId, attackT, facing, h)` returning a full pose for the active special's wind-up + strike frames. Falls back to walk pose blended with arm overrides for skins without a custom rig.
-- Flash/A-Train get afterimage hook: engine calls back N times per frame to draw faded ghost copies along recent motion samples.
+New `src/game/ai.ts` runs every frame for P2 and writes into the same `intents.p2` the keyboard/touch inputs use — so the existing physics/melee code is unchanged.
 
-### Sound effects
+### AI behaviour per tick
 
-- Add `src/game/sfx.ts` — no external assets; uses WebAudio `OscillatorNode` + `BiquadFilter` + noise buffer to synthesize: punch (low thump + click), heavy boom (sub + decay), laser (sawtooth sweep), shockwave (filtered noise), whoosh (high-pass noise), batarang (fm chirp), woodthump (Butcher).
-- Single `Sfx` singleton with `play(name)` mapped per move. Lazy-init `AudioContext` on first user gesture (existing Splash "PLAY" tap is the unlock). Master gain + per-sound limiter so spam (A-Train flurry) doesn't clip.
-- Mute toggle in HUD (small speaker icon).
+```text
+read snapshot: dx = p1.x - p2.x, dy, p1.vx, p1 attacking?
+choose target distance = move.range * 0.85   (per-character)
+  - if |dx| > target + dead → walk toward
+  - if |dx| < target - dead → walk away (kite)
+  - else hold position
+jump if:
+  - p1 is on platform above and dx small, OR
+  - incoming projectile within 180px and grounded
+special trigger (per character, see table)
+react: if p1.meleeKind active and dx < threat range, back-step or jump
+```
 
-### Input wiring (GameCanvas.tsx)
+### Special-use range table
 
-- Add J (p1 melee) / `;` (p2 melee) to `KEY_MAP`.
-- Add a third "PUNCH" button to each `Pad` on touch.
-- Engine exposes `pressMelee(p)`; intent flushed each tick like fire/tele.
+Each character only fires its special when the opponent is in the move's effective sweet-spot:
 
-### Files
+| Skin            | Special           | Trigger range (px) | Notes |
+|-----------------|-------------------|--------------------|-------|
+| Heatwave        | Fire bolt         | 200–800            | Needs LOS, p1 vy small |
+| Nightcrawler    | Teleport          | dx > 350 or HP < 35 | Teleports near p1 (engine helper) |
+| Superman        | Heat-Punch        | < 90               | Long windup → only when p1 grounded + close |
+| Homelander      | Laser Sweep       | 120–540            | Hold while sweeping |
+| Hulk            | Ground Smash      | < 220 and grounded | AoE |
+| A-Train         | Speed Flurry      | < 70               | Close-in pressure |
+| Flash           | Phase Strike      | < 250              | Engine teleports behind, so any mid range |
+| Spider-Man      | Web Yank          | 200–380            | Pull-in tool |
+| Iron Man        | Repulsor          | < 160              | Cone |
+| Batman          | Batarang Combo    | 250–600            | Ranged |
+| Butcher         | Crowbar           | < 70               | Close |
 
-- src/game/sfx.ts (new)
-- src/game/combat.ts (new — per-skin move specs: damage, wind-up, range, hitstopMs, knockback, slowmoT, sfx, attackKind)
-- src/game/animation.ts (add `computeAttackPose`, `computeRagdollPose`)
-- src/game/engine.ts (hitstop, ragdoll state, melee resolution, afterimage trail buffer, refactor slowmo modes, chromatic offset)
-- src/components/game/GameCanvas.tsx (J/; keys, PUNCH touch button, mute toggle)
+If special is on cooldown, AI defaults to walking into melee range and pressing melee (already gated by `meleeCd`).
 
-### Mobile / perf notes
+### Difficulty knobs
 
-- Hitstop is just a timer — zero extra cost.
-- Afterimages capped to 4 ghosts on lowPower; chromatic offset disabled on lowPower.
-- WebAudio nodes are created and disposed per-shot; `Sfx` reuses a noise buffer across calls.
-- All new draws skip `shadowBlur` on lowPower (consistent with existing engine).
+```text
+Easy:    react 280ms, special chance 0.25, kite 30%, no anti-air, fire intent only when stationary
+Hard:    react 140ms,                0.65, kite 60%, jumps over projectiles, mixes feints
+Extreme: react  60ms,                0.95, kite 85%, predicts p1.vx for aim, special the moment in-range
+```
+
+Implemented as a tick-rate gate (`reactTimer`) and a per-decision `Math.random() < specialChance`.
+
+### Nightcrawler AI teleport
+
+The current teleport flow opens a slow-mo aim mode and waits for a pointer. Add `engine.aiTeleportTo(x, y)` that bypasses the pointer step and drops the fighter at a chosen point near P1 (offset by ±120px on the side P1 is facing away from). AI calls this directly when teleport fires.
+
+### When AI is active
+
+- Skip P2 keyboard mapping if `engine.cpuEnabled`.
+- On mobile, only render the P1 joystick (P2 controls hidden) — solo play.
+- Pause AI during `intro` and `ko` phases and during global slow-mo aim.
+
+## Files
+
+- `src/game/ai.ts` — new, `class CpuController` with `update(dt, snap)`.
+- `src/game/engine.ts` — add `cpuEnabled`, `difficulty`, `aiTeleportTo`, `getFighterRect`, instantiate + tick the CPU.
+- `src/components/game/GameCanvas.tsx` — tap-opponent handler, hide P2 touch UI when CPU on, pass difficulty through.
+- `src/components/game/SkinSelect.tsx` — Difficulty segmented control + "vs CPU" toggle (default on).
+
+## Out of scope
+
+No online multiplayer. No new characters. No changes to map roster or visuals beyond the small tap-ring.
