@@ -30,19 +30,24 @@ function legPose(
   amp: number,
 ): { joints: [number, number, number, number, number, number]; foot: [number, number] } {
   const c = ((cyc % 1) + 1) % 1;
-  // Smooth sinusoidal stride (no hard stance/swing seam)
   const phase = c * Math.PI * 2;
-  // Foot moves on an ellipse: forward+back continuously, lifts only on swing half
   const forward = Math.cos(phase); // -1..1
-  const liftCurve = Math.max(0, Math.sin(phase)); // 0..1, only positive half
-  const footX = hipX + stride * forward + facing * 1.5;
-  const footY = H - lift * liftCurve;
+  // Sharpen lift at speed (shorter ground contact, snappier swing)
+  const liftBase = Math.max(0, Math.sin(phase)); // 0..1
+  const liftCurve = Math.pow(liftBase, 1 - 0.4 * amp);
+  // Heel-toe roll: toe-leads on landing, heel-pushes on take-off
+  const rollX = facing * Math.sin(phase) * 1.6 * amp;
+  const footX = hipX + stride * forward + facing * 1.5 + rollX;
+  // Tiny vertical pop at push-off so the foot reads as rolling, not sliding
+  const pushPop = Math.max(0, -Math.cos(phase)) * 0.6 * amp;
+  const footY = H - lift * liftCurve + pushPop;
   const lifted = liftCurve;
 
-  // Knee bends more when lifted; bias forward in facing direction.
+  // Knee bends more when lifted; curved forward arc through swing (not linear).
   const baseBend = 5 + amp * 2;
   const swingBend = 12 * lifted;
-  const kneeForward = facing * (3 + 5 * lifted);
+  const kneeArc = 4 * Math.sin(phase) * lifted;
+  const kneeForward = facing * (3 + 5 * lifted + kneeArc);
   const kneeX = (hipX + footX) / 2 + kneeForward;
   const kneeY = (hipY + footY) / 2 + baseBend + swingBend;
 
