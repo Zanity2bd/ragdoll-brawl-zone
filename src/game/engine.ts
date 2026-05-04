@@ -4812,7 +4812,7 @@ export class GameEngine {
 
   private drawFighterAt(f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
     const ctx = this.ctx;
-    void f.skin; // skin colors/details intentionally unused — minimal white style
+    const skin = f.skin;
 
     // ---- Bamf strike depth FX (perspective scale + z-shadow) ----
     // Drives a punch-in zoom toward the camera plus a darker offset shadow underfoot
@@ -4889,78 +4889,470 @@ export class GameEngine {
     }
     ctx.translate(0, -FIGHTER_H);
 
-    // ---- Minimal white stickman renderer ----
-    // Clean, high-contrast silhouette: white head, torso, and capsule limbs.
-    // No outlines, emblems, capes, masks, or color details — just the shape.
-    const headR = 13;
+    const headR = 12;
     const headY = headR + 2 + pose.headOffsetY;
     const shoulderY = pose.shoulderY;
     const hipY = pose.hipY;
 
-    // Slight warm tint on hit so impacts still read; otherwise pure white.
-    const white = "oklch(0.985 0.005 100)";
-    const bodyColor = f.hitFlash > 0 && !ghost ? "oklch(0.92 0.18 30)" : white;
+    const bodyColor = f.hitFlash > 0 && !ghost ? "oklch(0.95 0.20 30)" : skin.body;
+    const limbColor = skin.limb ?? bodyColor;
+    const headColor = skin.head ?? bodyColor;
 
-    // Subtle ground shadow (kept — helps grounding).
     if (f.onGround && !ghost && f.ragdollT <= 0) {
-      ctx.fillStyle = "oklch(0 0 0 / 0.34)";
+      // Soft contact light pool — adds depth and grounding without cost.
+      if (!this.lowPower) {
+        const grad = ctx.createRadialGradient(0, FIGHTER_H - 1, 1, 0, FIGHTER_H - 1, 30);
+        grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 35%, transparent)`);
+        grad.addColorStop(1, "transparent");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(0, FIGHTER_H - 1, 30, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "oklch(0 0 0 / 0.32)";
       ctx.beginPath();
       ctx.ellipse(0, FIGHTER_H - 2, 16, 3.5, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
+    if (skin.cape) {
+      ctx.save();
+      // Counter-rotate the cape so it hangs/trails in WORLD space (gravity + wind),
+      // not perpendicular to a pitched body. We pivot at the shoulders.
+      const bodyAngle = pose.lean + (ghost ? 0 : f.bodyRoll);
+      ctx.translate(0, shoulderY - 2);
+      ctx.rotate(-bodyAngle);
+      // Cape's own hang angle in world space: gravity pulls down, wind pushes
+      // opposite the facing direction proportional to speed.
+      const windAngle = -f.facing * Math.min(0.9, Math.abs(f.vx) / 520) + (f.flying ? -f.facing * 0.15 : 0);
+      ctx.rotate(windAngle);
+      ctx.translate(0, -(shoulderY - 2));
+
+      const wobble = Math.sin(f.walkPhase * 0.6) * 2;
+      const sw = f.capeSwingX + wobble;        // bottom horizontal sway (spring)
+      const swMid = sw * 0.55;                 // anchored near shoulders
+      const lift = f.capeLift * 14;            // raises bottom edge in flight/sprints
+      const curl = -Math.sign(sw) * Math.min(6, Math.abs(sw) * 0.35); // trailing whip curl
+      ctx.fillStyle = skin.cape;
+      ctx.beginPath();
+      ctx.moveTo(-7, shoulderY - 2);
+      ctx.lineTo(7, shoulderY - 2);
+      ctx.quadraticCurveTo(11 + swMid, hipY + 22 - lift * 0.4, 5 + sw + curl, hipY + 40 - lift);
+      ctx.lineTo(-5 + sw + curl, hipY + 40 - lift);
+      ctx.quadraticCurveTo(-11 + swMid, hipY + 22 - lift * 0.4, -7, shoulderY - 2);
+      ctx.fill();
+      if (skin.capeAccent) {
+        ctx.fillStyle = skin.capeAccent;
+        ctx.fillRect(-1.5 + swMid * 0.5, shoulderY, 3, hipY + 36 - shoulderY - lift * 0.6);
+      }
+      ctx.restore();
+    }
+
+    if (skin.streaks && Math.abs(f.vx) > 80 && f.onGround) {
+      ctx.save();
+      ctx.strokeStyle = skin.streaks;
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 4; i++) {
+        ctx.globalAlpha = 0.5 - i * 0.12;
+        ctx.beginPath();
+        const sx = -f.facing * (10 + i * 8);
+        const ey = 30 + i * 12;
+        ctx.moveTo(sx, ey);
+        ctx.lineTo(sx - f.facing * 26, ey);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // ---- Nightcrawler tail: long whippy curl behind the hip ----
+    if (skin.id === "nightcrawler" && !ghost) {
+      ctx.save();
+      const t = this.elapsed + (f.id === "p1" ? 0 : 1.3);
+      const back = -f.facing;
+      const moving = Math.min(1, Math.abs(f.vx) / 240);
+      const sway = Math.sin(t * 3.2) * (4 + moving * 6) + back * (8 + moving * 6);
+      const sway2 = Math.sin(t * 4.6 + 1.1) * (3 + moving * 4);
+      // Anchor at lower spine just above the hip.
+      const ax = back * 2;
+      const ay = pose.hipY - 2;
+      // Three control points for a snake-like curl.
+      const c1x = back * 14 + sway * 0.4;
+      const c1y = pose.hipY + 14;
+      const c2x = back * 26 + sway;
+      const c2y = pose.hipY + 26 + sway2 * 0.3;
+      const tipX = back * 36 + sway * 1.4;
+      const tipY = pose.hipY + 12 + sway2;     // tip curls back upward
+      // Outline pass
+      ctx.strokeStyle = "oklch(0.10 0.02 250)";
+      ctx.lineCap = "round";
+      ctx.lineWidth = 5.5;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY);
+      ctx.stroke();
+      // Main stroke
+      ctx.strokeStyle = skin.body;
+      ctx.lineWidth = 3.6;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY);
+      ctx.stroke();
+      // Spade tip
+      ctx.fillStyle = skin.body;
+      ctx.beginPath();
+      ctx.ellipse(tipX + back * 2, tipY, 4.5, 2.6, Math.atan2(tipY - c2y, tipX - c2x), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = bodyColor;
-    ctx.fillStyle = bodyColor;
 
-    // Limb thickness — uniform, slightly chunky for readability.
-    const limbW = 9.5;
+    // ---- Size-driven dimensions ----
+    // Chunky silhouette proportions (matches reference run-cycle artstyle):
+    // thicker limbs, beefier torso. Iconic accents (cape, ears, mask) layer on top.
+    const baseW = skin.thickBody ? 9.5 : 8.0;
+    const lowerW = baseW * 0.72;                                     // less taper, chunkier shins/forearms
+    const torsoW = skin.thickBody ? 11 : 9;
+    const outlineW = Math.max(2.0, Math.min(3.6, baseW * 0.42));
+    const torsoOutlineW = Math.max(2.2, Math.min(3.4, torsoW * 0.36));
+    const overlap = baseW * 0.45;
+    const outlineColor = "oklch(0.10 0.02 250)";
 
-    const drawSmoothLimb = (j: readonly [number, number, number, number, number, number]) => {
-      // Single smooth quadratic from start through elbow to hand — fully connected,
-      // no segmentation, no taper. Round caps make joints look like balls.
-      ctx.lineWidth = limbW;
-      ctx.beginPath();
-      ctx.moveTo(j[0], j[1]);
-      ctx.quadraticCurveTo(j[2], j[3], j[4], j[5]);
-      ctx.stroke();
+    // ---- Curvature: facing-anchored sign, velocity / state amplitude ----
+    const speedNorm = Math.min(1, Math.abs(f.vx) / 210);
+    const flexAmt = 0.35
+      + 0.45 * speedNorm
+      + (f.attackAnim > 0 ? 0.35 : 0)
+      + (f.flying ? 0.25 : 0);
+    const flexBase = baseW * 0.30 * flexAmt;
+    const fSign = f.facingT >= 0 ? 1 : -1;
+    // arms bow outward, legs bow inward — sign anchored to facing, never to limb vector
+    const dirArmL = -1 * fSign;
+    const dirArmR =  1 * fSign;
+    const dirLegL =  1 * fSign;
+    const dirLegR = -1 * fSign;
+
+    const drawAllLimbs = (uW: number, lW: number, withFlex: boolean) => {
+      const m = withFlex ? flexBase : 0;
+      drawLimb(ctx, pose.legL, uW, lW, dirLegL, m, overlap);
+      drawLimb(ctx, pose.legR, uW, lW, dirLegR, m, overlap);
+      drawLimb(ctx, pose.armL, uW, lW, dirArmL, m, overlap);
+      drawLimb(ctx, pose.armR, uW, lW, dirArmR, m, overlap);
     };
 
-    // Limbs
-    drawSmoothLimb(pose.legL);
-    drawSmoothLimb(pose.legR);
-    drawSmoothLimb(pose.armL);
-    drawSmoothLimb(pose.armR);
+    // ---- 1. Dark outline pass (limbs + torso, NO head) ----
+    if (!ghost) {
+      ctx.save();
+      ctx.strokeStyle = outlineColor;
+      const outerLimbW = baseW + outlineW * 2;
+      const outerLowerW = lowerW + outlineW * 2;
+      drawAllLimbs(outerLimbW, outerLowerW, true);
+      // Torso outline
+      ctx.lineWidth = torsoW + torsoOutlineW * 2;
+      ctx.beginPath(); ctx.moveTo(0, shoulderY - overlap * 0.4); ctx.lineTo(0, hipY + overlap * 0.4); ctx.stroke();
+      ctx.restore();
+    }
 
-    // Feet — small white pucks merged into the leg via round caps.
-    ctx.beginPath(); ctx.arc(pose.footL[0], pose.footL[1], limbW * 0.55, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(pose.footR[0], pose.footR[1], limbW * 0.55, 0, Math.PI * 2); ctx.fill();
-    // Hands
-    ctx.beginPath(); ctx.arc(pose.handL[0], pose.handL[1], limbW * 0.55, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(pose.handR[0], pose.handR[1], limbW * 0.55, 0, Math.PI * 2); ctx.fill();
+    // ---- 2. Outer glow pass ----
+    if (!this.lowPower && !ghost) {
+      ctx.save();
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = skin.glow;
+      ctx.strokeStyle = `color-mix(in oklab, ${skin.glow} 70%, transparent)`;
+      ctx.globalAlpha = 0.55;
+      const gW = baseW + 2.5;
+      drawAllLimbs(gW, gW, true);
+      ctx.beginPath(); ctx.moveTo(0, shoulderY); ctx.lineTo(0, hipY); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
 
-    // Torso — capsule from shoulders to hips, slightly thicker than limbs.
-    const torsoW = 16;
+    // ---- 3. Main limb stroke (tapered) ----
+    ctx.strokeStyle = limbColor;
+    drawAllLimbs(baseW, lowerW, true);
+
+    // ---- 4. Inner highlight (mirrors taper) ----
+    if (!ghost) {
+      ctx.save();
+      ctx.strokeStyle = `color-mix(in oklab, ${limbColor} 40%, white)`;
+      ctx.globalAlpha = 0.38;
+      const hUp = Math.max(1, baseW - 2.4);
+      const hLo = Math.max(0.8, lowerW - 2.0);
+      drawAllLimbs(hUp, hLo, true);
+      ctx.restore();
+    }
+
+    // ---- Hulk: muscle bulges on limbs ----
+    if (skin.id === "hulk" && !ghost) {
+      const muscleFill = `color-mix(in oklab, ${limbColor} 70%, white)`;
+      const muscleShade = `color-mix(in oklab, ${limbColor} 60%, black)`;
+      const drawMuscle = (j: [number, number, number, number, number, number], rx: number, ry: number) => {
+        // bulge near upper segment (between joint and mid)
+        const ux = (j[0] + j[2]) / 2;
+        const uy = (j[1] + j[3]) / 2;
+        const ang = Math.atan2(j[3] - j[1], j[2] - j[0]);
+        ctx.save();
+        ctx.translate(ux, uy);
+        ctx.rotate(ang);
+        ctx.fillStyle = muscleFill;
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath(); ctx.ellipse(0, -ry * 0.4, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = muscleShade;
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath(); ctx.ellipse(0, ry * 0.5, rx * 0.85, ry * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      };
+      // Biceps + forearms
+      drawMuscle(pose.armL, 7, 4.5);
+      drawMuscle(pose.armR, 7, 4.5);
+      drawMuscle([pose.armL[2], pose.armL[3], pose.armL[4], pose.armL[5], pose.armL[4], pose.armL[5]], 5.5, 3.6);
+      drawMuscle([pose.armR[2], pose.armR[3], pose.armR[4], pose.armR[5], pose.armR[4], pose.armR[5]], 5.5, 3.6);
+      // Quads + calves
+      drawMuscle(pose.legL, 8, 5);
+      drawMuscle(pose.legR, 8, 5);
+      drawMuscle([pose.legL[2], pose.legL[3], pose.legL[4], pose.legL[5], pose.legL[4], pose.legL[5]], 6, 4);
+      drawMuscle([pose.legR[2], pose.legR[3], pose.legR[4], pose.legR[5], pose.legR[4], pose.legR[5]], 6, 4);
+      ctx.globalAlpha = 1;
+
+      // Pecs + abs on torso
+      const torsoMid = (shoulderY + hipY) / 2;
+      ctx.save();
+      // Pecs (two large ellipses just below shoulder line)
+      ctx.fillStyle = muscleFill;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.ellipse(-5, shoulderY + 6, 6, 5, -0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(5, shoulderY + 6, 6, 5, 0.2, 0, Math.PI * 2); ctx.fill();
+      // Pec separation shadow
+      ctx.strokeStyle = muscleShade;
+      ctx.lineWidth = 1.4;
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.moveTo(0, shoulderY + 2); ctx.lineTo(0, shoulderY + 11); ctx.stroke();
+      // Abs (3 horizontal pairs)
+      ctx.lineWidth = 1.2;
+      ctx.globalAlpha = 0.5;
+      for (let i = 0; i < 3; i++) {
+        const ay = torsoMid - 1 + i * 4;
+        ctx.beginPath(); ctx.moveTo(-4, ay); ctx.lineTo(-1, ay); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(1, ay); ctx.lineTo(4, ay); ctx.stroke();
+      }
+      // Center ab line
+      ctx.beginPath(); ctx.moveTo(0, shoulderY + 12); ctx.lineTo(0, hipY - 2); ctx.stroke();
+      // Shoulder traps
+      ctx.fillStyle = muscleFill;
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath(); ctx.ellipse(-7, shoulderY - 1, 4, 2.5, -0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(7, shoulderY - 1, 4, 2.5, 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    if (skin.boots) {
+      drawBoot(ctx, pose.footL, f.facing, skin.boots);
+      drawBoot(ctx, pose.footR, f.facing, skin.boots);
+    }
+    if (skin.gloves) {
+      drawFist(ctx, pose.handL, skin.gloves);
+      drawFist(ctx, pose.handR, skin.gloves);
+    }
+
+    // Torso (uses sized torsoW)
+    ctx.strokeStyle = bodyColor;
     ctx.lineWidth = torsoW;
     ctx.beginPath();
     ctx.moveTo(0, shoulderY);
     ctx.lineTo(0, hipY);
     ctx.stroke();
+    if (!ghost) {
+      ctx.save();
+      ctx.strokeStyle = `color-mix(in oklab, ${bodyColor} 40%, white)`;
+      ctx.lineWidth = skin.thickBody ? 2.5 : 1.8;
+      ctx.globalAlpha = 0.42;
+      ctx.beginPath(); ctx.moveTo(0, shoulderY + 2); ctx.lineTo(0, hipY - 2); ctx.stroke();
+      ctx.restore();
+    }
 
-    // Shoulder + hip caps so joints stay fully connected.
-    ctx.beginPath(); ctx.arc(0, shoulderY, torsoW * 0.5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(0, hipY, torsoW * 0.5, 0, Math.PI * 2); ctx.fill();
+    // Tiny shoulder caps (hidden under outline). Hip cap removed — overlap covers it.
+    ctx.fillStyle = limbColor;
+    const jr = baseW * 0.32;
+    ctx.beginPath(); ctx.arc(-4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
 
-    // Neck stub bridging head and torso.
-    ctx.lineWidth = limbW;
-    ctx.beginPath();
-    ctx.moveTo(0, headY + headR - 2);
-    ctx.lineTo(0, shoulderY);
-    ctx.stroke();
+    if (skin.emblem) {
+      const ey = (shoulderY + hipY) / 2;
+      ctx.fillStyle = skin.emblem.color;
+      ctx.strokeStyle = skin.emblem.color;
+      drawEmblem(ctx, skin.emblem, ey, shoulderY, hipY);
+    }
 
-    // Head — solid white disc, no face details.
+    // Head: fill disc first, then proportional rim. Highlight follows below.
+    ctx.fillStyle = headColor;
     ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
+    if (!ghost) {
+      const headRimOffset = outlineW * 0.5;
+      ctx.strokeStyle = outlineColor;
+      ctx.lineWidth = outlineW;
+      ctx.beginPath(); ctx.arc(0, headY, headR + headRimOffset, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (!ghost) {
+      ctx.save();
+      const hg = ctx.createRadialGradient(
+        f.facing * -2.5, headY - headR * 0.55, 0.5,
+        f.facing * -2.5, headY - headR * 0.55, headR * 1.1,
+      );
+      hg.addColorStop(0, "rgba(255,255,255,0.32)");
+      hg.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = hg;
+      ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    if (skin.skinTone) {
+      ctx.fillStyle = skin.skinTone;
+      ctx.beginPath();
+      ctx.ellipse(f.facing * 1.5, headY + 2, headR - 2.5, headR - 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (skin.cowlEars) {
+      ctx.fillStyle = headColor;
+      ctx.beginPath();
+      ctx.moveTo(-headR + 3, headY - headR + 4);
+      ctx.lineTo(-headR - 1, headY - headR - 7);
+      ctx.lineTo(-1, headY - headR + 1);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(headR - 3, headY - headR + 4);
+      ctx.lineTo(headR + 1, headY - headR - 7);
+      ctx.lineTo(1, headY - headR + 1);
+      ctx.closePath(); ctx.fill();
+    }
+
+    if (skin.id === "superman") {
+      ctx.fillStyle = "oklch(0.18 0.02 30)";
+      ctx.beginPath();
+      ctx.moveTo(-headR + 3, headY - headR + 5);
+      ctx.quadraticCurveTo(0, headY - headR - 4, headR - 3, headY - headR + 5);
+      ctx.quadraticCurveTo(headR - 1, headY - 4, headR - 5, headY - 5);
+      ctx.lineTo(-headR + 5, headY - 5);
+      ctx.quadraticCurveTo(-headR + 1, headY - 4, -headR + 3, headY - headR + 5);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(-2 + f.facing * 1, headY - 3, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (skin.id === "homelander") {
+      ctx.fillStyle = "oklch(0.78 0.10 85)";
+      ctx.beginPath();
+      ctx.moveTo(-headR + 3, headY - headR + 4);
+      ctx.quadraticCurveTo(f.facing * 4, headY - headR - 3, headR - 3, headY - headR + 4);
+      ctx.quadraticCurveTo(0, headY - headR + 1, -headR + 3, headY - headR + 4);
+      ctx.fill();
+    }
+
+    const eyeColor = skin.id === "spiderman" ? "oklch(0.95 0.02 250)" : "oklch(0.10 0 0)";
+    ctx.fillStyle = eyeColor;
+    if (skin.id === "spiderman") {
+      ctx.beginPath(); ctx.ellipse(-3.5, headY - 1, 3, 2, -0.35, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(3.5, headY - 1, 3, 2, 0.35, 0, Math.PI * 2); ctx.fill();
+    } else if (skin.cowlEars) {
+      ctx.fillStyle = "oklch(0.92 0.02 250)";
+      ctx.fillRect(-5, headY - 1, 3, 1.6);
+      ctx.fillRect(2, headY - 1, 3, 1.6);
+    } else {
+      ctx.beginPath(); ctx.arc(-3, headY, 1.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3, headY, 1.4, 0, Math.PI * 2); ctx.fill();
+    }
+
+    if (skin.glowingEyes) {
+      const flick = 0.7 + 0.3 * Math.sin(performance.now() * 0.018);
+      const charging = f.meleeKind === "laserSweep";
+      ctx.save();
+      if (!this.lowPower) { ctx.shadowBlur = charging ? 20 : 10; ctx.shadowColor = skin.glowingEyes; }
+      ctx.fillStyle = skin.glowingEyes;
+      ctx.globalAlpha = charging ? 1 : flick;
+      const r = charging ? 2.6 : 1.8;
+      ctx.beginPath(); ctx.arc(-3, headY, r, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3, headY, r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // ---- Hulk: angry expression (furrowed brows, scowl, bared teeth) ----
+    if (skin.id === "hulk" && !ghost) {
+      ctx.save();
+      // Furrowed thick brows angled inward over the eyes
+      ctx.strokeStyle = "oklch(0.10 0.05 25)";
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = "round";
+      // Left brow: outer-low to inner-high (angry V)
+      ctx.beginPath();
+      ctx.moveTo(-5.5, headY - 2.6);
+      ctx.lineTo(-1.2, headY - 1.4);
+      ctx.stroke();
+      // Right brow
+      ctx.beginPath();
+      ctx.moveTo(5.5, headY - 2.6);
+      ctx.lineTo(1.2, headY - 1.4);
+      ctx.stroke();
+      // Brow shadow / forehead crease
+      ctx.strokeStyle = "oklch(0.18 0.10 25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-3, headY - 4);
+      ctx.lineTo(0, headY - 3.4);
+      ctx.lineTo(3, headY - 4);
+      ctx.stroke();
+      // Snarling mouth — open, downturned, with bared teeth
+      const my = headY + 4.5;
+      // Dark mouth interior
+      ctx.fillStyle = "oklch(0.12 0.02 25)";
+      ctx.beginPath();
+      ctx.moveTo(-4.5, my);
+      ctx.quadraticCurveTo(-2, my + 2.4, 0, my + 1.8);
+      ctx.quadraticCurveTo(2, my + 2.4, 4.5, my);
+      ctx.quadraticCurveTo(2, my + 0.4, 0, my + 0.6);
+      ctx.quadraticCurveTo(-2, my + 0.4, -4.5, my);
+      ctx.closePath();
+      ctx.fill();
+      // Bared teeth
+      ctx.fillStyle = "oklch(0.95 0.02 80)";
+      ctx.fillRect(-3.2, my + 0.7, 1.2, 1.2);
+      ctx.fillRect(-1.6, my + 0.9, 1.2, 1.2);
+      ctx.fillRect(0.4, my + 0.9, 1.2, 1.2);
+      ctx.fillRect(2.0, my + 0.7, 1.2, 1.2);
+      // Strong jawline shadow
+      ctx.strokeStyle = "oklch(0.16 0.06 25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-headR + 1, headY + 2);
+      ctx.quadraticCurveTo(0, headY + headR - 1, headR - 1, headY + 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (skin.beard) {
+      ctx.fillStyle = "oklch(0.14 0.02 60)";
+      ctx.beginPath();
+      ctx.ellipse(0, headY + 5, 7, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(-5, headY + 1, 10, 1.4);
+    }
+
+    // Crowbar prop for Butcher during melee
+    if (skin.id === "butcher" && f.meleeKind === "crowbar" && !ghost) {
+      const hand = f.facing > 0 ? pose.handR : pose.handL;
+      ctx.strokeStyle = "oklch(0.55 0.02 60)";
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(hand[0], hand[1]);
+      ctx.lineTo(hand[0] + f.facing * 16, hand[1] - 18);
+      ctx.stroke();
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(hand[0] + f.facing * 16, hand[1] - 18);
+      ctx.lineTo(hand[0] + f.facing * 22, hand[1] - 22);
+      ctx.stroke();
+    }
 
     ctx.restore();
   }
