@@ -661,6 +661,8 @@ export class GameEngine {
       f.onGround = false;
     } else {
       // ---- Ground / standard physics ----
+      let move = 0;
+      const locked = f.meleeKind && f.meleeKind !== "laserSweep";
       if (!locked) {
         if (intent.left) move -= 1;
         if (intent.right) move += 1;
