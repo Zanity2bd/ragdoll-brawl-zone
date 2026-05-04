@@ -106,7 +106,7 @@ class SfxEngine {
           const n = ctx.createBufferSource(); n.buffer = this.noise;
           const f = ctx.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 1800;
           const g = ctx.createGain(); g.gain.value = 0.4 * vol;
-          n.connect(f); f.connect(g); g.connect(this.master);
+          n.connect(f); f.connect(g); g.connect(this.sfxGain);
           n.start(t); n.stop(t + 0.04);
           setTimeout(() => { n.disconnect(); f.disconnect(); g.disconnect(); }, 80);
         }
@@ -177,7 +177,7 @@ class SfxEngine {
         o.frequency.setValueAtTime(260, t);
         o.frequency.exponentialRampToValueAtTime(120, t + 0.06);
         const g = ctx.createGain(); g.gain.value = 0.0001;
-        o.connect(g); g.connect(this.master);
+        o.connect(g); g.connect(this.sfxGain);
         g.gain.setValueAtTime(0.0001, t);
         g.gain.exponentialRampToValueAtTime(0.45 * vol, t + 0.003);
         g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
