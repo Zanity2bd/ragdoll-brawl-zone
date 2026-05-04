@@ -114,9 +114,9 @@ export function computeWalkPose(
     };
   }
 
-  const amp = moving ? Math.min(1, speed / 200) : 0;
-  const stride = 13 * amp;
-  const lift = 16 * amp;
+  const amp = moving ? Math.min(1, speed / 160) : 0;
+  const stride = 15 * amp;
+  const lift = 18 * amp;
 
   // Body bob: dips at heel-strike (twice per gait cycle), but smoother
   const bob = moving ? (1 - Math.cos(phase * 2)) * 0.9 * amp : 0;
