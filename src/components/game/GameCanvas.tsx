@@ -183,8 +183,11 @@ export function GameCanvas() {
 
   const engine = engineRef.current;
 
-  const startFight = (m: MapId, p1: SkinId, p2: SkinId) => {
-    engine?.configure(m, p1, p2);
+  const startFight = (m: MapId, p1: SkinId, p2: SkinId, opts: { cpu: boolean; difficulty: Difficulty }) => {
+    setCpuEnabled(opts.cpu);
+    setDifficulty(opts.difficulty);
+    cpuEnabledRef.current = opts.cpu;
+    engine?.configure(m, p1, p2, { cpu: opts.cpu, difficulty: opts.difficulty });
     setScreen("fight");
   };
 
