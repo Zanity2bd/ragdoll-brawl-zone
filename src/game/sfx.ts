@@ -1,9 +1,12 @@
 // Procedural WebAudio SFX — no external assets.
 // Lazy-init on first user gesture (Splash PLAY tap).
 
+import bamfUrl from "@/assets/sfx/bamf.mp3";
+
 export type SfxName =
   | "punch" | "heavy" | "boom" | "laser" | "shock"
-  | "whoosh" | "chirp" | "thud" | "jab" | "blip";
+  | "whoosh" | "chirp" | "thud" | "jab" | "blip"
+  | "bamf";
 
 class SfxEngine {
   private ctx: AudioContext | null = null;
@@ -13,6 +16,7 @@ class SfxEngine {
   private noise: AudioBuffer | null = null;
   private musicNodes: AudioNode[] = [];
   private musicPlaying = false;
+  private samples: Partial<Record<SfxName, AudioBuffer>> = {};
   muted = false;
   sfxVolume = 0.8;
   musicVolume = 0.35;
