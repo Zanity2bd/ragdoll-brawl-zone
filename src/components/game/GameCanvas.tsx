@@ -488,15 +488,16 @@ function PlayerControls({
 }
 
 function Joystick({
-  color, onMove, onJump, onSpecial, specialCd, specialMax, specialLabel,
+  color, onMove, onJump, onSpecial, specialCd, specialMax, specialLabel, verticalSteer,
 }: {
   color: string;
-  onMove: (x: number) => void;
+  onMove: (x: number, y: number) => void;
   onJump: () => void;
   onSpecial: () => void;
   specialCd: number;
   specialMax: number;
   specialLabel: string;
+  verticalSteer?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const idRef = useRef<number | null>(null);
