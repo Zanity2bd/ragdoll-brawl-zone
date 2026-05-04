@@ -1752,8 +1752,51 @@ export class GameEngine {
       ctx.globalAlpha = 1;
     }
 
-    this.drawFighter(this.p1);
-    this.drawFighter(this.p2);
+    // Hide attacker (and target) during frenzy — replaced by video clip below.
+    const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
+    const frenzyTarget = frenzyAttacker
+      ? (frenzyAttacker.frenzy!.target === "p1" ? this.p1 : this.p2)
+      : null;
+    if (frenzyAttacker !== this.p1 && frenzyTarget !== this.p1) this.drawFighter(this.p1);
+    if (frenzyAttacker !== this.p2 && frenzyTarget !== this.p2) this.drawFighter(this.p2);
+
+    // Frenzy video overlay — drawn in stage space so the camera/zoom moves with it.
+    if (frenzyAttacker && this.frenzyVideo && this.frenzyVideoReady) {
+      const fr = frenzyAttacker.frenzy!;
+      const trans = Math.min(1, fr.transitionT / 0.25);
+      const ease = trans * trans * (3 - 2 * trans);
+      const fade = Math.min(1, fr.t * 6) * Math.min(1, (fr.dur - fr.t) * 4);
+      // Size relative to fighter — height ~ 2.4x stickman so the video reads big
+      const targetH = FIGHTER_H * 2.4;
+      const v = this.frenzyVideo;
+      const ratio = (v.videoWidth || 16) / (v.videoHeight || 9);
+      const targetW = targetH * ratio;
+      const cx = (frenzyAttacker.x + (frenzyTarget?.x ?? frenzyAttacker.x)) / 2;
+      const cy = frenzyAttacker.y + FIGHTER_H * 0.5;
+      const facing = frenzyAttacker.facing;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(facing * (0.6 + ease * 0.4), 0.6 + ease * 0.4);
+      ctx.globalAlpha = fade;
+      // Subtle screen-shake driven jitter for impact
+      const jx = (Math.random() - 0.5) * 4;
+      const jy = (Math.random() - 0.5) * 4;
+      try {
+        ctx.drawImage(v, -targetW / 2 + jx, -targetH / 2 + jy, targetW, targetH);
+      } catch { /* video may not be decode-ready */ }
+      ctx.restore();
+      // Transition flash burst on the first frames
+      if (trans < 1) {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = 1 - ease;
+        ctx.fillStyle = "oklch(0.85 0.22 145)";
+        ctx.beginPath();
+        ctx.arc(cx, cy, 80 + ease * 120, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      }
+    }
 
     // Beams (laser)
     ctx.globalCompositeOperation = "lighter";
