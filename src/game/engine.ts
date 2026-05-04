@@ -231,6 +231,29 @@ const FRENZY_TICK_DMG = 2;     // per tick → ~44 total over full clip (balance
 const FRENZY_RANGE = 110;      // close-range gate
 const FRENZY_FRAME_COUNT = 123;
 
+// ---- Dual-power system ----
+// Flash: Time Freeze (HOLD) + Lightning Blast (TAP)
+const TIMEFREEZE_DUR = 5.0;
+const TIMEFREEZE_CD = 14;
+const LIGHTNING_DUR = 6.0;
+const LIGHTNING_CD = 10;
+const LIGHTNING_DMG = 22;       // damage on contact (one-time impact)
+const LIGHTNING_TICK_DMG = 2.5; // per second arc damage while latched
+const LIGHTNING_SPEED = 320;    // px/s chase speed
+const LIGHTNING_TURN = 4.5;     // steering responsiveness
+
+interface LightningOrb {
+  owner: PlayerId;
+  target: PlayerId;
+  x: number; y: number;
+  vx: number; vy: number;
+  life: number;     // remaining seconds
+  maxLife: number;
+  phase: number;    // animation
+  hit: boolean;     // initial impact landed → tick mode
+  tickAcc: number;  // sub-second accumulator for tick damage
+}
+
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
