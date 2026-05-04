@@ -152,13 +152,13 @@ const HOVER_RATE = 1.6;          // hover frequency (Hz-ish)
 
 // Super-Punch
 const SUPER_CD = 4.5;
-const SUPER_DAMAGE = 38;
-const SUPER_KB_X = 980;
-const SUPER_KB_Y = -380;
-const SUPER_HITSTOP = 0.26;
-const SUPER_SLOWMO = 0.45;
-const SUPER_RAGDOLL = 1.0;
-const SUPER_SHAKE = 36;
+const SUPER_DAMAGE = 46;
+const SUPER_KB_X = 1280;
+const SUPER_KB_Y = -460;
+const SUPER_HITSTOP = 0.34;
+const SUPER_SLOWMO = 0.7;
+const SUPER_RAGDOLL = 1.3;
+const SUPER_SHAKE = 52;
 
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
