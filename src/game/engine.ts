@@ -4960,20 +4960,17 @@ export class GameEngine {
     const headColor = skin.head ?? bodyColor;
 
     if (f.onGround && !ghost && f.ragdollT <= 0) {
-      // Soft contact light pool — adds depth and grounding without cost.
+      // Soft contact light pool — grounds the character without a hard
+      // disc shadow (the disc was reading as a floating UFO under the feet).
       if (!this.lowPower) {
-        const grad = ctx.createRadialGradient(0, FIGHTER_H - 1, 1, 0, FIGHTER_H - 1, 30);
-        grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 35%, transparent)`);
+        const grad = ctx.createRadialGradient(0, FIGHTER_H - 1, 1, 0, FIGHTER_H - 1, 28);
+        grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 28%, transparent)`);
         grad.addColorStop(1, "transparent");
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.ellipse(0, FIGHTER_H - 1, 30, 7, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, FIGHTER_H - 1, 28, 5, 0, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.fillStyle = "oklch(0 0 0 / 0.32)";
-      ctx.beginPath();
-      ctx.ellipse(0, FIGHTER_H - 2, 16, 3.5, 0, 0, Math.PI * 2);
-      ctx.fill();
     }
 
     if (skin.cape) {
