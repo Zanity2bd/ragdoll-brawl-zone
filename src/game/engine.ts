@@ -1224,6 +1224,24 @@ export class GameEngine {
     for (const p of this.particles) { p.x += p.vx * sdt; p.y += p.vy * sdt; p.life -= dt; }
     this.particles = this.particles.filter(p => p.life > 0);
 
+    // Smoke clouds — drift, expand, swirl, fade
+    for (const sc of this.smokeClouds) {
+      sc.life -= dt;
+      sc.r += (sc.rMax - sc.r) * Math.min(1, dt * 1.6);
+      if (sc.vx !== undefined) {
+        const t = (sc.maxLife - sc.life);
+        // Turbulence: gentle sinusoidal swirl
+        const seed = sc.seed ?? 0;
+        const swirl = Math.sin(t * 3 + seed) * 16;
+        sc.x += (sc.vx + swirl) * sdt;
+        sc.y += (sc.vy ?? 0) * sdt;
+        // Air drag + buoyant rise
+        sc.vx *= Math.exp(-1.2 * dt);
+        sc.vy = (sc.vy ?? 0) * Math.exp(-0.6 * dt) - 8 * dt;
+      }
+    }
+    this.smokeClouds = this.smokeClouds.filter(s => s.life > 0);
+
     for (const sw of this.shockwaves) {
       sw.life -= dt; sw.r += (sw.rMax - sw.r) * Math.min(1, dt * 4);
     }
