@@ -2330,16 +2330,24 @@ export class GameEngine {
         case "laserSweep": {
           if (inActive) {
             const target = f.id === "p1" ? this.p2 : this.p1;
+            // Time spent in the active window so far (0..m.active)
+            const activeT = t - m.windup;
+            // Final 3 seconds: OVERLOAD — thicker red beam, pierces all cover, heavier dps
+            const overload = activeT > Math.max(0, m.active - 3);
             const sx = f.x + f.facing * 6; const sy = f.y + 14;
             const dx = target.x - sx; const dy = (target.y + 30) - sy;
             const angle = Math.atan2(dy, dx);
             const desired = f.facing > 0 ? Math.atan2(dy, Math.abs(dx) || 1) : Math.PI - Math.atan2(dy, Math.abs(dx) || 1);
-            // Raycast against blocking platforms (cover + solid platforms) so the beam is occluded.
+            // Normal beam: blocked by cover. Overload: pierces everything.
             const beamMaxLen = m.range;
-            const blockHit = this.raycastPlatforms(sx, sy, desired, beamMaxLen);
+            const blockHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
             const beamLen = blockHit ? blockHit.dist : beamMaxLen;
-            this.beams.push({ owner: f.id, x: sx, y: sy, angle: desired, length: beamLen, life: 0.05 });
-            // Spark at the impact point if blocked
+            // Tag the beam so the renderer can switch to the red overload look.
+            this.beams.push({
+              owner: f.id, x: sx, y: sy, angle: desired, length: beamLen, life: 0.05,
+              overload,
+            });
+            // Spark at impact / pierce point
             if (blockHit && Math.random() < 0.6) {
               const ex = sx + Math.cos(desired) * beamLen;
               const ey = sy + Math.sin(desired) * beamLen;
@@ -2350,21 +2358,51 @@ export class GameEngine {
                 color: "oklch(0.92 0.20 60)", size: 1.5 + Math.random() * 1.8,
               });
             }
-            // Hit only if target is within beam cone AND closer than the blocker
+            // During overload: spawn molten "burn-through" particles along cover blocks
+            // it punches through, so the player visually reads the pierce.
+            if (overload && !this.lowPower && Math.random() < 0.5) {
+              for (const pl of this.platforms) {
+                if (pl.kind !== "cover") continue;
+                // Beam axis-aligned segment crossing the cover bbox
+                const inX = sx + Math.cos(desired);
+                if ((pl.x < target.x && pl.x + pl.w > sx) || (pl.x < sx && pl.x + pl.w > target.x)) {
+                  const burnX = pl.x + Math.random() * pl.w;
+                  const burnY = pl.y + Math.random() * pl.h;
+                  this.particles.push({
+                    x: burnX, y: burnY,
+                    vx: (Math.random() - 0.5) * 80, vy: -40 - Math.random() * 80,
+                    life: 0.45, maxLife: 0.45,
+                    color: Math.random() < 0.5 ? "oklch(0.78 0.28 28)" : "oklch(0.95 0.20 70)",
+                    size: 1.6 + Math.random() * 2.2,
+                  });
+                  void inX;
+                }
+              }
+            }
+            // Hit if target is within beam cone AND closer than the blocker (or overload pierces)
             const ang = Math.abs(((angle - desired + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
             const targetDist = Math.hypot(dx, dy);
-            if (ang < 0.18 && targetDist < beamLen) {
-              const dps = m.damage; // per active second
+            const inBeam = ang < (overload ? 0.22 : 0.18) && targetDist < beamLen;
+            if (inBeam) {
+              // Damage per second = m.damage normally (1 dps -> 10 total over 10s).
+              // Overload triples the rate so the final 3s adds a real punch.
+              const dps = m.damage * (overload ? 3 : 1);
               if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
-                target.hp = Math.max(0, target.hp - dps * (1 / 60));
+                target.hp = Math.max(0, target.hp - dps * dt);
               }
-              target.hitFlash = 0.15;
+              target.hitFlash = overload ? 0.35 : 0.15;
               this.particles.push({
                 x: target.x + (Math.random() - 0.5) * 20, y: target.y + 20 + Math.random() * 30,
                 vx: (Math.random() - 0.5) * 80, vy: -60 - Math.random() * 80,
                 life: 0.5, maxLife: 0.5,
-                color: "oklch(0.85 0.18 60)", size: 2 + Math.random() * 2,
+                color: overload ? "oklch(0.78 0.28 28)" : "oklch(0.85 0.18 60)",
+                size: 2 + Math.random() * 2,
               });
+              if (overload) {
+                // Continuous shake + screen flash during overload contact
+                this.shake = Math.max(this.shake, 6);
+                this.impactFlash = Math.max(this.impactFlash, 0.25);
+              }
               if (target.hp <= 0) { this.phase = "ko"; this.winner = f.id; }
             }
           }
