@@ -373,6 +373,7 @@ export class GameEngine {
   private missiles: Missile[] = [];
   private fireWalls: FireWall[] = [];
   private magmas: MagmaBlast[] = [];
+  private smokeClouds: SmokeCloud[] = [];
   // Global time-freeze (Flash power 1): freezes everything except the freezer.
   private timeFreezeT = 0;
   private timeFreezer: PlayerId | null = null;
