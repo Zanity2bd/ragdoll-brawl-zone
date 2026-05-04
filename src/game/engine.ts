@@ -169,8 +169,8 @@ export class GameEngine {
   ];
 
   private intents: Record<PlayerId, Intents> = {
-    p1: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false },
-    p2: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false },
+    p1: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false, ax: 0, ay: 0, toggleFlight: false },
+    p2: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false, ax: 0, ay: 0, toggleFlight: false },
   };
 
   private teleTargeting: PlayerId | null = null;
