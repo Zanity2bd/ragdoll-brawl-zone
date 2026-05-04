@@ -1021,7 +1021,10 @@ export class GameEngine {
         });
         this.burst(sx, sy, "oklch(0.95 0.18 95)", 22);
         this.shockwaves.push({ x: sx, y: sy, r: 6, rMax: 80, life: 0.3, maxLife: 0.3, color: "oklch(0.95 0.18 95)" });
-        Sfx.play("blip", 0.7); Sfx.play("whoosh", 0.8);
+        // Cast feedback — quick crack + camera kick
+        this.shake = Math.max(this.shake, 10);
+        this.impactFlash = Math.max(this.impactFlash, 0.35);
+        Sfx.play("blip", 0.8); Sfx.play("whoosh", 0.9); Sfx.play("shock", 0.6);
         return true;
       }
       case "superman": {
