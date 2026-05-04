@@ -449,6 +449,8 @@ export class GameEngine {
       dash: null,
       frenzy: null,
       frenzyCd: 0,
+      power1Cd: 0, power2Cd: 0,
+      freezeT: 0,
     };
   }
 
