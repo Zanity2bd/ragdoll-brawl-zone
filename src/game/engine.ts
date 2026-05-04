@@ -764,14 +764,17 @@ export class GameEngine {
     }
   }
 
-  private emit() {
-    this.onSnapshot?.({
+  private buildSnapshot(): GameSnapshot {
+    return {
       p1: this.snapPlayer(this.p1),
       p2: this.snapPlayer(this.p2),
       winner: this.winner, phase: this.phase,
       slowmo: this.slowmoT > 0,
       teleTargeting: this.teleTargeting !== null,
-    });
+    };
+  }
+  private emit() {
+    this.onSnapshot?.(this.buildSnapshot());
   }
   private snapPlayer(f: Fighter): PlayerState {
     return {
