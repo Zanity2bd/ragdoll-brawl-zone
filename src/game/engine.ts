@@ -3491,18 +3491,22 @@ export class GameEngine {
 
     if (skin.cape) {
       ctx.save();
-      const sway = Math.sin(f.walkPhase * 0.6) * 3 + (-f.facing) * Math.min(10, Math.abs(f.vx) * 0.05);
+      const wobble = Math.sin(f.walkPhase * 0.6) * 2;
+      const sw = f.capeSwingX + wobble;        // bottom horizontal sway
+      const swMid = sw * 0.55;                 // anchored near shoulders
+      const lift = f.capeLift * 14;            // raises bottom edge in flight/sprints
+      const curl = -Math.sign(sw) * Math.min(6, Math.abs(sw) * 0.35); // trailing whip curl
       ctx.fillStyle = skin.cape;
       ctx.beginPath();
       ctx.moveTo(-7, shoulderY - 2);
       ctx.lineTo(7, shoulderY - 2);
-      ctx.quadraticCurveTo(11 + sway * f.facing, hipY + 22, 5 + sway * f.facing, hipY + 40);
-      ctx.lineTo(-5 + sway * f.facing, hipY + 40);
-      ctx.quadraticCurveTo(-11 + sway * f.facing, hipY + 22, -7, shoulderY - 2);
+      ctx.quadraticCurveTo(11 + swMid, hipY + 22 - lift * 0.4, 5 + sw + curl, hipY + 40 - lift);
+      ctx.lineTo(-5 + sw + curl, hipY + 40 - lift);
+      ctx.quadraticCurveTo(-11 + swMid, hipY + 22 - lift * 0.4, -7, shoulderY - 2);
       ctx.fill();
       if (skin.capeAccent) {
         ctx.fillStyle = skin.capeAccent;
-        ctx.fillRect(-1.5 + sway * f.facing * 0.5, shoulderY, 3, hipY + 36 - shoulderY);
+        ctx.fillRect(-1.5 + swMid * 0.5, shoulderY, 3, hipY + 36 - shoulderY - lift * 0.6);
       }
       ctx.restore();
     }
