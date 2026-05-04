@@ -1,7 +1,7 @@
 // OgunArena — Canvas 2D engine v3 (a Blkdom production)
 // Per-skin signature melees with impact frames, ragdoll, slow-mo, SFX.
 
-import { computeWalkPose, computeAttackPose, computeRagdollPose, type Pose } from "./animation";
+import { computeWalkPose, computeAttackPose, computeRagdollPose, computeFlightPose, type Pose } from "./animation";
 import { getMap, type MapId } from "./maps";
 import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
@@ -1039,7 +1039,9 @@ export class GameEngine {
   // ---------------- POSE ----------------
   private poseFor(f: Fighter): Pose {
     if (f.ragdollT > 0) return computeRagdollPose(f.ragdollPhase, FIGHTER_H);
-    const base = computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, f.facing, FIGHTER_H);
+    const base = f.flying
+      ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, f.facing, FIGHTER_H)
+      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, f.facing, FIGHTER_H);
     if (f.meleeKind) {
       const m = f.move;
       const wp = m.windup / f.meleeDur;

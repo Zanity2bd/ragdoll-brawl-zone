@@ -421,26 +421,30 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
           side="left"
           color="oklch(0.85 0.18 210)"
           p={snap.p1}
-          onMove={(x) => {
+          onMove={(x, y) => {
             engine.setIntent("p1", { left: x < -0.25, right: x > 0.25 });
+            engine.setAirSteering("p1", x, y);
           }}
           onJump={() => engine.pressJump("p1")}
           onFire={() => engine.pressFire("p1")}
           onPunch={() => engine.pressMelee("p1")}
           onTele={() => engine.pressTeleport("p1")}
+          canFly={engine.canFly("p1")}
         />
         {!cpu && (
           <PlayerControls
             side="right"
             color="oklch(0.72 0.28 340)"
             p={snap.p2}
-            onMove={(x) => {
+            onMove={(x, y) => {
               engine.setIntent("p2", { left: x < -0.25, right: x > 0.25 });
+              engine.setAirSteering("p2", x, y);
             }}
             onJump={() => engine.pressJump("p2")}
             onFire={() => engine.pressFire("p2")}
             onPunch={() => engine.pressMelee("p2")}
             onTele={() => engine.pressTeleport("p2")}
+            canFly={engine.canFly("p2")}
           />
         )}
       </div>
@@ -449,16 +453,17 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
 }
 
 function PlayerControls({
-  side, color, p, onMove, onJump, onFire, onPunch, onTele,
+  side, color, p, onMove, onJump, onFire, onPunch, onTele, canFly,
 }: {
   side: "left" | "right";
   color: string;
   p: GameSnapshot["p1"];
-  onMove: (x: number) => void;
+  onMove: (x: number, y: number) => void;
   onJump: () => void;
   onFire: () => void;
   onPunch: () => void;
   onTele: () => void;
+  canFly?: boolean;
 }) {
   const isHeatwave = p.name === "Heatwave";
   const isNightcrawler = p.name === "Nightcrawler";
@@ -475,22 +480,24 @@ function PlayerControls({
         onSpecial={onSpecial}
         specialCd={cd}
         specialMax={max}
-        specialLabel={label}
+        specialLabel={canFly ? `${label} · Fly` : label}
+        verticalSteer={!!canFly}
       />
     </div>
   );
 }
 
 function Joystick({
-  color, onMove, onJump, onSpecial, specialCd, specialMax, specialLabel,
+  color, onMove, onJump, onSpecial, specialCd, specialMax, specialLabel, verticalSteer,
 }: {
   color: string;
-  onMove: (x: number) => void;
+  onMove: (x: number, y: number) => void;
   onJump: () => void;
   onSpecial: () => void;
   specialCd: number;
   specialMax: number;
   specialLabel: string;
+  verticalSteer?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const idRef = useRef<number | null>(null);
@@ -539,12 +546,13 @@ function Joystick({
     const cl = Math.min(d, max);
     const nx = (dx / d) * cl, ny = (dy / d) * cl;
     setKnob({ x: nx, y: ny });
-    onMove(nx / max);
+    onMove(nx / max, ny / max);
     if (Math.hypot(nx, ny) / max > 0.22) {
       movedFar.current = true;
       cancelHold();
     }
-    if (ny / max < -0.55 && Date.now() - lastUpY.current > 350) {
+    // For non-flyers, swiping up = jump (one-shot). Flyers steer up directly.
+    if (!verticalSteer && ny / max < -0.55 && Date.now() - lastUpY.current > 350) {
       lastUpY.current = Date.now();
       onJump();
     }
@@ -577,9 +585,9 @@ function Joystick({
         cancelHold();
         movedFar.current = false;
         setKnob({ x: 0, y: 0 });
-        onMove(0);
+        onMove(0, 0);
       }}
-      onPointerCancel={() => { idRef.current = null; cancelHold(); movedFar.current = false; setKnob({ x: 0, y: 0 }); onMove(0); }}
+      onPointerCancel={() => { idRef.current = null; cancelHold(); movedFar.current = false; setKnob({ x: 0, y: 0 }); onMove(0, 0); }}
     >
       <span className={arrow} style={{ top: 6, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▲</span>
       <span className={arrow} style={{ bottom: 6, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▼</span>
