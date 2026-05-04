@@ -6,6 +6,7 @@ import { getMap, type MapId } from "./maps";
 import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
 import { Sfx } from "./sfx";
+import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, type WobbleState } from "./wobble";
 import { CpuController, type Difficulty } from "./ai";
 
 export type PlayerId = "p1" | "p2";
