@@ -504,15 +504,17 @@ function CdPill({ label, cd, max, color }: { label: string; cd: number; max: num
   const pct = ready ? 100 : (1 - cd / max) * 100;
   return (
     <div
-      className="relative px-3 py-1 rounded-sm border font-mono text-[10px] tracking-widest uppercase overflow-hidden"
+      className="relative px-2.5 py-1 rounded-md font-mono text-[10px] tracking-widest uppercase overflow-hidden"
       style={{
-        borderColor: ready ? color : "oklch(0.4 0.05 250)",
-        color: ready ? color : "oklch(0.6 0.03 250)",
+        background: "linear-gradient(180deg, oklch(0.16 0.04 275 / 0.85), oklch(0.10 0.03 275 / 0.95))",
+        border: `1px solid ${ready ? color : "oklch(0.35 0.06 280 / 0.5)"}`,
+        color: ready ? color : "oklch(0.55 0.04 280)",
+        boxShadow: ready ? `0 0 10px ${color}, inset 0 1px 0 oklch(0.95 0.05 290 / 0.15)` : "inset 0 1px 0 oklch(0.95 0.05 290 / 0.06)",
       }}
     >
       <div
-        className="absolute inset-y-0 left-0 opacity-20"
-        style={{ width: `${pct}%`, background: color }}
+        className="absolute inset-y-0 left-0 transition-[width] duration-150"
+        style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in oklab, ${color} 35%, transparent), transparent)` }}
       />
       <span className="relative">{label}</span>
     </div>
