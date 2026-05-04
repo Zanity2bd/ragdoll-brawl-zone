@@ -477,30 +477,31 @@ export function computeFlightPose(
 
   const shoulderY = 28 + bob;
   const hipY = 56 + bob * 0.5;
-  // Head leads the body forward into the wind when cruising.
-  const headOffsetY = -3 + bob * 0.4 - horiz * 1.2;
+  // Head sits naturally on the neck — no aggressive forward push that detaches it.
+  const headOffsetY = -2 + bob * 0.3 - horiz * 0.4;
 
-  // ---- Legs: trail straight back when cruising, hang when hovering ----
+  // ---- Legs: trail straight back when cruising, hang naturally when hovering ----
   const back = -facing;
-  const flutter = Math.sin(phase * 2.6) * (0.6 + (1 - horiz) * 1.4);
-  const trailReach = 8 + horiz * 38;          // longer streak when fast
-  const kneeReach = 4 + horiz * 22;
+  // Flutter only when actually moving — at hover the legs hang still, not splay.
+  const flutter = Math.sin(phase * 2.6) * (0.4 * horiz);
+  const trailReach = horiz * 38;              // 0 at hover (no sideways splay)
+  const kneeReach = horiz * 22;
   // Legs hang vertically at hover, splay back at cruise
-  const droop = (1 - horiz) * 16 * (goingUp ? 0.3 : 1);
+  const droop = (1 - horiz) * 18 * (goingUp ? 0.3 : 1);
   const verticalLean = goingUp ? 0.4 : (goingDown ? -0.18 : 0);
   const vY = verticalLean * 22;
 
   // Cruise: knees nearly straight (very little Y separation between knee & foot).
   // Hover: knees bent ~90deg with feet hanging below.
-  const footBaseY = hipY + 22 + droop + bob - horiz * 14;
+  const footBaseY = hipY + 24 + droop - horiz * 14;
   const kneeBaseY = hipY + 12 + droop * 0.6 - horiz * 8;
 
-  // Slight stagger between legs for organic feel
-  const legSplit = 4 + (1 - horiz) * 2;
-  const footLX = back * trailReach - legSplit * facing * 0.5;
-  const footRX = back * trailReach + legSplit * facing * 0.5;
-  const kneeLX = back * kneeReach - legSplit * facing * 0.4;
-  const kneeRX = back * kneeReach + legSplit * facing * 0.4;
+  // Slight stagger between legs for organic feel — feet stay near body at hover
+  const legSplit = 3;
+  const footLX = back * trailReach - legSplit * 0.5;
+  const footRX = back * trailReach + legSplit * 0.5;
+  const kneeLX = back * kneeReach - legSplit * 0.4;
+  const kneeRX = back * kneeReach + legSplit * 0.4;
 
   const footL: [number, number] = [footLX + sway * 0.3, footBaseY - vY + flutter];
   const footR: [number, number] = [footRX + sway * 0.3, footBaseY - vY - flutter * 0.7];
