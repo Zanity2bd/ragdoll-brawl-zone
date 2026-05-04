@@ -236,81 +236,166 @@ function SkinThumb({ skin }: { skin: Skin }) {
         ctx.setTransform(c.width / W, 0, 0, c.height / H, 0, 0);
         ctx.clearRect(0, 0, W, H);
 
-        // background plate
+        // background plate (subtle radial, no neon)
         const grad = ctx.createRadialGradient(W / 2, H / 2, 8, W / 2, H / 2, 130);
-        grad.addColorStop(0, skin.glow.replace(")", " / 0.22)"));
-        grad.addColorStop(1, "oklch(0.1 0.02 280 / 0)");
+        grad.addColorStop(0, "oklch(0.22 0.02 280 / 0.5)");
+        grad.addColorStop(1, "oklch(0.10 0.02 280 / 0)");
         ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
 
         const cx = W / 2;
-        const breath = Math.sin(t * 1.5) * 1.2;
+        const breath = Math.sin(t * 1.5) * 1;
+        const headR = 12;
         const headY = 50 + breath;
         const shoulderY = 78 + breath;
         const hipY = 130;
-        const feetY = 190;
+        const feetY = 188;
 
+        // soft shadow under feet
+        ctx.fillStyle = "oklch(0 0 0 / 0.28)";
+        ctx.beginPath(); ctx.ellipse(cx, feetY + 4, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+        // cape
         if (skin.cape) {
+          const sway = Math.sin(t * 1.2) * 4;
           ctx.fillStyle = skin.cape;
-          ctx.shadowBlur = 10; ctx.shadowColor = skin.cape;
           ctx.beginPath();
-          ctx.moveTo(cx - 8, shoulderY);
-          ctx.lineTo(cx + 8, shoulderY);
-          ctx.quadraticCurveTo(cx + 14, hipY + 24, cx + 4, hipY + 50);
-          ctx.lineTo(cx - 4, hipY + 50);
-          ctx.quadraticCurveTo(cx - 14, hipY + 24, cx - 8, shoulderY);
+          ctx.moveTo(cx - 9, shoulderY);
+          ctx.lineTo(cx + 9, shoulderY);
+          ctx.quadraticCurveTo(cx + 14 + sway, hipY + 24, cx + 5 + sway, hipY + 50);
+          ctx.lineTo(cx - 5 + sway, hipY + 50);
+          ctx.quadraticCurveTo(cx - 14 + sway, hipY + 24, cx - 9, shoulderY);
           ctx.fill();
-          ctx.shadowBlur = 0;
+          if (skin.capeAccent) {
+            ctx.fillStyle = skin.capeAccent;
+            ctx.fillRect(cx - 1.5 + sway * 0.3, shoulderY, 3, hipY + 46 - shoulderY);
+          }
         }
 
-        ctx.shadowBlur = 16; ctx.shadowColor = skin.glow;
-        ctx.strokeStyle = skin.body;
-        ctx.lineWidth = skin.thickBody ? 5 : 3.5;
         ctx.lineCap = "round";
+        ctx.lineJoin = "round";
 
-        ctx.beginPath(); ctx.arc(cx, headY, 12, 0, Math.PI * 2); ctx.stroke();
-
-        if (skin.cowlEars) {
-          ctx.fillStyle = skin.body;
-          ctx.beginPath(); ctx.moveTo(cx - 10, headY - 10); ctx.lineTo(cx - 14, headY - 22); ctx.lineTo(cx - 2, headY - 12); ctx.fill();
-          ctx.beginPath(); ctx.moveTo(cx + 10, headY - 10); ctx.lineTo(cx + 14, headY - 22); ctx.lineTo(cx + 2, headY - 12); ctx.fill();
-        }
-
-        ctx.beginPath(); ctx.moveTo(cx, shoulderY); ctx.lineTo(cx, hipY); ctx.stroke();
-
+        // limbs (curved with quad)
+        const armSwing = Math.sin(t * 2) * 5;
         ctx.strokeStyle = skin.limb ?? skin.body;
-        const sw = Math.sin(t * 2) * 4;
+        ctx.lineWidth = skin.thickBody ? 4.5 : 3.5;
+        // arms
+        const handLX = cx - 18 + armSwing;
+        const handRX = cx + 18 - armSwing;
+        const handY = shoulderY + 38;
         ctx.beginPath();
-        ctx.moveTo(cx, shoulderY); ctx.lineTo(cx - 14, shoulderY + 18); ctx.lineTo(cx - 18 + sw, shoulderY + 36);
-        ctx.moveTo(cx, shoulderY); ctx.lineTo(cx + 14, shoulderY + 18); ctx.lineTo(cx + 18 - sw, shoulderY + 36);
-        ctx.stroke();
+        ctx.moveTo(cx - 4, shoulderY); ctx.quadraticCurveTo(cx - 14, shoulderY + 18, handLX, handY); ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(cx, hipY); ctx.lineTo(cx - 8, (hipY + feetY) / 2); ctx.lineTo(cx - 10, feetY);
-        ctx.moveTo(cx, hipY); ctx.lineTo(cx + 8, (hipY + feetY) / 2); ctx.lineTo(cx + 10, feetY);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+        ctx.moveTo(cx + 4, shoulderY); ctx.quadraticCurveTo(cx + 14, shoulderY + 18, handRX, handY); ctx.stroke();
+        // legs (idle slight stagger)
+        const legSway = Math.sin(t * 2 + Math.PI) * 2;
+        const footLX = cx - 9 + legSway;
+        const footRX = cx + 9 - legSway;
+        ctx.beginPath();
+        ctx.moveTo(cx - 3, hipY); ctx.quadraticCurveTo(cx - 8, (hipY + feetY) / 2 + 4, footLX, feetY); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx + 3, hipY); ctx.quadraticCurveTo(cx + 8, (hipY + feetY) / 2 + 4, footRX, feetY); ctx.stroke();
 
-        if (skin.glowingEyes) {
-          ctx.fillStyle = skin.glowingEyes;
-          ctx.shadowBlur = 10; ctx.shadowColor = skin.glowingEyes;
-          ctx.beginPath(); ctx.arc(cx - 4, headY, 2, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.arc(cx + 4, headY, 2, 0, Math.PI * 2); ctx.fill();
-          ctx.shadowBlur = 0;
+        // boots
+        if (skin.boots) {
+          ctx.fillStyle = skin.boots;
+          ctx.beginPath(); ctx.ellipse(footLX, feetY - 1, 5.5, 2.8, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(footRX, feetY - 1, 5.5, 2.8, 0, 0, Math.PI * 2); ctx.fill();
         }
+        // gloves
+        if (skin.gloves) {
+          ctx.fillStyle = skin.gloves;
+          ctx.beginPath(); ctx.arc(handLX, handY, 3.6, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(handRX, handY, 3.6, 0, Math.PI * 2); ctx.fill();
+        }
+
+        // torso
+        ctx.strokeStyle = skin.body;
+        ctx.lineWidth = skin.thickBody ? 6 : 4.5;
+        ctx.beginPath(); ctx.moveTo(cx, shoulderY); ctx.lineTo(cx, hipY); ctx.stroke();
+        // shoulder caps
+        ctx.fillStyle = skin.body;
+        ctx.beginPath(); ctx.arc(cx - 4, shoulderY, 2.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 4, shoulderY, 2.5, 0, Math.PI * 2); ctx.fill();
+
+        // emblem
         if (skin.emblem) {
           const ey = (shoulderY + hipY) / 2;
           ctx.fillStyle = skin.emblem.color;
-          ctx.shadowBlur = 8; ctx.shadowColor = skin.emblem.color;
-          if (skin.emblem.shape === "oval") { ctx.beginPath(); ctx.ellipse(cx, ey, 8, 4, 0, 0, Math.PI * 2); ctx.fill(); }
+          if (skin.emblem.shape === "oval") { ctx.beginPath(); ctx.ellipse(cx, ey, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill(); }
           else if (skin.emblem.shape === "circle") { ctx.beginPath(); ctx.arc(cx, ey, 5, 0, Math.PI * 2); ctx.fill(); }
           else if (skin.emblem.shape === "shield") { ctx.beginPath(); ctx.moveTo(cx - 6, ey - 4); ctx.lineTo(cx + 6, ey - 4); ctx.lineTo(cx, ey + 6); ctx.fill(); }
-          else if (skin.emblem.shape === "stripe") { ctx.fillRect(cx - 3, shoulderY + 4, 6, hipY - shoulderY - 8); }
+          else if (skin.emblem.shape === "stripe") { ctx.fillRect(cx - 2.5, shoulderY + 4, 5, hipY - shoulderY - 8); }
           else if (skin.emblem.shape === "spider") {
             ctx.beginPath(); ctx.arc(cx, ey, 3, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = skin.emblem.color; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(cx - 6, ey - 3); ctx.lineTo(cx + 6, ey + 3); ctx.moveTo(cx + 6, ey - 3); ctx.lineTo(cx - 6, ey + 3); ctx.stroke();
+          } else if (skin.emblem.shape === "lightning") {
+            ctx.beginPath();
+            ctx.moveTo(cx - 3, ey - 6); ctx.lineTo(cx + 2, ey - 1); ctx.lineTo(cx - 1, ey - 1);
+            ctx.lineTo(cx + 3, ey + 6); ctx.lineTo(cx - 2, ey + 1); ctx.lineTo(cx + 1, ey + 1);
+            ctx.closePath(); ctx.fill();
           }
+        }
+
+        // HEAD — filled mask + optional skin tone face
+        ctx.fillStyle = skin.head ?? skin.body;
+        ctx.beginPath(); ctx.arc(cx, headY, headR, 0, Math.PI * 2); ctx.fill();
+        if (skin.skinTone) {
+          ctx.fillStyle = skin.skinTone;
+          ctx.beginPath(); ctx.ellipse(cx + 1.5, headY + 2, headR - 3, headR - 4.5, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        // cowl ears
+        if (skin.cowlEars) {
+          ctx.fillStyle = skin.head ?? skin.body;
+          ctx.beginPath(); ctx.moveTo(cx - 9, headY - 8); ctx.lineTo(cx - 13, headY - 20); ctx.lineTo(cx - 1, headY - 10); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(cx + 9, headY - 8); ctx.lineTo(cx + 13, headY - 20); ctx.lineTo(cx + 1, headY - 10); ctx.fill();
+        }
+        // hair tufts
+        if (skin.id === "homelander") {
+          ctx.fillStyle = "oklch(0.78 0.10 85)";
+          ctx.beginPath();
+          ctx.moveTo(cx - 9, headY - 8);
+          ctx.quadraticCurveTo(cx + 4, headY - 16, cx + 9, headY - 8);
+          ctx.quadraticCurveTo(cx, headY - 11, cx - 9, headY - 8);
+          ctx.fill();
+        }
+        if (skin.id === "superman") {
+          ctx.fillStyle = "oklch(0.18 0.02 30)";
+          ctx.beginPath();
+          ctx.moveTo(cx - 9, headY - 7);
+          ctx.quadraticCurveTo(cx, headY - 16, cx + 9, headY - 7);
+          ctx.quadraticCurveTo(cx + 7, headY - 4, cx - 7, headY - 4);
+          ctx.fill();
+          ctx.beginPath(); ctx.arc(cx - 1, headY - 3, 1.6, 0, Math.PI * 2); ctx.fill();
+        }
+        // beard
+        if (skin.beard) {
+          ctx.fillStyle = "oklch(0.14 0.02 60)";
+          ctx.beginPath(); ctx.ellipse(cx, headY + 5, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillRect(cx - 5, headY + 1, 10, 1.4);
+        }
+        // eyes
+        const eyeColor = skin.id === "spiderman" ? "oklch(0.95 0.02 250)" : "oklch(0.10 0 0)";
+        ctx.fillStyle = eyeColor;
+        if (skin.id === "spiderman") {
+          ctx.beginPath(); ctx.ellipse(cx - 4, headY - 1, 3.5, 2.2, -0.35, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(cx + 4, headY - 1, 3.5, 2.2, 0.35, 0, Math.PI * 2); ctx.fill();
+        } else if (skin.cowlEars) {
+          ctx.fillStyle = "oklch(0.92 0.02 250)";
+          ctx.fillRect(cx - 6, headY - 1, 4, 1.8);
+          ctx.fillRect(cx + 2, headY - 1, 4, 1.8);
+        } else {
+          ctx.beginPath(); ctx.arc(cx - 3, headY, 1.5, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(cx + 3, headY, 1.5, 0, Math.PI * 2); ctx.fill();
+        }
+        if (skin.glowingEyes) {
+          ctx.fillStyle = skin.glowingEyes;
+          ctx.shadowBlur = 8; ctx.shadowColor = skin.glowingEyes;
+          ctx.beginPath(); ctx.arc(cx - 3, headY, 2, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(cx + 3, headY, 2, 0, Math.PI * 2); ctx.fill();
           ctx.shadowBlur = 0;
         }
+
         ctx.restore();
       }
       raf = requestAnimationFrame(loop);

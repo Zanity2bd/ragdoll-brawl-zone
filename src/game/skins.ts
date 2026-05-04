@@ -1,4 +1,4 @@
-// Skin catalog — Marvel / DC / The Boys (stickman style)
+// Skin catalog — Marvel / DC / The Boys (premium stickman style, non-neon)
 
 export type SkinId =
   | "spiderman" | "ironman" | "hulk"
@@ -11,59 +11,95 @@ export interface Skin {
   id: SkinId;
   name: string;
   universe: Universe;
-  body: string;       // line color
-  glow: string;       // shadow color
-  limb?: string;      // optional separate limb color
-  cape?: string;      // cape color (drawn behind torso)
-  capeAccent?: string;
+  body: string;             // torso line color
+  limb?: string;            // arms/legs line color
+  head?: string;            // head outline (mask) color — defaults to body
+  skinTone?: string;        // exposed face skin (drawn as filled head)
+  gloves?: string;          // colored hand "fists"
+  boots?: string;           // colored feet
+  cape?: string;            // cape fill
+  capeAccent?: string;      // cape inner stripe / lining
   cowlEars?: boolean;
-  glowingEyes?: string;     // color of laser eyes
-  emblem?: { shape: "oval" | "shield" | "circle" | "stripe" | "spider"; color: string };
+  glowingEyes?: string;
+  emblem?: { shape: "oval" | "shield" | "circle" | "stripe" | "spider" | "lightning"; color: string };
   thickBody?: boolean;
-  streaks?: string;         // motion streak color
   beard?: boolean;
+  glow: string;             // subtle accent glow (used sparingly for emblem/eyes only)
+  streaks?: string;
 }
 
 export const SKINS: Skin[] = [
   // Marvel
   { id: "spiderman", name: "Spider-Man", universe: "Marvel",
-    body: "oklch(0.65 0.22 25)", glow: "oklch(0.7 0.25 20)",
-    limb: "oklch(0.55 0.22 260)",
-    emblem: { shape: "spider", color: "oklch(0.2 0.05 260)" } },
+    body: "oklch(0.50 0.16 25)", limb: "oklch(0.32 0.12 260)",
+    head: "oklch(0.50 0.16 25)",
+    gloves: "oklch(0.50 0.16 25)", boots: "oklch(0.50 0.16 25)",
+    emblem: { shape: "spider", color: "oklch(0.18 0.04 260)" },
+    glow: "oklch(0.55 0.18 20)" },
+
   { id: "ironman", name: "Iron Man", universe: "Marvel",
-    body: "oklch(0.6 0.22 25)", glow: "oklch(0.85 0.18 85)",
-    limb: "oklch(0.85 0.18 85)", thickBody: true,
-    emblem: { shape: "circle", color: "oklch(0.95 0.15 200)" } },
+    body: "oklch(0.48 0.18 25)", limb: "oklch(0.65 0.16 85)",
+    head: "oklch(0.65 0.16 85)",
+    gloves: "oklch(0.65 0.16 85)", boots: "oklch(0.65 0.16 85)",
+    emblem: { shape: "circle", color: "oklch(0.78 0.14 200)" },
+    thickBody: true,
+    glow: "oklch(0.78 0.14 200)" },
+
   { id: "hulk", name: "Hulk", universe: "Marvel",
-    body: "oklch(0.65 0.22 145)", glow: "oklch(0.7 0.25 140)",
-    thickBody: true },
+    body: "oklch(0.45 0.16 145)", limb: "oklch(0.45 0.16 145)",
+    head: "oklch(0.45 0.16 145)",
+    boots: "oklch(0.32 0.10 290)",
+    thickBody: true,
+    glow: "oklch(0.55 0.16 145)" },
 
   // DC
   { id: "batman", name: "Batman", universe: "DC",
-    body: "oklch(0.25 0.02 280)", glow: "oklch(0.5 0.1 280)",
-    cape: "oklch(0.2 0.02 280)", cowlEars: true,
-    emblem: { shape: "oval", color: "oklch(0.85 0.18 90)" } },
+    body: "oklch(0.18 0.02 280)", limb: "oklch(0.18 0.02 280)",
+    head: "oklch(0.18 0.02 280)",
+    gloves: "oklch(0.18 0.02 280)", boots: "oklch(0.18 0.02 280)",
+    cape: "oklch(0.16 0.02 280)", cowlEars: true,
+    emblem: { shape: "oval", color: "oklch(0.78 0.16 90)" },
+    glow: "oklch(0.40 0.04 280)" },
+
   { id: "superman", name: "Superman", universe: "DC",
-    body: "oklch(0.5 0.22 260)", glow: "oklch(0.65 0.25 255)",
-    cape: "oklch(0.55 0.22 25)", capeAccent: "oklch(0.7 0.25 20)",
-    emblem: { shape: "shield", color: "oklch(0.85 0.18 85)" } },
+    body: "oklch(0.40 0.18 260)", limb: "oklch(0.40 0.18 260)",
+    head: "oklch(0.30 0.05 30)", skinTone: "oklch(0.72 0.08 50)",
+    gloves: "oklch(0.40 0.18 260)", boots: "oklch(0.50 0.20 25)",
+    cape: "oklch(0.45 0.20 25)", capeAccent: "oklch(0.55 0.22 20)",
+    emblem: { shape: "shield", color: "oklch(0.78 0.16 85)" },
+    glow: "oklch(0.55 0.18 255)" },
+
   { id: "flash", name: "The Flash", universe: "DC",
-    body: "oklch(0.6 0.22 25)", glow: "oklch(0.85 0.18 85)",
-    streaks: "oklch(0.9 0.18 85)",
-    emblem: { shape: "shield", color: "oklch(0.95 0.15 90)" } },
+    body: "oklch(0.50 0.20 25)", limb: "oklch(0.50 0.20 25)",
+    head: "oklch(0.50 0.20 25)",
+    gloves: "oklch(0.78 0.16 85)", boots: "oklch(0.78 0.16 85)",
+    streaks: "oklch(0.85 0.16 85)",
+    emblem: { shape: "lightning", color: "oklch(0.85 0.16 85)" },
+    glow: "oklch(0.78 0.16 85)" },
 
   // The Boys
   { id: "homelander", name: "Homelander", universe: "The Boys",
-    body: "oklch(0.4 0.15 260)", glow: "oklch(0.6 0.2 255)",
-    cape: "oklch(0.55 0.22 25)", capeAccent: "oklch(0.95 0.02 250)",
-    glowingEyes: "oklch(0.95 0.15 60)" },
+    body: "oklch(0.78 0.06 250)", limb: "oklch(0.78 0.06 250)",
+    head: "oklch(0.30 0.05 30)", skinTone: "oklch(0.74 0.08 50)",
+    gloves: "oklch(0.40 0.16 260)", boots: "oklch(0.40 0.16 260)",
+    cape: "oklch(0.45 0.20 25)", capeAccent: "oklch(0.92 0.04 250)",
+    glowingEyes: "oklch(0.82 0.18 60)",
+    glow: "oklch(0.55 0.18 30)" },
+
   { id: "butcher", name: "Butcher", universe: "The Boys",
-    body: "oklch(0.2 0.02 280)", glow: "oklch(0.45 0.05 280)",
-    thickBody: true, beard: true },
+    body: "oklch(0.18 0.02 60)", limb: "oklch(0.32 0.04 70)",
+    head: "oklch(0.30 0.05 30)", skinTone: "oklch(0.68 0.06 50)",
+    gloves: "oklch(0.18 0.02 60)", boots: "oklch(0.14 0.01 60)",
+    thickBody: true, beard: true,
+    glow: "oklch(0.40 0.04 60)" },
+
   { id: "atrain", name: "A-Train", universe: "The Boys",
-    body: "oklch(0.55 0.22 25)", glow: "oklch(0.7 0.25 20)",
-    streaks: "oklch(0.95 0.05 90)",
-    emblem: { shape: "stripe", color: "oklch(0.95 0.02 250)" } },
+    body: "oklch(0.45 0.20 25)", limb: "oklch(0.45 0.20 25)",
+    head: "oklch(0.45 0.20 25)",
+    gloves: "oklch(0.92 0.02 250)", boots: "oklch(0.92 0.02 250)",
+    streaks: "oklch(0.92 0.02 250)",
+    emblem: { shape: "stripe", color: "oklch(0.92 0.02 250)" },
+    glow: "oklch(0.55 0.18 25)" },
 ];
 
 export function getSkin(id: SkinId): Skin {
