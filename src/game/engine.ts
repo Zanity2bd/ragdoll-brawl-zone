@@ -632,6 +632,7 @@ export class GameEngine {
     this.magmas = [];
     this.smokeClouds = [];
     this.homelanderVoPlayed = false;
+    this.pendingSfx = [];
     this.timeFreezeT = 0; this.timeFreezer = null;
     this.teleTargeting = null;
     this.slowmoT = 0; this.slowmoMode = null;
@@ -2268,10 +2269,11 @@ export class GameEngine {
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
-    // Homelander laser SFX — plays once per match, on his first laser cast.
+    // Homelander laser SFX — plays once per match, synced to the beam's first
+    // active frame (after the windup) so the audio onset matches the visual.
     if (m.kind === "laserSweep" && f.skin.id === "homelander" && !this.homelanderVoPlayed) {
       this.homelanderVoPlayed = true;
-      Sfx.play("homelanderLaser", 1.0);
+      this.pendingSfx.push({ at: this.elapsed + m.windup, name: "homelanderLaser", vol: 1.0 });
     }
     // Flash blink: instantly teleport behind opponent
     if (m.kind === "phaseStrike") {
