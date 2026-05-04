@@ -552,20 +552,97 @@ export class GameEngine {
     const localScale = f.slowedT > 0 ? 0.25 : 1;
     const ldt = dt * localScale;
 
-    // Ragdoll mode bypasses input
+    // Decay timers (always)
+    if (f.iframeT > 0) f.iframeT = Math.max(0, f.iframeT - dt);
+    if (f.ragdollImmuneT > 0) f.ragdollImmuneT = Math.max(0, f.ragdollImmuneT - dt);
+
+    // Ragdoll mode bypasses input — physics-driven tumble
     if (f.ragdollT > 0) {
       f.ragdollT -= dt;
       f.ragdollPhase += dt;
-      f.vy += GRAVITY * ldt;
+      f.vy += GRAVITY * 0.95 * ldt;
+      // Air drag
+      f.vx *= Math.pow(0.985, dt * 60);
+      f.vy *= Math.pow(0.995, dt * 60);
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
-      f.vx *= 0.985;
-      if (f.x < 30) { f.x = 30; f.vx = -f.vx * 0.4; }
-      if (f.x > W - 30) { f.x = W - 30; f.vx = -f.vx * 0.4; }
+      // Angular: torque from horizontal speed; damp gradually
+      const targetAV = Math.sign(f.vx) * Math.min(12, Math.abs(f.vx) * 0.02);
+      f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 2);
+      f.ragdollAV *= Math.pow(0.97, dt * 60);
+      f.ragdollAng += f.ragdollAV * dt;
+      // Walls — bounce with energy loss
+      if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
+      if (f.x > W - 30) { f.x = W - 30; f.vx = -Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
+      // Ground impact
       if (f.y + FIGHTER_H >= GROUND_Y) {
         f.y = GROUND_Y - FIGHTER_H;
-        if (Math.abs(f.vy) > 80) { f.vy = -f.vy * 0.35; this.shake = Math.max(this.shake, 8); Sfx.play("thud", 0.4); }
-        else { f.vy = 0; f.onGround = true; }
+        const impact = Math.abs(f.vy);
+        if (impact > 120) {
+          // Bounce, lose energy
+          f.vy = -impact * 0.32;
+          f.vx *= 0.55;
+          f.ragdollAV *= 0.4;
+          f.ragdollEnergy = Math.max(0, f.ragdollEnergy - 0.25);
+          this.shake = Math.max(this.shake, Math.min(14, impact * 0.05));
+          Sfx.play("thud", Math.min(0.6, impact / 600));
+          // Dust puff
+          if (!this.lowPower) {
+            for (let i = 0; i < 6; i++) {
+              this.particles.push({
+                x: f.x + (Math.random() - 0.5) * 24,
+                y: GROUND_Y - 4,
+                vx: (Math.random() - 0.5) * 80,
+                vy: -20 - Math.random() * 40,
+                life: 0.4, maxLife: 0.4,
+                color: "oklch(0.7 0.02 60)",
+                size: 2 + Math.random() * 2,
+              });
+            }
+          }
+        } else {
+          f.vy = 0;
+          f.vx *= Math.pow(0.6, dt * 60);
+          f.ragdollAV *= Math.pow(0.7, dt * 60);
+          f.onGround = true;
+          // Settle when slow enough
+          if (Math.abs(f.vx) < 30 && Math.abs(f.ragdollAV) < 1.2) {
+            // Transition: ragdoll → downed (laydown)
+            f.ragdollT = 0;
+            f.downedT = 0.55; // brief lay on ground
+            // Snap ragdoll angle toward nearest 90° (face-down/up) for stable laydown
+            const target = Math.abs(Math.sin(f.ragdollAng)) > 0.5 ? Math.PI / 2 * Math.sign(Math.sin(f.ragdollAng)) : 0;
+            f.ragdollAng = target;
+            f.ragdollAV = 0;
+          }
+        }
+      }
+      return;
+    }
+
+    // Downed (laying on ground) — locked, then triggers get-up
+    if (f.downedT > 0) {
+      f.downedT -= dt;
+      f.vx *= Math.pow(0.5, dt * 60);
+      f.vy = 0;
+      f.onGround = true;
+      if (f.downedT <= 0) {
+        f.getUpDur = 0.45;
+        f.getUpT = f.getUpDur;
+      }
+      return;
+    }
+
+    // Get-up animation — locked but visually rising
+    if (f.getUpT > 0) {
+      f.getUpT -= dt;
+      f.vx *= Math.pow(0.4, dt * 60);
+      f.vy = 0;
+      f.onGround = true;
+      if (f.getUpT <= 0) {
+        f.iframeT = 1.0;            // 1s post-rise invulnerability
+        f.ragdollImmuneT = 2.0;     // additional anti-chain window (no re-ragdoll)
+        f.ragdollAng = 0; f.ragdollAV = 0; f.ragdollEnergy = 0;
       }
       return;
     }
