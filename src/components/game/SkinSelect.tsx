@@ -14,24 +14,24 @@ export function SkinSelect({
   const [p2, setP2] = useState<SkinId>("homelander");
 
   return (
-    <div className="absolute inset-0 z-20 bg-background/95 backdrop-blur-md flex flex-col items-center justify-center p-4 overflow-auto">
+    <div className="absolute inset-0 z-20 bg-background/95 backdrop-blur-md flex flex-col items-center justify-start sm:justify-center p-3 sm:p-4 overflow-auto">
       <button
         onClick={onBack}
-        className="absolute top-4 left-4 font-mono text-[10px] tracking-widest uppercase text-foreground/50 hover:text-foreground/90"
+        className="absolute top-3 left-3 sm:top-4 sm:left-4 font-mono text-[10px] tracking-widest uppercase text-foreground/60 sm:hover:text-foreground/90 min-h-11 px-2 flex items-center"
       >
-        ← Back to maps
+        ← Maps
       </button>
-      <div className="font-mono text-xs tracking-[0.4em] text-foreground/60 uppercase mb-2">Select Fighters</div>
-      <h2 className="text-3xl md:text-5xl font-black tracking-widest text-foreground mb-8">PICK YOUR HEROES</h2>
+      <div className="font-mono text-[10px] sm:text-xs tracking-[0.4em] text-foreground/60 uppercase mb-2 mt-10 sm:mt-0">Select Fighters</div>
+      <h2 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-widest text-foreground mb-6 sm:mb-8 text-center">PICK YOUR HEROES</h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-5xl">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 w-full max-w-5xl">
         <SkinPicker label="Player 1" accent="oklch(0.85 0.18 210)" value={p1} onChange={setP1} />
         <SkinPicker label="Player 2" accent="oklch(0.72 0.28 340)" value={p2} onChange={setP2} />
       </div>
 
       <button
         onClick={() => onConfirm(p1, p2)}
-        className="mt-10 px-10 py-3 rounded-md font-mono uppercase tracking-[0.3em] text-sm border border-foreground/30 hover:bg-foreground/10 transition-colors text-foreground"
+        className="mt-6 sm:mt-10 mb-4 px-10 py-4 rounded-md font-mono uppercase tracking-[0.3em] text-sm border border-foreground/30 sm:hover:bg-foreground/10 active:bg-foreground/15 transition-colors text-foreground min-h-12"
       >
         FIGHT →
       </button>
@@ -58,8 +58,8 @@ function SkinPicker({
           <button
             key={u}
             onClick={() => setUniverse(u)}
-            className={`flex-1 py-1.5 font-mono text-[10px] tracking-widest uppercase border transition-colors ${
-              universe === u ? "bg-foreground/15 border-foreground/40 text-foreground" : "border-foreground/10 text-foreground/50 hover:text-foreground"
+            className={`flex-1 min-h-11 py-2 font-mono text-[10px] tracking-widest uppercase border transition-colors ${
+              universe === u ? "bg-foreground/15 border-foreground/40 text-foreground" : "border-foreground/10 text-foreground/60 sm:hover:text-foreground"
             }`}
           >
             {u}
@@ -67,7 +67,7 @@ function SkinPicker({
         ))}
       </div>
 
-      <div className="flex items-center justify-center gap-3 py-4">
+      <div className="flex items-center justify-center gap-3 py-2 sm:py-4">
         <SkinPreview skin={skin} />
       </div>
 
@@ -76,8 +76,8 @@ function SkinPicker({
           <button
             key={s.id}
             onClick={() => onChange(s.id)}
-            className={`py-2 px-2 font-mono text-[10px] tracking-widest uppercase border rounded transition-colors text-center ${
-              s.id === value ? "border-foreground/60 bg-foreground/10 text-foreground" : "border-foreground/10 text-foreground/60 hover:text-foreground"
+            className={`min-h-11 py-2 px-2 font-mono text-[10px] tracking-widest uppercase border rounded transition-colors text-center ${
+              s.id === value ? "border-foreground/60 bg-foreground/10 text-foreground" : "border-foreground/10 text-foreground/70 sm:hover:text-foreground"
             }`}
             style={s.id === value ? { boxShadow: `0 0 10px -2px ${s.glow}` } : undefined}
           >
@@ -198,5 +198,5 @@ function SkinPreview({ skin }: { skin: Skin }) {
     return () => cancelAnimationFrame(raf);
   }, [skin]);
 
-  return <canvas ref={ref} className="w-[200px] h-[240px]" />;
+  return <canvas ref={ref} className="w-[150px] h-[180px] sm:w-[200px] sm:h-[240px]" />;
 }
