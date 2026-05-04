@@ -580,7 +580,8 @@ function Joystick({
   return (
     <div
       ref={ref}
-      className="relative w-[120px] h-[120px] rounded-full pointer-events-auto touch-none"
+      className="relative rounded-full pointer-events-auto touch-none"
+      // size scales with viewport so it never feels too small or too big
       style={{
         background: `radial-gradient(circle at 50% 45%, color-mix(in oklab, ${color} 55%, transparent) 0%, color-mix(in oklab, ${color} 28%, transparent) 60%, color-mix(in oklab, ${color} 12%, transparent) 100%)`,
         border: `3px solid color-mix(in oklab, ${color} 75%, transparent)`,
