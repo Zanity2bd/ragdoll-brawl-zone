@@ -287,6 +287,34 @@ const MAGMA_BLAST_CD = 5;
 const MAGMA_BLAST_DMG = 22;
 const MAGMA_BLAST_RADIUS = 110;
 
+// ---- Batch-2 powers: Batman / Spider-Man / A-Train / Nightcrawler ----
+// Batman
+const SMOKE_BOMB_CD = 9;
+const SMOKE_BOMB_DUR = 1.2;     // visual cloud duration
+const SMOKE_INVIS_DUR = 0.7;    // self-invisibility window (iframes)
+const SMOKE_RADIUS = 140;
+const BATARANG_VOLLEY_CD = 6;
+const BATARANG_VOLLEY_COUNT = 3;
+const BATARANG_VOLLEY_DMG = 9;
+// Spider-Man
+const WEB_SNARE_CD = 8;
+const WEB_SNARE_DUR = 1.6;
+const WEB_SNARE_PULL = 0.32;     // fraction of distance pulled toward attacker
+const WEB_ZIP_CD = 5;
+const WEB_ZIP_DMG = 20;
+// A-Train
+const SONIC_SPRINT_CD = 9;
+const SONIC_SPRINT_DUR = 1.6;
+const SONIC_SPRINT_MULT = 1.85;
+const COMPOUND_V_CD = 10;
+const COMPOUND_V_DMG = 30;
+// Nightcrawler
+const BAMF_CLOUD_CD = 8;
+const BAMF_CLOUD_RADIUS = 130;
+const BAMF_CLOUD_DMG = 14;
+const SHADOW_STRIKE_CD = 5;
+const SHADOW_STRIKE_DMG = 18;
+
 interface Missile {
   owner: PlayerId; target: PlayerId;
   x: number; y: number; vx: number; vy: number;
