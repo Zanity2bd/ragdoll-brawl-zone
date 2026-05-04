@@ -115,6 +115,17 @@ export function GameCanvas() {
     document.addEventListener("visibilitychange", onVis);
 
     const down = (e: KeyboardEvent) => {
+      // Dedicated Hulk Rage Frenzy keys (B = P1, N = P2 if not CPU)
+      if (e.code === "KeyB") {
+        e.preventDefault();
+        engine.pressFrenzy("p1");
+        return;
+      }
+      if (e.code === "KeyN" && !cpuEnabledRef.current) {
+        e.preventDefault();
+        engine.pressFrenzy("p2");
+        return;
+      }
       const m = KEY_MAP[e.code];
       if (!m) return;
       if (m.p === "p2" && cpuEnabledRef.current) return;
@@ -146,8 +157,8 @@ export function GameCanvas() {
       const hitW = 70, hitH = 120;
       if (Math.abs(sx - opp.x) < hitW / 2 && sy > opp.y - 15 && sy < opp.y + hitH) {
         const p1Name = engine.getSkinIdFor("p1");
-        // Hulk: try Rage Frenzy first when in close range
-        if (p1Name === "hulk" && engine.pressFrenzy("p1")) return true;
+        // NOTE: Rage Frenzy is NOT triggered by tapping — it must be activated
+        // explicitly via the Rage Frenzy HUD button or the dedicated key (B).
         if (engine.canFly("p1") && engine.isFlying("p1")) {
           if (engine.pressSuperDash("p1")) return true;
         }
@@ -222,6 +233,7 @@ export function GameCanvas() {
           onChange={() => setScreen("map")}
           onOpenAudio={() => setAudioOpen(o => !o)}
           muted={muted}
+          onFrenzyP1={() => engineRef.current?.pressFrenzy("p1")}
         />
       )}
       <AudioPanel
@@ -262,7 +274,7 @@ function RotatePrompt() {
   );
 }
 
-function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onOpenAudio: () => void }) {
+function HUD({ snap, onRematch, onChange, muted, onOpenAudio, onFrenzyP1 }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onOpenAudio: () => void; onFrenzyP1: () => void }) {
   return (
     <>
       <div
@@ -270,7 +282,7 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
         style={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       >
         <div className="flex gap-3 sm:gap-6 items-start w-full px-3 sm:px-6" style={{ maxWidth: "min(1200px, 96vw)" }}>
-          <HpBar p={snap.p1} side="left" />
+          <HpBar p={snap.p1} side="left" onFrenzy={onFrenzyP1} />
           <HpBar p={snap.p2} side="right" />
         </div>
       </div>
@@ -351,7 +363,7 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
   );
 }
 
-function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
+function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "right"; onFrenzy?: () => void }) {
   const isP1 = p.id === "p1";
   const color = isP1 ? "oklch(0.85 0.18 210)" : "oklch(0.72 0.28 340)";
   const glow = isP1 ? "oklch(0.75 0.22 215)" : "oklch(0.65 0.30 345)";
@@ -388,27 +400,34 @@ function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
         <FrenzyBar
           cd={p.frenzyCd} max={p.frenzyCdMax} active={p.frenzyActive}
           side={side}
+          onActivate={isP1 ? onFrenzy : undefined}
+          hint={isP1 ? "B · Tap" : "N"}
         />
       )}
     </div>
   );
 }
 
-function FrenzyBar({ cd, max, active, side }: { cd: number; max: number; active: boolean; side: "left" | "right" }) {
+function FrenzyBar({ cd, max, active, side, onActivate, hint }: { cd: number; max: number; active: boolean; side: "left" | "right"; onActivate?: () => void; hint?: string }) {
   const ready = cd <= 0;
   const pct = ready ? 100 : (1 - cd / max) * 100;
   const fill = active ? "oklch(0.78 0.22 30)" : ready ? "oklch(0.72 0.22 145)" : "oklch(0.55 0.10 145)";
   const glow = active ? "oklch(0.85 0.25 30)" : "oklch(0.78 0.22 145)";
+  const clickable = !!onActivate && ready && !active;
+  const Wrapper: any = clickable ? "button" : "div";
   return (
-    <div className={`flex flex-col gap-1 ${side === "right" ? "items-end" : ""}`}>
-      <div
-        className={`flex items-center gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}
-      >
+    <Wrapper
+      onClick={clickable ? onActivate : undefined}
+      className={`flex flex-col gap-1 ${side === "right" ? "items-end" : ""} ${clickable ? "pointer-events-auto cursor-pointer hover:scale-[1.02] active:scale-[0.98] transition-transform" : ""}`}
+      style={clickable ? { background: "transparent", border: "none", padding: 0 } : undefined}
+      aria-label={clickable ? "Activate Rage Frenzy" : undefined}
+    >
+      <div className={`flex items-center gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
         <span
           className="font-mono text-[10px] tracking-[0.2em] uppercase"
           style={{ color: ready ? glow : "oklch(0.65 0.04 145)" }}
         >
-          {active ? "RAGE FRENZY!" : ready ? "Rage Frenzy ▸ READY" : "Rage Frenzy"}
+          {active ? "RAGE FRENZY!" : ready ? `Rage Frenzy ▸ ${hint ?? "READY"}` : "Rage Frenzy"}
         </span>
         {!ready && !active && (
           <span className="font-mono text-[10px] text-foreground/50">{cd.toFixed(1)}s</span>
@@ -432,7 +451,7 @@ function FrenzyBar({ cd, max, active, side }: { cd: number; max: number; active:
           }}
         />
       </div>
-    </div>
+    </Wrapper>
   );
 }
 

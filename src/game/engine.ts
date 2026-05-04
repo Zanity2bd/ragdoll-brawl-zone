@@ -211,7 +211,7 @@ const SUPER_SHAKE = 52;
 const FRENZY_CD = 18;          // long cooldown — high impact special
 const FRENZY_DUR = 4.0;        // seconds (matches video clip)
 const FRENZY_TICK = 0.18;      // damage tick interval
-const FRENZY_TICK_DMG = 7;     // per tick → ~155 total over full clip
+const FRENZY_TICK_DMG = 3;     // per tick → ~65 total over full clip (balanced special)
 const FRENZY_RANGE = 110;      // close-range gate
 
 export class GameEngine {
