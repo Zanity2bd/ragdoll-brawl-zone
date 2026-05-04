@@ -377,13 +377,13 @@ function CdPill({ label, cd, max, color }: { label: string; cd: number; max: num
   );
 }
 
-function TouchControls({ engine, snap }: { engine: GameEngine; snap: GameSnapshot }) {
+function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSnapshot; cpu: boolean }) {
   return (
     <div
       className="absolute inset-x-0 bottom-0 pointer-events-none"
       style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
     >
-      <div className="flex justify-between items-end px-4">
+      <div className={`flex ${cpu ? "justify-start" : "justify-between"} items-end px-4`}>
         <PlayerControls
           side="left"
           color="oklch(0.85 0.18 210)"
@@ -396,18 +396,20 @@ function TouchControls({ engine, snap }: { engine: GameEngine; snap: GameSnapsho
           onPunch={() => engine.pressMelee("p1")}
           onTele={() => engine.pressTeleport("p1")}
         />
-        <PlayerControls
-          side="right"
-          color="oklch(0.72 0.28 340)"
-          p={snap.p2}
-          onMove={(x) => {
-            engine.setIntent("p2", { left: x < -0.25, right: x > 0.25 });
-          }}
-          onJump={() => engine.pressJump("p2")}
-          onFire={() => engine.pressFire("p2")}
-          onPunch={() => engine.pressMelee("p2")}
-          onTele={() => engine.pressTeleport("p2")}
-        />
+        {!cpu && (
+          <PlayerControls
+            side="right"
+            color="oklch(0.72 0.28 340)"
+            p={snap.p2}
+            onMove={(x) => {
+              engine.setIntent("p2", { left: x < -0.25, right: x > 0.25 });
+            }}
+            onJump={() => engine.pressJump("p2")}
+            onFire={() => engine.pressFire("p2")}
+            onPunch={() => engine.pressMelee("p2")}
+            onTele={() => engine.pressTeleport("p2")}
+          />
+        )}
       </div>
     </div>
   );
