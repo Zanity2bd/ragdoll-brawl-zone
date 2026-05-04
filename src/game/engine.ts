@@ -240,8 +240,12 @@ export class GameEngine {
     if (!this.teleTargeting) return;
     const f = this.teleTargeting === "p1" ? this.p1 : this.p2;
     const rect = this.canvas.getBoundingClientRect();
-    const sx = canvasX * (W / rect.width);
-    const sy = canvasY * (H / rect.height);
+    // Match the contain-fit used in render(): map CSS pixels -> stage coords.
+    const scale = Math.min(rect.width / W, rect.height / H);
+    const offX = (rect.width - W * scale) / 2;
+    const offY = (rect.height - H * scale) / 2;
+    const sx = (canvasX - offX) / scale;
+    const sy = (canvasY - offY) / scale;
     this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
     f.x = Math.max(40, Math.min(W - 40, sx));
     f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy - FIGHTER_H / 2));
