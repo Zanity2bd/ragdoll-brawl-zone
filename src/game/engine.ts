@@ -267,13 +267,13 @@ const MAX_AIR_JUMPS = 1;            // double-jump for non-flyers
 const FIGHTER_H = 90;
 // Universal basic punch — sprite-driven (frames 11–14 + recovery 15).
 // Speed up frames 12–13 (impact window) for snap.
-const PUNCH_F11 = 0.10;  // windup    -> frame 10
-const PUNCH_F12 = 0.05;  // impact 1  -> frame 11 (hit active)
-const PUNCH_F13 = 0.05;  // impact 2  -> frame 12 (hit active)
-const PUNCH_F14 = 0.10;  // followthr -> frame 13
+const PUNCH_F11 = 0.05;  // windup    -> frame 10
+const PUNCH_F12 = 0.03;  // impact 1  -> frame 11 (hit active)
+const PUNCH_F13 = 0.03;  // impact 2  -> frame 12 (hit active)
+const PUNCH_F14 = 0.06;  // followthr -> frame 13
 const PUNCH_DUR = PUNCH_F11 + PUNCH_F12 + PUNCH_F13 + PUNCH_F14;
-const PUNCH_RECOVERY = 0.10;  // frame 14, no hit
-const PUNCH_CD = 0.55;
+const PUNCH_RECOVERY = 0.05;  // frame 14, no hit
+const PUNCH_CD = 0.32;
 const PUNCH_RANGE = 60;
 const PUNCH_DMG = 1;
 const FIGHTER_W = 30;
