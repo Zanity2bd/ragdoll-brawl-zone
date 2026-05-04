@@ -8,6 +8,7 @@ import { MOVES, type MoveSpec } from "./combat";
 import { Sfx } from "./sfx";
 import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, type WobbleState } from "./wobble";
 import { CpuController, type Difficulty } from "./ai";
+import { loadWalkSheet, isWalkSheetReady, drawWalkFrame, WALK_FRAME_COUNT } from "./walkSprite";
 
 export type PlayerId = "p1" | "p2";
 
