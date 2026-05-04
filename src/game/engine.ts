@@ -373,7 +373,26 @@ export class GameEngine {
       x: f.x, y: f.y, vx: f.vx, vy: f.vy,
       onGround: f.onGround, facing: f.facing,
       meleeKind: f.meleeKind, hp: f.hp,
+      meleeT: f.meleeT, meleeDur: f.meleeDur,
+      ragdollT: f.ragdollT, downedT: f.downedT, getUpT: f.getUpT,
+      flying: f.flying, canFly: f.canFly,
     };
+  }
+
+  /** True if a cover/solid platform sits roughly between the two fighters (eye-level). */
+  hasCoverBetween(a: PlayerId, b: PlayerId): boolean {
+    const fa = a === "p1" ? this.p1 : this.p2;
+    const fb = b === "p1" ? this.p1 : this.p2;
+    const ay = fa.y + 20, by = fb.y + 20;
+    const yMid = (ay + by) / 2;
+    const x0 = Math.min(fa.x, fb.x), x1 = Math.max(fa.x, fb.x);
+    const map = getMap(this.mapId);
+    for (const p of map.platforms) {
+      if (p.kind !== "cover") continue;
+      if (p.x + p.w < x0 || p.x > x1) continue;
+      if (yMid >= p.y - 10 && yMid <= p.y + p.h + 10) return true;
+    }
+    return false;
   }
 
   getSkinIdFor(id: PlayerId): SkinId {
