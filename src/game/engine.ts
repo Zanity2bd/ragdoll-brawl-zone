@@ -600,6 +600,9 @@ export class GameEngine {
     return false;
   }
 
+  /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
+  pressSuperDash(attacker: PlayerId): boolean {
+    const a = attacker === "p1" ? this.p1 : this.p2;
     const t = attacker === "p1" ? this.p2 : this.p1;
     if (!a.canFly || !a.flying) return false;
     if (a.dash || a.meleeKind || a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
