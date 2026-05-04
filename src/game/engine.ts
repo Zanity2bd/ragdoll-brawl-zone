@@ -4820,46 +4820,59 @@ export class GameEngine {
     // Replace the procedural body render with the imported 66-frame walk
     // animation when the fighter is in a normal grounded walk state. Falls
     // back to the procedural renderer for attacks, ragdoll, flight, KO, etc.
-    if (
+    // Sprite walk plays whenever the fighter is grounded (even during attacks
+    // / kicks) — the procedural attack pose draws on top so arms still swing
+    // but the legs stay visible from the sprite. Disabled only for ragdoll,
+    // KO, get-up, and flight where the procedural rig owns the full body.
+    const useSpriteWalk =
       !ghost &&
       f.onGround &&
       f.ragdollT <= 0 &&
       f.downedT <= 0 &&
       f.getUpT <= 0 &&
       !f.flying &&
-      f.attackAnim <= 0 &&
-      f.kickT <= 0 &&
-      f.meleeKind == null &&
-      isWalkSheetReady()
-    ) {
-      // ground shadow + accent glow pool
-      ctx.save();
+      isWalkSheetReady();
+
+    if (useSpriteWalk) {
+      // Soft accent pool — grounds the character; no hard contact shadow
+      // (was reading as a floating disc beneath the feet).
       if (!this.lowPower) {
-        const grad = ctx.createRadialGradient(x, y + FIGHTER_H - 1, 1, x, y + FIGHTER_H - 1, 30);
-        grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 35%, transparent)`);
+        ctx.save();
+        const grad = ctx.createRadialGradient(x, y + FIGHTER_H - 1, 1, x, y + FIGHTER_H - 1, 28);
+        grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 28%, transparent)`);
         grad.addColorStop(1, "transparent");
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.ellipse(x, y + FIGHTER_H - 1, 30, 7, 0, 0, Math.PI * 2);
+        ctx.ellipse(x, y + FIGHTER_H - 1, 28, 5, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
       }
-      ctx.fillStyle = "oklch(0 0 0 / 0.32)";
-      ctx.beginPath();
-      ctx.ellipse(x, y + FIGHTER_H - 2, 16, 3.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
 
-      // Frame index: cycle through 66 frames driven by walkPhase. When idle
-      // (low |vx|) we hold the first frame so the character doesn't moonwalk.
+      // Drive frame index off walkPhase. Smooth via fractional blending: draw
+      // the next frame on top with alpha = fractional part for a softer cycle.
       const moving = Math.abs(f.vx) > 18;
-      const frame = moving
-        ? Math.floor((f.walkPhase / (Math.PI * 2)) * WALK_FRAME_COUNT) % WALK_FRAME_COUNT
-        : 0;
+      const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
+      const fIdx = moving ? cycleF * WALK_FRAME_COUNT : 0;
+      const f0 = Math.floor(fIdx) % WALK_FRAME_COUNT;
+      const f1 = (f0 + 1) % WALK_FRAME_COUNT;
+      const frac = fIdx - Math.floor(fIdx);
       const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
-      // Tint with main body color (limbs share). Hit flash flips to white-hot.
-      const tint = f.hitFlash > 0 ? "oklch(0.95 0.20 30)" : (skin.body);
-      drawWalkFrame(ctx, tint, frame, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H + 12);
-      return;
+      const tint = f.hitFlash > 0 ? "oklch(0.95 0.20 30)" : skin.body;
+      // Match procedural FIGHTER_H exactly so attacks don't visually shrink.
+      drawWalkFrame(ctx, tint, f0, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+      if (moving && frac > 0.01) {
+        ctx.save();
+        ctx.globalAlpha = frac;
+        drawWalkFrame(ctx, tint, f1, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+        ctx.restore();
+      }
+
+      // If not attacking/kicking, sprite is the whole body — done.
+      if (f.attackAnim <= 0 && f.kickT <= 0 && f.meleeKind == null) {
+        return;
+      }
+      // Otherwise fall through so the procedural attack pose renders the
+      // arms / weapons on top of the sprite legs.
     }
 
     // ---- Bamf strike depth FX (perspective scale + z-shadow) ----
@@ -4947,20 +4960,17 @@ export class GameEngine {
     const headColor = skin.head ?? bodyColor;
 
     if (f.onGround && !ghost && f.ragdollT <= 0) {
-      // Soft contact light pool — adds depth and grounding without cost.
+      // Soft contact light pool — grounds the character without a hard
+      // disc shadow (the disc was reading as a floating UFO under the feet).
       if (!this.lowPower) {
-        const grad = ctx.createRadialGradient(0, FIGHTER_H - 1, 1, 0, FIGHTER_H - 1, 30);
-        grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 35%, transparent)`);
+        const grad = ctx.createRadialGradient(0, FIGHTER_H - 1, 1, 0, FIGHTER_H - 1, 28);
+        grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 28%, transparent)`);
         grad.addColorStop(1, "transparent");
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.ellipse(0, FIGHTER_H - 1, 30, 7, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, FIGHTER_H - 1, 28, 5, 0, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.fillStyle = "oklch(0 0 0 / 0.32)";
-      ctx.beginPath();
-      ctx.ellipse(0, FIGHTER_H - 2, 16, 3.5, 0, 0, Math.PI * 2);
-      ctx.fill();
     }
 
     if (skin.cape) {
