@@ -962,7 +962,7 @@ export class GameEngine {
 
   private resolveMelees() {
     for (const f of [this.p1, this.p2]) {
-      if (!f.meleeKind || f.ragdollT > 0) continue;
+      if (!f.meleeKind || f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) continue;
       const m = f.move;
       const t = f.meleeT;
       const inActive = t >= m.windup && t < m.windup + m.active;
