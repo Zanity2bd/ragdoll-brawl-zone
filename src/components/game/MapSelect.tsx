@@ -1,5 +1,5 @@
 import { MAPS, type MapId } from "@/game/maps";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function MapSelect({ onPick }: { onPick: (id: MapId) => void }) {
   return (
@@ -17,11 +17,26 @@ export function MapSelect({ onPick }: { onPick: (id: MapId) => void }) {
 
 function MapCard({ mapId, onPick }: { mapId: MapId; onPick: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const wrapRef = useRef<HTMLButtonElement>(null);
   const map = MAPS.find((m) => m.id === mapId)!;
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => e.isIntersecting && setVisible(true)),
+      { rootMargin: "100px" }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
     const c = ref.current!;
     const ctx = c.getContext("2d")!;
+    const dprCap = Math.min(devicePixelRatio || 1, 1.5);
     let raf = 0;
     const t0 = performance.now();
     const loop = () => {
@@ -35,19 +50,20 @@ function MapCard({ mapId, onPick }: { mapId: MapId; onPick: () => void }) {
     };
     const resize = () => {
       const r = c.getBoundingClientRect();
-      c.width = Math.floor(r.width * devicePixelRatio);
-      c.height = Math.floor(r.height * devicePixelRatio);
+      c.width = Math.floor(r.width * dprCap);
+      c.height = Math.floor(r.height * dprCap);
     };
     resize();
     window.addEventListener("resize", resize);
     raf = requestAnimationFrame(loop);
     return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
-  }, [map]);
+  }, [map, visible]);
 
   return (
     <button
+      ref={wrapRef}
       onClick={onPick}
-      className="group relative aspect-video rounded-lg overflow-hidden border border-foreground/15 hover:border-foreground/60 transition-all hover:scale-[1.02]"
+      className="group relative aspect-video rounded-lg overflow-hidden border border-foreground/15 sm:hover:border-foreground/60 transition-all sm:hover:scale-[1.02] active:scale-[0.99] touch-manipulation"
       style={{ boxShadow: `0 0 30px -10px ${map.accent}` }}
     >
       <canvas ref={ref} className="absolute inset-0 w-full h-full" />
