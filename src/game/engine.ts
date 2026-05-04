@@ -211,8 +211,9 @@ const SUPER_SHAKE = 52;
 const FRENZY_CD = 18;          // long cooldown — high impact special
 const FRENZY_DUR = 4.0;        // seconds (matches video clip)
 const FRENZY_TICK = 0.18;      // damage tick interval
-const FRENZY_TICK_DMG = 3;     // per tick → ~65 total over full clip (balanced special)
+const FRENZY_TICK_DMG = 2;     // per tick → ~44 total over full clip (balanced special)
 const FRENZY_RANGE = 110;      // close-range gate
+const FRENZY_FRAME_COUNT = 123;
 
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
@@ -274,9 +275,10 @@ export class GameEngine {
   private cpuDifficulty: Difficulty = "hard";
   private cpu: CpuController | null = null;
 
-  // Hulk frenzy video — preloaded once, drawn into canvas during cinematic
+  // Hulk frenzy cinematic assets — frame sequence is the reliable mobile path.
   private frenzyVideo: HTMLVideoElement | null = null;
   private frenzyVideoReady = false;
+  private frenzyFrames: HTMLImageElement[] = [];
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -292,6 +294,12 @@ export class GameEngine {
       v.crossOrigin = "anonymous";
       v.addEventListener("loadeddata", () => { this.frenzyVideoReady = true; });
       this.frenzyVideo = v;
+      this.frenzyFrames = Array.from({ length: FRENZY_FRAME_COUNT }, (_, index) => {
+        const frame = new Image();
+        frame.decoding = "async";
+        frame.src = `/fx/hulk-special-frames/frame-${String(index + 1).padStart(3, "0")}.webp`;
+        return frame;
+      });
     }
     this.reset();
   }
@@ -461,9 +469,6 @@ export class GameEngine {
     // Lock target out: clear ragdoll/getup to keep them upright in scene
     t.ragdollT = 0; t.downedT = 0; t.getUpT = 0;
     a.frenzy = { t: 0, dur: FRENZY_DUR, target: t.id, nextTick: 0, transitionT: 0 };
-    if (this.frenzyVideo) {
-      try { this.frenzyVideo.currentTime = 0; void this.frenzyVideo.play(); } catch { /* ignore */ }
-    }
     this.shake = Math.max(this.shake, 24);
     this.hitstopT = Math.max(this.hitstopT, 0.08);
     this.impactFlash = 1;
@@ -704,7 +709,7 @@ export class GameEngine {
       f.vx = 0; f.vy = 0; f.onGround = true;
       target.vx = 0; target.vy = 0; target.onGround = true;
       target.y = GROUND_Y - FIGHTER_H;
-      target.x = f.x + f.facing * 48;
+      target.x = f.x + f.facing * 96;
       // Suppress target actions
       target.meleeKind = null; target.meleeT = 0;
       target.iframeT = 0; target.ragdollT = 0; target.downedT = 0; target.getUpT = 0;
@@ -714,6 +719,7 @@ export class GameEngine {
         fr.nextTick = FRENZY_TICK;
         target.hp = Math.max(0, target.hp - FRENZY_TICK_DMG);
         target.hitFlash = 0.25;
+        target.ragdollAng = f.facing * 0.16;
         this.shake = Math.max(this.shake, 14);
         this.impactFlash = Math.max(this.impactFlash, 0.55);
         this.burst(target.x, target.y + 40, "oklch(0.95 0.18 30)", 8);
@@ -740,7 +746,6 @@ export class GameEngine {
         this.shockwaves.push({ x: target.x, y: target.y + 40, r: 10, rMax: 320, life: 0.7, maxLife: 0.7, color: "oklch(0.7 0.18 145)" });
         Sfx.play("boom", 1);
         f.frenzy = null;
-        if (this.frenzyVideo) { try { this.frenzyVideo.pause(); } catch { /* ignore */ } }
       }
       return;
     }
@@ -1754,36 +1759,38 @@ export class GameEngine {
 
     // Hide attacker (and target) during frenzy — replaced by video clip below.
     const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
-    const frenzyTarget = frenzyAttacker
-      ? (frenzyAttacker.frenzy!.target === "p1" ? this.p1 : this.p2)
-      : null;
-    if (frenzyAttacker !== this.p1 && frenzyTarget !== this.p1) this.drawFighter(this.p1);
-    if (frenzyAttacker !== this.p2 && frenzyTarget !== this.p2) this.drawFighter(this.p2);
+    if (frenzyAttacker !== this.p1) this.drawFighter(this.p1);
+    if (frenzyAttacker !== this.p2) this.drawFighter(this.p2);
 
-    // Frenzy video overlay — drawn in stage space so the camera/zoom moves with it.
-    if (frenzyAttacker && this.frenzyVideo && this.frenzyVideoReady) {
+    // Frenzy overlay — prefer frame sequence for mobile reliability, fall back to video.
+    if (frenzyAttacker) {
       const fr = frenzyAttacker.frenzy!;
       const trans = Math.min(1, fr.transitionT / 0.25);
       const ease = trans * trans * (3 - 2 * trans);
       const fade = Math.min(1, fr.t * 6) * Math.min(1, (fr.dur - fr.t) * 4);
-      // Size relative to fighter — height ~ 2.4x stickman so the video reads big
-      const targetH = FIGHTER_H * 2.4;
-      const v = this.frenzyVideo;
-      const ratio = (v.videoWidth || 16) / (v.videoHeight || 9);
+      const targetH = FIGHTER_H * 2.55;
+      const frameIndex = Math.max(0, Math.min(FRENZY_FRAME_COUNT - 1, Math.floor((fr.t / fr.dur) * FRENZY_FRAME_COUNT)));
+      const source = this.frenzyFrames[frameIndex]?.complete
+        ? this.frenzyFrames[frameIndex]
+        : (this.frenzyVideoReady ? this.frenzyVideo : null);
+      const ratio = source ? ((source as HTMLImageElement).naturalWidth || (source as HTMLVideoElement).videoWidth || 16) / (((source as HTMLImageElement).naturalHeight || (source as HTMLVideoElement).videoHeight || 9)) : (16 / 9);
       const targetW = targetH * ratio;
-      const cx = (frenzyAttacker.x + (frenzyTarget?.x ?? frenzyAttacker.x)) / 2;
-      const cy = frenzyAttacker.y + FIGHTER_H * 0.5;
+      const cx = frenzyAttacker.x + frenzyAttacker.facing * 6;
+      const cy = frenzyAttacker.y + FIGHTER_H * 0.52;
       const facing = frenzyAttacker.facing;
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.scale(facing * (0.6 + ease * 0.4), 0.6 + ease * 0.4);
+      ctx.scale(facing * (0.68 + ease * 0.32), 0.68 + ease * 0.32);
       ctx.globalAlpha = fade;
+      ctx.globalCompositeOperation = source === this.frenzyVideo ? "screen" : "source-over";
       // Subtle screen-shake driven jitter for impact
       const jx = (Math.random() - 0.5) * 4;
       const jy = (Math.random() - 0.5) * 4;
-      try {
-        ctx.drawImage(v, -targetW / 2 + jx, -targetH / 2 + jy, targetW, targetH);
-      } catch { /* video may not be decode-ready */ }
+      if (source) {
+        try {
+          ctx.drawImage(source, -targetW / 2 + jx, -targetH / 2 + jy, targetW, targetH);
+        } catch { /* source may not be decode-ready */ }
+      }
       ctx.restore();
       // Transition flash burst on the first frames
       if (trans < 1) {
