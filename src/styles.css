@@ -143,8 +143,22 @@
     border-color: var(--color-border);
   }
 
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  canvas {
+    display: block;
+    image-rendering: auto;
   }
 }
