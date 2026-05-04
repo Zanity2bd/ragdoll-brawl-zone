@@ -2913,6 +2913,25 @@ export class GameEngine {
     return applyWobble(posed, f.wobble, this.lowPower, f.onGround && !f.flying);
   }
 
+  /**
+   * World-space position of the eye-line mid-point, accounting for body lean /
+   * roll / head bob. Mirrors transforms in drawFighterAt: translate(x+bodyLagX, y)
+   * → rotate(lean+bodyRoll) around feet → eye at local (facing*3, headY).
+   */
+  private getEyeWorldPos(f: Fighter): { x: number; y: number } {
+    const pose = this.poseFor(f);
+    const headR = 10;
+    const headY = headR + 2 + pose.headOffsetY;
+    const ex = f.facingT * 3;
+    const ey = headY;
+    const a = pose.lean + f.bodyRoll;
+    const dyL = ey - FIGHTER_H;
+    const cos = Math.cos(a); const sin = Math.sin(a);
+    const rx = ex * cos - dyL * sin;
+    const ry = ex * sin + dyL * cos + FIGHTER_H;
+    return { x: f.x + f.bodyLagX + rx, y: f.y + ry };
+  }
+
   // ---------------- RENDER ----------------
   // Visible world rect for current frame (set by render, used by pointer mapping).
   private viewScale = 1;
