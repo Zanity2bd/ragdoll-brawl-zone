@@ -722,6 +722,8 @@ export class GameEngine {
     }
 
     for (const pr of this.projectiles) {
+      // Frozen: projectiles owned by frozen player are paused.
+      if (freezeActive && pr.owner !== this.timeFreezer) continue;
       if (pr.kind === "batarang" && pr.homing) {
         const target = pr.owner === "p1" ? this.p2 : this.p1;
         const dx = target.x - pr.x, dy = target.y + 30 - pr.y;
