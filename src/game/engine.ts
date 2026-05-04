@@ -4087,7 +4087,7 @@ export class GameEngine {
     const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
     const base = f.flying
       ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, renderFacing, FIGHTER_H)
-      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, renderFacing, FIGHTER_H);
+      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0 || f.kickT > 0, renderFacing, FIGHTER_H);
     let posed: Pose;
     if (f.dash) {
       // Cinematic super-punch pose during the dash. Superman = 1-hand cross,
@@ -4116,7 +4116,11 @@ export class GameEngine {
       const wp = KICK_WINDUP / KICK_DUR;
       const ap = KICK_ACTIVE / KICK_DUR;
       const prog = Math.min(1, f.kickT / KICK_DUR);
-      posed = computeAttackPose(base, "basicKick", prog, { wp, ap }, renderFacing);
+      // Airborne kick: keep the flying-kick walk pose (already set in `base`).
+      // Grounded kick: apply the snap-kick attack overlay.
+      posed = f.onGround
+        ? computeAttackPose(base, "basicKick", prog, { wp, ap }, renderFacing)
+        : base;
     } else {
       posed = base;
     }
