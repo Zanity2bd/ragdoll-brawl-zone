@@ -1227,6 +1227,41 @@ export class GameEngine {
     this.emit();
   }
 
+  /** Tap-to-swing for Spider-Man. Fires a web to the tapped point and starts a
+   *  pendulum swing. If already swinging, the tap releases (with a momentum
+   *  boost), then a follow-up tap re-attaches at the new point. The anchor is
+   *  clamped to sit above the player so pendulum motion is always natural. */
+  tapWebSwing(p: PlayerId, canvasX: number, canvasY: number): boolean {
+    const f = p === "p1" ? this.p1 : this.p2;
+    if (f.skin.id !== "spiderman") return false;
+    if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0 || f.stunT > 0) return false;
+    if (f.frenzy) return false;
+    if (f.swing) { this.releaseSwing(f, true); return true; }
+    const { sx, sy } = this.cssToStage(canvasX, canvasY);
+    const anchorX = Math.max(40, Math.min(W - 40, sx));
+    // Force anchor to sit above the player's head for a real pendulum arc.
+    const aboveHead = f.y - 80;
+    const anchorY = Math.max(40, Math.min(aboveHead, sy));
+    const dx = f.x - anchorX;
+    const dy = (f.y + FIGHTER_H * 0.35) - anchorY;
+    const len = Math.max(120, Math.min(420, Math.hypot(dx, dy)));
+    const angle = Math.atan2(dx, dy);
+    const tx = Math.cos(angle), ty = -Math.sin(angle);
+    const tangSpeed = f.vx * tx + f.vy * ty;
+    const dir = anchorX >= f.x ? 1 : -1;
+    const angV = tangSpeed / len + dir * 0.9;
+    f.swing = { ax: anchorX, ay: anchorY, len, angle, angV, t: 0 };
+    f.onGround = false;
+    f.airJumps = 1;
+    f.facing = dir;
+    f.power2Cd = 0.25;
+    Sfx.play("whoosh", 0.85);
+    // Silk burst at anchor + a faint puff at the hand to sell the shot.
+    this.burst(anchorX, anchorY, "oklch(0.97 0.03 240)", 14);
+    this.burst(f.x, f.y + 28, "oklch(0.97 0.03 240)", 5);
+    return true;
+  }
+
   /** Instantaneous tap-to-teleport for Nightcrawler. No aim, no slow-mo. */
   tapTeleport(p: PlayerId, canvasX: number, canvasY: number): boolean {
     const f = p === "p1" ? this.p1 : this.p2;
@@ -4197,25 +4232,55 @@ export class GameEngine {
     const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
     if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
-    // Web-swing tethers
+    // Web-swing tethers — silky double strand with glow + slight slack curve.
     for (const f of [this.p1, this.p2]) {
       if (!f.swing) continue;
       const ctx = this.ctx; if (!ctx) continue;
       const hx = f.x; const hy = f.y + 28;
+      const ax = f.swing.ax, ay = f.swing.ay;
+      const dx = hx - ax, dy = hy - ay;
+      const dist = Math.hypot(dx, dy) || 1;
+      // Slack: bow the strand downward proportional to length.
+      const sag = Math.min(28, dist * 0.06 + 6);
+      const mx = (ax + hx) / 2;
+      const my = (ay + hy) / 2 + sag;
+      const drawStrand = (ox: number, oy: number, alpha: number, w: number, blur: number) => {
+        ctx.save();
+        ctx.strokeStyle = `oklch(0.98 0.02 240 / ${alpha})`;
+        ctx.lineWidth = w;
+        ctx.lineCap = "round";
+        ctx.shadowColor = "oklch(0.95 0.04 240)";
+        ctx.shadowBlur = blur;
+        ctx.beginPath();
+        ctx.moveTo(ax + ox, ay + oy);
+        ctx.quadraticCurveTo(mx + ox, my + oy, hx + ox, hy + oy);
+        ctx.stroke();
+        ctx.restore();
+      };
+      // Outer glow
+      drawStrand(0, 0, 0.25, 5.5, 14);
+      // Twin silk strands (slight perpendicular offset)
+      const px = -dy / dist, py = dx / dist;
+      drawStrand(px * 1.2, py * 1.2, 0.95, 1.4, 6);
+      drawStrand(-px * 1.2, -py * 1.2, 0.85, 1.2, 4);
+      // Anchor splat (web stuck to surface)
       ctx.save();
-      ctx.strokeStyle = "oklch(0.95 0.02 240 / 0.95)";
-      ctx.lineWidth = 1.6;
-      ctx.shadowColor = "oklch(0.95 0.02 240)";
-      ctx.shadowBlur = 6;
+      ctx.fillStyle = "oklch(0.97 0.02 240 / 0.9)";
+      ctx.shadowColor = "oklch(0.95 0.04 240)";
+      ctx.shadowBlur = 10;
       ctx.beginPath();
-      ctx.moveTo(f.swing.ax, f.swing.ay);
-      ctx.lineTo(hx, hy);
-      ctx.stroke();
-      // Anchor pulse
-      ctx.fillStyle = "oklch(0.95 0.02 240 / 0.85)";
-      ctx.beginPath();
-      ctx.arc(f.swing.ax, f.swing.ay, 3, 0, Math.PI * 2);
+      ctx.arc(ax, ay, 4.5, 0, Math.PI * 2);
       ctx.fill();
+      // Tiny radial threads at anchor
+      ctx.strokeStyle = "oklch(0.97 0.02 240 / 0.55)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax + Math.cos(a) * 7, ay + Math.sin(a) * 7);
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
