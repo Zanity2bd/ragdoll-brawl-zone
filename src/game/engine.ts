@@ -1097,6 +1097,14 @@ export class GameEngine {
 
   private update(dt: number) {
     this.elapsed += dt;
+    // Fire any deferred SFX whose scheduled engine-time has passed.
+    if (this.pendingSfx.length) {
+      const due = this.pendingSfx.filter(p => p.at <= this.elapsed);
+      if (due.length) {
+        for (const p of due) Sfx.play(p.name, p.vol);
+        this.pendingSfx = this.pendingSfx.filter(p => p.at > this.elapsed);
+      }
+    }
     this.impactFlash = Math.max(0, this.impactFlash - dt * 4);
 
     // Hitstop freezes simulation for a few frames (render still runs)
