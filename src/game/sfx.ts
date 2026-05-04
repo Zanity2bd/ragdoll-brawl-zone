@@ -1,9 +1,12 @@
 // Procedural WebAudio SFX — no external assets.
 // Lazy-init on first user gesture (Splash PLAY tap).
 
+import bamfUrl from "@/assets/sfx/bamf.mp3";
+
 export type SfxName =
   | "punch" | "heavy" | "boom" | "laser" | "shock"
-  | "whoosh" | "chirp" | "thud" | "jab" | "blip";
+  | "whoosh" | "chirp" | "thud" | "jab" | "blip"
+  | "bamf";
 
 class SfxEngine {
   private ctx: AudioContext | null = null;
@@ -13,6 +16,7 @@ class SfxEngine {
   private noise: AudioBuffer | null = null;
   private musicNodes: AudioNode[] = [];
   private musicPlaying = false;
+  private samples: Partial<Record<SfxName, AudioBuffer>> = {};
   muted = false;
   sfxVolume = 0.8;
   musicVolume = 0.35;
@@ -35,7 +39,19 @@ class SfxEngine {
       const data = buf.getChannelData(0);
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
       this.noise = buf;
+      // Lazy-load sample assets
+      this.loadSample("bamf", bamfUrl);
     } catch { /* no audio */ }
+  }
+
+  private async loadSample(name: SfxName, url: string) {
+    if (!this.ctx) return;
+    try {
+      const res = await fetch(url);
+      const arr = await res.arrayBuffer();
+      const buf = await this.ctx.decodeAudioData(arr);
+      this.samples[name] = buf;
+    } catch { /* */ }
   }
 
   setMuted(m: boolean) {
@@ -190,6 +206,17 @@ class SfxEngine {
         o.frequency.setValueAtTime(660, t);
         o.connect(out); o.start(t);
         env(0.3, 0.002, 0.08); stopAt(o, 0.1);
+        break;
+      }
+      case "bamf": {
+        const sample = this.samples["bamf"];
+        if (!sample) break;
+        const src = ctx.createBufferSource();
+        src.buffer = sample;
+        const g = ctx.createGain(); g.gain.value = 0.9 * vol;
+        src.connect(g); g.connect(this.sfxGain);
+        src.start(t);
+        setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch { /* */ } }, (sample.duration + 0.1) * 1000);
         break;
       }
     }
