@@ -13,6 +13,7 @@ import {
   WALK_LOOP_FRAMES, PUNCH_FRAME_START, RECOVERY_FRAME,
   JUMP_TAKEOFF_FRAME, JUMP_RISE_FRAME, JUMP_APEX_FRAME, JUMP_LAND_FRAME,
   DOWN_FRAME, GETUP_FRAME_A, GETUP_FRAME_B, HURT_FRAME,
+  KICK_CHAMBER_FRAME, KICK_HIT_FRAME, KNEE_CHAMBER_FRAME, KNEE_HIT_FRAME,
 } from "./walkSprite";
 
 export type PlayerId = "p1" | "p2";
@@ -168,6 +169,13 @@ interface Fighter {
   punchCd: number;
   punchHit: boolean;    // ensures one hit per swing
   recoverT: number;     // frame-15 transition timer (visual only)
+  // 3-tap combo: 0 = next is basic punch, 1 = next is high kick, 2 = next is knee finisher
+  comboStep: number;
+  comboWindowT: number; // window during which the next tap chains the combo
+  comboT: number;       // active timer for kick/knee swing
+  comboDur: number;     // duration of current combo swing
+  comboKind: "kick" | "knee" | null;
+  comboHit: boolean;
 }
 
 interface SmokeCloud {
