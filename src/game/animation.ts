@@ -1,17 +1,59 @@
 // Procedural walk-cycle pose for stickman fighters.
+// Two-phase gait per leg: STANCE (foot planted) and SWING (foot lifts and steps forward).
 
 export interface Pose {
-  // joint offsets relative to a fighter centered at (0,0) with feet at y=H
   headOffsetY: number;
   shoulderY: number;
   hipY: number;
-  // legs: each = [hipX, hipY, kneeX, kneeY, footX, footY] relative
   legL: [number, number, number, number, number, number];
   legR: [number, number, number, number, number, number];
-  // arms: shoulder -> elbow -> hand
   armL: [number, number, number, number, number, number];
   armR: [number, number, number, number, number, number];
-  lean: number; // body lean angle (radians)
+  lean: number;
+}
+
+function easeInOut(t: number) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function legPose(
+  cyc: number,
+  hipX: number,
+  hipY: number,
+  stride: number,
+  lift: number,
+  facing: 1 | -1,
+  H: number,
+  amp: number,
+): [number, number, number, number, number, number] {
+  const c = ((cyc % 1) + 1) % 1;
+
+  let footX: number;
+  let footY: number;
+  let lifted: number;
+
+  if (c < 0.5) {
+    // STANCE — foot planted, slides backward relative to hip
+    const s = c / 0.5;
+    footX = hipX + stride * (1 - 2 * s);
+    footY = H;
+    lifted = 0;
+  } else {
+    // SWING — foot lifts in an arc and steps forward
+    const s = (c - 0.5) / 0.5;
+    const e = easeInOut(s);
+    footX = hipX + stride * (-1 + 2 * e);
+    lifted = Math.sin(s * Math.PI);
+    footY = H - lift * lifted;
+  }
+
+  const baseBend = 4 + amp * 2;
+  const swingBend = 10 * lifted;
+  const kneeForward = facing * (2 + 4 * lifted);
+  const kneeX = (hipX + footX) / 2 + kneeForward;
+  const kneeY = (hipY + footY) / 2 + baseBend + swingBend;
+
+  return [hipX, hipY, kneeX, kneeY, footX, footY];
 }
 
 export function computeWalkPose(
@@ -26,19 +68,15 @@ export function computeWalkPose(
   const speed = Math.abs(vx);
   const moving = speed > 8;
 
-  // Idle breathing
-  const breath = Math.sin(phase * 1.2) * 1.5;
-
+  const breath = Math.sin(phase * 0.9) * 1.2;
   const headOffsetY = breath - 2;
   const shoulderY = 28 + breath;
   const hipY = 56;
 
-  // Lean forward when running
-  const lean = moving ? facing * Math.min(0.18, speed / 1500) : 0;
+  const lean = moving ? facing * Math.min(0.14, speed / 1800) : 0;
 
-  // ----- Air pose -----
   if (!onGround) {
-    const tuck = vy < 0 ? 1 : 0.4; // jumping vs falling
+    const tuck = vy < 0 ? 1 : 0.4;
     const kneeX = 6 * tuck;
     const kneeY = hipY + 14;
     const footX = 4 * tuck;
@@ -53,70 +91,60 @@ export function computeWalkPose(
     };
   }
 
-  // ----- Ground pose (walk or idle) -----
-  // step amplitude scales with speed
-  const amp = moving ? Math.min(1, speed / 220) : 0;
-  const stepLen = 14 * amp;
-  const lift = 10 * amp;
+  const amp = moving ? Math.min(1, speed / 200) : 0;
+  const stride = 12 * amp;
+  const lift = 14 * amp;
 
-  const phL = Math.sin(phase);
-  const phR = Math.sin(phase + Math.PI);
+  // Body bob — dips during double-support, twice per gait cycle
+  const bob = moving ? Math.abs(Math.cos(phase * Math.PI)) * 1.5 * amp : 0;
 
-  // hip positions
   const hxL = -3, hxR = 3;
-  // foot positions: alternating forward/back
-  const footLY = H - (Math.max(0, phL) * lift); // raised when phase positive
-  const footLX = hxL + phL * stepLen;
-  const footRY = H - (Math.max(0, phR) * lift);
-  const footRX = hxR + phR * stepLen;
-  // knees: midpoint pulled slightly forward + bent
-  const kneeBend = 6 + amp * 4;
-  const kneeLX = hxL + phL * stepLen * 0.5 + (phL > 0 ? facing * 2 : 0);
-  const kneeLY = (hipY + footLY) / 2 + kneeBend - Math.max(0, phL) * 4;
-  const kneeRX = hxR + phR * stepLen * 0.5 + (phR > 0 ? facing * 2 : 0);
-  const kneeRY = (hipY + footRY) / 2 + kneeBend - Math.max(0, phR) * 4;
+  const cycL = phase / (Math.PI * 2);
+  const cycR = cycL + 0.5;
 
-  // arm swing — opposite phase
-  const armSwing = (moving ? 12 : 4) * amp + (moving ? 0 : 0);
+  const legL = legPose(cycL, hxL, hipY + bob, stride, lift, facing, H, amp);
+  const legR = legPose(cycR, hxR, hipY + bob, stride, lift, facing, H, amp);
+
   const sxL = -4, sxR = 4;
-  const handLX = sxL - phR * armSwing;
-  const handLY = shoulderY + 22 - Math.max(0, -phR) * 4;
-  const handRX = sxR - phL * armSwing;
-  const handRY = shoulderY + 22 - Math.max(0, -phL) * 4;
-  const elbowLX = (sxL + handLX) / 2 + 2;
-  const elbowLY = (shoulderY + handLY) / 2 + 4;
-  const elbowRX = (sxR + handRX) / 2 - 2;
-  const elbowRY = (shoulderY + handRY) / 2 + 4;
+  const armSwing = (moving ? 11 : 3) * Math.max(amp, moving ? 0.3 : 0);
+  const swingL = Math.cos(cycR * Math.PI * 2);
+  const swingR = Math.cos(cycL * Math.PI * 2);
 
-  // attack: punch the front arm forward
+  const handLX = sxL + swingL * armSwing;
+  const handLY = shoulderY + 22 + Math.max(0, -swingL) * 2;
+  const handRX = sxR + swingR * armSwing;
+  const handRY = shoulderY + 22 + Math.max(0, -swingR) * 2;
+  const elbowLX = (sxL + handLX) / 2 + facing * 2;
+  const elbowLY = (shoulderY + handLY) / 2 + 5;
+  const elbowRX = (sxR + handRX) / 2 - facing * 2;
+  const elbowRY = (shoulderY + handRY) / 2 + 5;
+
   if (attacking) {
     const ahx = facing * 26;
     const ahy = shoulderY + 4;
     if (facing > 0) {
       return {
-        headOffsetY, shoulderY, hipY,
-        legL: [hxL, hipY, kneeLX, kneeLY, footLX, footLY],
-        legR: [hxR, hipY, kneeRX, kneeRY, footRX, footRY],
+        headOffsetY: headOffsetY - bob, shoulderY: shoulderY - bob, hipY: hipY + bob,
+        legL, legR,
         armL: [sxL, shoulderY, elbowLX, elbowLY, handLX, handLY],
         armR: [sxR, shoulderY, sxR + 8, shoulderY, ahx, ahy],
         lean,
       };
-    } else {
-      return {
-        headOffsetY, shoulderY, hipY,
-        legL: [hxL, hipY, kneeLX, kneeLY, footLX, footLY],
-        legR: [hxR, hipY, kneeRX, kneeRY, footRX, footRY],
-        armL: [sxL, shoulderY, sxL - 8, shoulderY, ahx, ahy],
-        armR: [sxR, shoulderY, elbowRX, elbowRY, handRX, handRY],
-        lean,
-      };
     }
+    return {
+      headOffsetY: headOffsetY - bob, shoulderY: shoulderY - bob, hipY: hipY + bob,
+      legL, legR,
+      armL: [sxL, shoulderY, sxL - 8, shoulderY, ahx, ahy],
+      armR: [sxR, shoulderY, elbowRX, elbowRY, handRX, handRY],
+      lean,
+    };
   }
 
   return {
-    headOffsetY, shoulderY, hipY,
-    legL: [hxL, hipY, kneeLX, kneeLY, footLX, footLY],
-    legR: [hxR, hipY, kneeRX, kneeRY, footRX, footRY],
+    headOffsetY: headOffsetY - bob,
+    shoulderY: shoulderY - bob,
+    hipY: hipY + bob,
+    legL, legR,
     armL: [sxL, shoulderY, elbowLX, elbowLY, handLX, handLY],
     armR: [sxR, shoulderY, elbowRX, elbowRY, handRX, handRY],
     lean,

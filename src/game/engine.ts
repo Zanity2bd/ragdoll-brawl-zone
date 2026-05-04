@@ -313,9 +313,9 @@ export class GameEngine {
 
     // walk phase advances based on horizontal speed
     if (f.onGround) {
-      f.walkPhase += dt * (4 + Math.abs(f.vx) * 0.04);
+      f.walkPhase += dt * (1.6 + Math.abs(f.vx) * 0.018);
     } else {
-      f.walkPhase += dt * 2;
+      f.walkPhase += dt * 1.2;
     }
 
     f.vy += GRAVITY * dt;
