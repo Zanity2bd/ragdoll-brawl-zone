@@ -546,12 +546,13 @@ function Joystick({
     const cl = Math.min(d, max);
     const nx = (dx / d) * cl, ny = (dy / d) * cl;
     setKnob({ x: nx, y: ny });
-    onMove(nx / max);
+    onMove(nx / max, ny / max);
     if (Math.hypot(nx, ny) / max > 0.22) {
       movedFar.current = true;
       cancelHold();
     }
-    if (ny / max < -0.55 && Date.now() - lastUpY.current > 350) {
+    // For non-flyers, swiping up = jump (one-shot). Flyers steer up directly.
+    if (!verticalSteer && ny / max < -0.55 && Date.now() - lastUpY.current > 350) {
       lastUpY.current = Date.now();
       onJump();
     }
