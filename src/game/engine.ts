@@ -1379,6 +1379,8 @@ export class GameEngine {
       return;
     }
 
+    if (this.phase === "ko") this.koCinematicT += dt;
+
     const timeScale = this.slowmoT > 0 ? 0.18 : 1;
     const sdt = dt * timeScale;
     this.slowmoT = Math.max(0, this.slowmoT - dt);
