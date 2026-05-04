@@ -2278,6 +2278,117 @@ export class GameEngine {
     }
   }
 
+  private updateBamfCombo(a: Fighter, dt: number) {
+    if (!a.bamfCombo) return;
+    const combo = a.bamfCombo;
+    combo.t += dt;
+    // Lock attacker in place; iframes during sequence
+    a.iframeT = Math.max(a.iframeT, 0.2);
+    a.vx = 0; a.vy = 0; a.onGround = true;
+    a.stunT = 0; a.webSnareT = 0;
+
+    if (combo.t < combo.nextAt) return;
+
+    const t = combo.targetId === "p1" ? this.p1 : this.p2;
+    const step = combo.step;
+    if (step >= 3) {
+      a.bamfCombo = null;
+      a.iframeT = Math.max(a.iframeT, 0.4);
+      return;
+    }
+
+    // Position relative to target per step
+    let tx: number, ty: number, kbDir: 1 | -1, kbY: number, label: "punchTop" | "kickLeft" | "punchLeft";
+    if (step === 0) {
+      // Top → downward punch
+      tx = t.x;
+      ty = Math.max(40, t.y - 70);
+      kbDir = (a.facing === 1 ? 1 : -1) as 1 | -1;
+      kbY = -120;
+      label = "punchTop";
+    } else if (step === 1) {
+      // Left of target → roundhouse kick
+      tx = Math.max(40, t.x - 60);
+      ty = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, t.y));
+      kbDir = 1;
+      kbY = -240;
+      label = "kickLeft";
+    } else {
+      // Left of target again → finishing punch
+      tx = Math.max(40, t.x - 56);
+      ty = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, t.y));
+      kbDir = 1;
+      kbY = -340;
+      label = "punchLeft";
+    }
+    void label;
+
+    // Departure burst at old position
+    this.burst(a.x, a.y + FIGHTER_H / 2, "oklch(0.55 0.20 305)", 24);
+    this.smokeClouds.push({ x: a.x, y: a.y + 36, r: 16, rMax: 60, life: 0.45, maxLife: 0.45 });
+
+    // Teleport
+    a.x = Math.max(30, Math.min(W - 30, tx));
+    a.y = ty;
+    a.facing = (t.x >= a.x ? 1 : -1) as 1 | -1;
+    a.facingT = a.facing;
+    Sfx.play("bamf", 1.0);
+
+    // Arrival burst + 3D-style impact ring
+    this.burst(a.x, a.y + FIGHTER_H / 2, "oklch(0.7 0.22 305)", 32);
+    this.shockwaves.push({
+      x: a.x, y: a.y + FIGHTER_H / 2, r: 8, rMax: 60,
+      life: 0.35, maxLife: 0.35,
+      color: "oklch(0.75 0.22 305)",
+    });
+
+    // Apply hit
+    if (t.iframeT <= 0 && t.downedT <= 0 && t.getUpT <= 0) {
+      const dmg = BAMF_COMBO_DMG[step];
+      const hs = BAMF_COMBO_HITSTOP[step];
+      const sh = BAMF_COMBO_SHAKE[step];
+      // Temp-clear ragdollImmune so each hit can re-ragdoll for the cinematic chain
+      t.ragdollImmuneT = 0;
+      t.hp = Math.max(0, t.hp - dmg);
+      t.hitFlash = 0.5;
+      const kbX = step === 2 ? 520 : 280;
+      t.vx = kbDir * kbX;
+      t.vy = kbY;
+      t.onGround = false;
+      t.ragdollT = step === 2 ? 0.9 : 0.55;
+      t.ragdollPhase = 0;
+      t.ragdollAng = 0;
+      t.ragdollAV = kbDir * (5 + step * 1.5) + (Math.random() - 0.5) * 3;
+      t.ragdollEnergy = 1;
+      applyImpulse(t.wobble, kbDir, -0.6, 1.0);
+      this.shake = Math.max(this.shake, sh);
+      this.hitstopT = Math.max(this.hitstopT, hs);
+      this.impactFlash = 1;
+      this.slowmoT = Math.max(this.slowmoT, step === 2 ? 0.35 : 0.12);
+      this.slowmoMode = "impact";
+      // 3D-style radial spark streaks at impact point
+      const ix = t.x, iy = t.y + 40;
+      this.burst(ix, iy, "oklch(0.95 0.05 80)", 28);
+      this.burst(ix, iy, "oklch(0.7 0.22 305)", 22);
+      for (let i = 0; i < 14; i++) {
+        const ang = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
+        const sp = 260 + Math.random() * 220;
+        this.particles.push({
+          x: ix, y: iy,
+          vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 60,
+          life: 0.4 + Math.random() * 0.25, maxLife: 0.65,
+          color: i % 2 ? "oklch(0.95 0.05 80)" : "oklch(0.6 0.22 300)",
+          size: 2 + Math.random() * 2.4,
+        });
+      }
+      Sfx.play(step === 2 ? "heavy" : "punch", 1);
+      if (t.hp <= 0) { this.phase = "ko"; this.winner = a.id; a.bamfCombo = null; return; }
+    }
+
+    combo.step = step + 1;
+    combo.nextAt = combo.t + BAMF_COMBO_STEP;
+  }
+
   private applyMeleeHit(f: Fighter, target: Fighter, m: MoveSpec, fx: number, fy: number) {
     // I-frames: ignore hit entirely
     if (target.iframeT > 0) return;
