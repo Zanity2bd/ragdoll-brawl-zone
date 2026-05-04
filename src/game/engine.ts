@@ -29,6 +29,16 @@ export interface PlayerState {
   frenzyCdMax: number;
   hasFrenzy: boolean;
   frenzyActive: boolean;
+  // Dual-power system (per character: HOLD-joystick power + TAP-opponent power)
+  hasPower1: boolean;
+  hasPower2: boolean;
+  power1Name: string;
+  power2Name: string;
+  power1Cd: number; power1CdMax: number;
+  power2Cd: number; power2CdMax: number;
+  // Status effects from powers
+  frozen: boolean;          // currently time-frozen
+  freezeRemaining: number;  // seconds left
 }
 
 export interface GameSnapshot {
@@ -116,6 +126,11 @@ interface Fighter {
     punchPulse: number;  // 0..1, bumped on each tick, decays — drives flash + blur
   };
   frenzyCd: number;
+  // Dual powers (HOLD-joystick power1 + TAP-opponent power2)
+  power1Cd: number;
+  power2Cd: number;
+  // Time-freeze status (set by Flash's Time Freeze power on opponent)
+  freezeT: number;
 }
 
 interface Projectile {
@@ -216,6 +231,29 @@ const FRENZY_TICK_DMG = 2;     // per tick → ~44 total over full clip (balance
 const FRENZY_RANGE = 110;      // close-range gate
 const FRENZY_FRAME_COUNT = 123;
 
+// ---- Dual-power system ----
+// Flash: Time Freeze (HOLD) + Lightning Blast (TAP)
+const TIMEFREEZE_DUR = 5.0;
+const TIMEFREEZE_CD = 14;
+const LIGHTNING_DUR = 6.0;
+const LIGHTNING_CD = 10;
+const LIGHTNING_DMG = 22;       // damage on contact (one-time impact)
+const LIGHTNING_TICK_DMG = 2.5; // per second arc damage while latched
+const LIGHTNING_SPEED = 320;    // px/s chase speed
+const LIGHTNING_TURN = 4.5;     // steering responsiveness
+
+interface LightningOrb {
+  owner: PlayerId;
+  target: PlayerId;
+  x: number; y: number;
+  vx: number; vy: number;
+  life: number;     // remaining seconds
+  maxLife: number;
+  phase: number;    // animation
+  hit: boolean;     // initial impact landed → tick mode
+  tickAcc: number;  // sub-second accumulator for tick damage
+}
+
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
@@ -237,6 +275,10 @@ export class GameEngine {
   private particles: Particle[] = [];
   private shockwaves: Shockwave[] = [];
   private beams: Beam[] = [];
+  private lightnings: LightningOrb[] = [];
+  // Global time-freeze (Flash power 1): freezes everything except the freezer.
+  private timeFreezeT = 0;
+  private timeFreezer: PlayerId | null = null;
   // Multi-tier interactive level: low cover blocks, mid ledges, a high vantage.
   private platforms: Platform[] = [
     // Low cover blocks (solid) — partial cover / tactical positioning
@@ -374,6 +416,8 @@ export class GameEngine {
     this.particles = [];
     this.shockwaves = [];
     this.beams = [];
+    this.lightnings = [];
+    this.timeFreezeT = 0; this.timeFreezer = null;
     this.teleTargeting = null;
     this.slowmoT = 0; this.slowmoMode = null;
     this.hitstopT = 0; this.impactFlash = 0;
@@ -407,6 +451,8 @@ export class GameEngine {
       dash: null,
       frenzy: null,
       frenzyCd: 0,
+      power1Cd: 0, power2Cd: 0,
+      freezeT: 0,
     };
   }
 
@@ -496,6 +542,66 @@ export class GameEngine {
     return null;
   }
 
+  /** Power 1 (HOLD-joystick): currently Flash Time Freeze. Returns true if activated. */
+  pressPower1(attacker: PlayerId): boolean {
+    const a = attacker === "p1" ? this.p1 : this.p2;
+    const t = attacker === "p1" ? this.p2 : this.p1;
+    if (a.skin.id === "flash") {
+      if (a.power1Cd > 0) return false;
+      if (a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
+      a.power1Cd = TIMEFREEZE_CD;
+      this.timeFreezeT = TIMEFREEZE_DUR;
+      this.timeFreezer = a.id;
+      t.freezeT = TIMEFREEZE_DUR;
+      // Cinematic flash + slight global hitstop
+      this.impactFlash = 1;
+      this.shake = Math.max(this.shake, 18);
+      this.hitstopT = Math.max(this.hitstopT, 0.08);
+      // Burst FX around target
+      this.burst(t.x, t.y + 40, "oklch(0.92 0.18 220)", 28);
+      this.burst(a.x, a.y + 40, "oklch(0.92 0.18 60)", 24);
+      this.shockwaves.push({
+        x: t.x, y: t.y + 40, r: 8, rMax: 260,
+        life: 0.6, maxLife: 0.6, color: "oklch(0.92 0.18 220)",
+      });
+      Sfx.play("blip", 0.9);
+      Sfx.play("whoosh", 0.7);
+      return true;
+    }
+    return false;
+  }
+
+  /** Power 2 (TAP-opponent): currently Flash Lightning Blast. Returns true if activated. */
+  pressPower2(attacker: PlayerId): boolean {
+    const a = attacker === "p1" ? this.p1 : this.p2;
+    const t = attacker === "p1" ? this.p2 : this.p1;
+    if (a.skin.id === "flash") {
+      if (a.power2Cd > 0) return false;
+      if (a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
+      a.power2Cd = LIGHTNING_CD;
+      // Spawn a chasing lightning orb at attacker's hand
+      const sx = a.x + a.facing * 14;
+      const sy = a.y + 30;
+      const dxn = Math.sign(t.x - sx) || a.facing;
+      this.lightnings.push({
+        owner: a.id, target: t.id,
+        x: sx, y: sy,
+        vx: dxn * LIGHTNING_SPEED, vy: -40,
+        life: LIGHTNING_DUR, maxLife: LIGHTNING_DUR,
+        phase: 0, hit: false, tickAcc: 0,
+      });
+      this.burst(sx, sy, "oklch(0.95 0.18 95)", 22);
+      this.shockwaves.push({
+        x: sx, y: sy, r: 6, rMax: 80,
+        life: 0.3, maxLife: 0.3, color: "oklch(0.95 0.18 95)",
+      });
+      Sfx.play("blip", 0.7);
+      Sfx.play("whoosh", 0.8);
+      return true;
+    }
+    return false;
+  }
+
   /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
   pressSuperDash(attacker: PlayerId): boolean {
     const a = attacker === "p1" ? this.p1 : this.p2;
@@ -569,6 +675,24 @@ export class GameEngine {
     this.slowmoT = Math.max(0, this.slowmoT - dt);
     if (this.slowmoT <= 0) this.slowmoMode = null;
 
+    // ---- Time Freeze (Flash power 1): freezer ticks normally; everything else paused ----
+    this.timeFreezeT = Math.max(0, this.timeFreezeT - dt);
+    if (this.timeFreezeT <= 0) this.timeFreezer = null;
+    const freezeActive = this.timeFreezeT > 0 && this.timeFreezer !== null;
+    const isFrozenFor = (id: PlayerId): boolean => {
+      const f = id === "p1" ? this.p1 : this.p2;
+      return freezeActive && id !== this.timeFreezer && f.freezeT > 0;
+    };
+    // Decay per-fighter freeze when global freeze ends (or freezer changes)
+    if (!freezeActive) {
+      this.p1.freezeT = 0;
+      this.p2.freezeT = 0;
+    } else {
+      // freezeT mirrors timeFreezeT for the affected fighter
+      const victim = this.timeFreezer === "p1" ? this.p2 : this.p1;
+      victim.freezeT = this.timeFreezeT;
+    }
+
     if (this.phase === "intro") {
       this.introT -= dt;
       if (this.introT <= 0) this.phase = "fight";
@@ -577,22 +701,31 @@ export class GameEngine {
     // Ambient floor bubbles removed — kept the screen too busy.
     const maxParticles = this.lowPower ? 120 : 400;
 
-    if (this.cpu && this.phase === "fight") {
+    if (this.cpu && this.phase === "fight" && !isFrozenFor("p2")) {
       this.cpu.update(dt, this.buildSnapshot());
     }
 
     if (this.phase === "fight") {
-      this.updateFighter(this.p1, sdt);
-      this.updateFighter(this.p2, sdt);
-      if (!this.p1.ragdollT && !this.p1.downedT && !this.p1.getUpT) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
-      if (!this.p2.ragdollT && !this.p2.downedT && !this.p2.getUpT) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
+      // Power cooldowns ALWAYS tick (so even frozen fighters' cooldowns recover normally — but realistically only the freezer is acting).
+      this.p1.power1Cd = Math.max(0, this.p1.power1Cd - dt);
+      this.p1.power2Cd = Math.max(0, this.p1.power2Cd - dt);
+      this.p2.power1Cd = Math.max(0, this.p2.power1Cd - dt);
+      this.p2.power2Cd = Math.max(0, this.p2.power2Cd - dt);
+
+      if (!isFrozenFor("p1")) this.updateFighter(this.p1, sdt);
+      if (!isFrozenFor("p2")) this.updateFighter(this.p2, sdt);
+      if (!this.p1.ragdollT && !this.p1.downedT && !this.p1.getUpT && !isFrozenFor("p1")) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
+      if (!this.p2.ragdollT && !this.p2.downedT && !this.p2.getUpT && !isFrozenFor("p2")) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
       this.resolveMelees();
     }
     for (const f of [this.p1, this.p2]) {
+      if (freezeActive && f.id !== this.timeFreezer) continue;
       f.facingT += (f.facing - f.facingT) * Math.min(1, dt * 8);
     }
 
     for (const pr of this.projectiles) {
+      // Frozen: projectiles owned by frozen player are paused.
+      if (freezeActive && pr.owner !== this.timeFreezer) continue;
       if (pr.kind === "batarang" && pr.homing) {
         const target = pr.owner === "p1" ? this.p2 : this.p1;
         const dx = target.x - pr.x, dy = target.y + 30 - pr.y;
@@ -672,8 +805,64 @@ export class GameEngine {
       sw.life -= dt; sw.r += (sw.rMax - sw.r) * Math.min(1, dt * 4);
     }
     this.shockwaves = this.shockwaves.filter(s => s.life > 0);
-    for (const b of this.beams) b.life -= dt;
+    for (const b of this.beams) {
+      if (freezeActive && b.owner !== this.timeFreezer) continue;
+      b.life -= dt;
+    }
     this.beams = this.beams.filter(b => b.life > 0);
+
+    // ---- Lightning orbs (Flash power 2): chase target, deal damage on contact ----
+    for (const lo of this.lightnings) {
+      if (freezeActive && lo.owner !== this.timeFreezer) continue;
+      const tgt = lo.target === "p1" ? this.p1 : this.p2;
+      lo.life -= dt;
+      lo.phase += dt * 14;
+      // Steer toward target
+      const dx = tgt.x - lo.x, dy = (tgt.y + 40) - lo.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const desiredVx = (dx / d) * LIGHTNING_SPEED;
+      const desiredVy = (dy / d) * LIGHTNING_SPEED;
+      const k = Math.min(1, sdt * LIGHTNING_TURN);
+      lo.vx += (desiredVx - lo.vx) * k;
+      lo.vy += (desiredVy - lo.vy) * k;
+      lo.x += lo.vx * sdt; lo.y += lo.vy * sdt;
+      // Trail particles
+      if (!this.lowPower && Math.random() < 0.7) {
+        this.particles.push({
+          x: lo.x + (Math.random() - 0.5) * 6, y: lo.y + (Math.random() - 0.5) * 6,
+          vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40,
+          life: 0.35, maxLife: 0.35,
+          color: "oklch(0.95 0.18 95)", size: 2 + Math.random() * 1.5,
+        });
+      }
+      // Collision with target
+      const hit = Math.abs(dx) < FIGHTER_W && lo.y > tgt.y && lo.y < tgt.y + FIGHTER_H;
+      if (hit && tgt.iframeT <= 0 && tgt.downedT <= 0 && tgt.getUpT <= 0) {
+        if (!lo.hit) {
+          lo.hit = true;
+          tgt.hp = Math.max(0, tgt.hp - LIGHTNING_DMG);
+          tgt.hitFlash = 0.3;
+          tgt.vx += Math.sign(lo.vx || 1) * 220;
+          tgt.vy = -180; tgt.onGround = false;
+          this.shake = Math.max(this.shake, 14);
+          this.impactFlash = Math.max(this.impactFlash, 0.7);
+          this.burst(lo.x, lo.y, "oklch(0.95 0.18 95)", 22);
+          this.shockwaves.push({ x: lo.x, y: lo.y, r: 6, rMax: 110, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.18 95)" });
+          Sfx.play("punch", 0.7);
+          if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
+        } else {
+          // Latched: tick chip damage
+          lo.tickAcc += dt;
+          if (lo.tickAcc >= 0.25) {
+            lo.tickAcc = 0;
+            tgt.hp = Math.max(0, tgt.hp - LIGHTNING_TICK_DMG);
+            tgt.hitFlash = 0.18;
+            if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
+          }
+        }
+      }
+    }
+    this.lightnings = this.lightnings.filter(lo => lo.life > 0 && lo.x > -100 && lo.x < W + 100 && lo.y > -100 && lo.y < H + 100);
 
     this.shake = Math.max(0, this.shake - dt * 40);
 
@@ -1651,6 +1840,7 @@ export class GameEngine {
     this.onSnapshot?.(this.buildSnapshot());
   }
   private snapPlayer(f: Fighter): PlayerState {
+    const pw = getPowerSpec(f.skin.id);
     return {
       id: f.id, name: f.name,
       hp: f.hp, maxHp: 100,
@@ -1662,6 +1852,14 @@ export class GameEngine {
       frenzyCd: f.frenzyCd, frenzyCdMax: FRENZY_CD,
       hasFrenzy: f.skin.id === "hulk",
       frenzyActive: f.frenzy !== null,
+      hasPower1: !!pw.power1,
+      hasPower2: !!pw.power2,
+      power1Name: pw.power1?.name ?? "",
+      power2Name: pw.power2?.name ?? "",
+      power1Cd: f.power1Cd, power1CdMax: pw.power1?.cd ?? 1,
+      power2Cd: f.power2Cd, power2CdMax: pw.power2?.cd ?? 1,
+      frozen: f.freezeT > 0,
+      freezeRemaining: f.freezeT,
     };
   }
 
@@ -1962,6 +2160,62 @@ export class GameEngine {
       ctx.shadowBlur = 0;
     }
     ctx.globalCompositeOperation = "source-over";
+
+    // ---- Lightning orbs (Flash power 2) ----
+    ctx.globalCompositeOperation = "lighter";
+    for (const lo of this.lightnings) {
+      const fade = Math.min(1, lo.life * 4);
+      if (!this.lowPower) { ctx.shadowBlur = 30; ctx.shadowColor = "oklch(0.95 0.18 95)"; }
+      ctx.fillStyle = "oklch(0.95 0.18 95)";
+      ctx.globalAlpha = fade * 0.85;
+      ctx.beginPath(); ctx.arc(lo.x, lo.y, 10 + Math.sin(lo.phase) * 2, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "oklch(0.99 0.06 95)";
+      ctx.globalAlpha = fade;
+      ctx.beginPath(); ctx.arc(lo.x, lo.y, 4.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "oklch(0.95 0.18 95)";
+      ctx.lineWidth = 1.6;
+      ctx.globalAlpha = fade * 0.85;
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + lo.phase * 0.4;
+        let px = lo.x, py = lo.y;
+        ctx.beginPath(); ctx.moveTo(px, py);
+        for (let k = 0; k < 4; k++) {
+          const r = 6 + k * 5;
+          const jag = (Math.random() - 0.5) * 6;
+          px = lo.x + Math.cos(a) * r + Math.cos(a + Math.PI / 2) * jag;
+          py = lo.y + Math.sin(a) * r + Math.sin(a + Math.PI / 2) * jag;
+          ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalCompositeOperation = "source-over";
+
+    // ---- Time Freeze ring around frozen victim ----
+    if (this.timeFreezeT > 0 && this.timeFreezer) {
+      const victim = this.timeFreezer === "p1" ? this.p2 : this.p1;
+      const fade = Math.min(1, this.timeFreezeT * 2);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "oklch(0.92 0.14 220)";
+      ctx.lineWidth = 2.5;
+      ctx.globalAlpha = 0.65 * fade;
+      const ringR = 50 + Math.sin(this.elapsed * 6) * 4;
+      ctx.beginPath(); ctx.arc(victim.x, victim.y + 40, ringR, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = "oklch(0.95 0.16 220)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + this.elapsed * 0.3;
+        const r1 = ringR - 4, r2 = ringR + 4;
+        ctx.beginPath();
+        ctx.moveTo(victim.x + Math.cos(a) * r1, victim.y + 40 + Math.sin(a) * r1);
+        ctx.lineTo(victim.x + Math.cos(a) * r2, victim.y + 40 + Math.sin(a) * r2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
 
     // Projectiles
     ctx.globalCompositeOperation = "lighter";
@@ -2424,6 +2678,22 @@ export class GameEngine {
     }
 
     ctx.restore();
+  }
+}
+
+interface PowerSpec {
+  power1?: { name: string; cd: number };
+  power2?: { name: string; cd: number };
+}
+function getPowerSpec(id: SkinId): PowerSpec {
+  switch (id) {
+    case "flash":
+      return {
+        power1: { name: "Time Freeze", cd: TIMEFREEZE_CD },
+        power2: { name: "Lightning Blast", cd: LIGHTNING_CD },
+      };
+    default:
+      return {};
   }
 }
 

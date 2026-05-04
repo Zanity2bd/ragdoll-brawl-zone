@@ -126,6 +126,9 @@ export function GameCanvas() {
         engine.pressFrenzy("p2");
         return;
       }
+      // Flash: V = Time Freeze (P1), C = Lightning Blast (P1)
+      if (e.code === "KeyV") { e.preventDefault(); engine.pressPower1("p1"); return; }
+      if (e.code === "KeyC") { e.preventDefault(); engine.pressPower2("p1"); return; }
       const m = KEY_MAP[e.code];
       if (!m) return;
       if (m.p === "p2" && cpuEnabledRef.current) return;
@@ -158,8 +161,10 @@ export function GameCanvas() {
       if (Math.abs(sx - opp.x) < hitW / 2 && sy > opp.y - 15 && sy < opp.y + hitH) {
         const p1Name = engine.getSkinIdFor("p1");
         if (p1Name === "hulk") return true;
-        // NOTE: Rage Frenzy is NOT triggered by tapping — it must be activated
-        // explicitly via the Rage Frenzy HUD button or the dedicated key (B).
+        // Flash: tap on opponent → Lightning Blast
+        if (p1Name === "flash") {
+          if (engine.pressPower2("p1")) return true;
+        }
         if (engine.canFly("p1") && engine.isFlying("p1")) {
           if (engine.pressSuperDash("p1")) return true;
         }
@@ -503,6 +508,7 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
           onFire={() => engine.pressFire("p1")}
           onPunch={() => engine.pressMelee("p1")}
           onTele={() => engine.pressTeleport("p1")}
+          onPower1={() => engine.pressPower1("p1")}
           canFly={engine.canFly("p1")}
         />
         {!cpu && (
@@ -531,7 +537,7 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
 }
 
 function PlayerControls({
-  side, color, p, onMove, onJump, onFire, onPunch, onTele, canFly,
+  side, color, p, onMove, onJump, onFire, onPunch, onTele, onPower1, canFly,
 }: {
   side: "left" | "right";
   color: string;
@@ -541,14 +547,19 @@ function PlayerControls({
   onFire: () => void;
   onPunch: () => void;
   onTele: () => void;
+  onPower1?: () => void;
   canFly?: boolean;
 }) {
   const isHeatwave = p.name === "Heatwave";
   const isNightcrawler = p.name === "Nightcrawler";
-  const onSpecial = isHeatwave ? onFire : isNightcrawler ? onTele : onPunch;
-  const cd = isHeatwave ? p.fireCd : isNightcrawler ? p.teleCd : p.meleeCd;
-  const max = isHeatwave ? p.fireCdMax : isNightcrawler ? p.teleCdMax : p.meleeCdMax;
-  const label = isHeatwave ? "Fire" : isNightcrawler ? "Teleport" : p.meleeName;
+  const isFlash = p.name === "The Flash";
+  // Flash: HOLD activates Time Freeze (power1) instead of basic melee.
+  const onSpecial = isFlash && onPower1
+    ? onPower1
+    : (isHeatwave ? onFire : isNightcrawler ? onTele : onPunch);
+  const cd = isFlash ? p.power1Cd : isHeatwave ? p.fireCd : isNightcrawler ? p.teleCd : p.meleeCd;
+  const max = isFlash ? p.power1CdMax : isHeatwave ? p.fireCdMax : isNightcrawler ? p.teleCdMax : p.meleeCdMax;
+  const label = isFlash ? "Time Freeze" : isHeatwave ? "Fire" : isNightcrawler ? "Teleport" : p.meleeName;
   return (
     <div className={`flex items-end ${side === "right" ? "flex-row-reverse" : ""}`}>
       <Joystick
