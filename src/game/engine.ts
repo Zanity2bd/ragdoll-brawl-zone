@@ -156,6 +156,10 @@ interface Fighter {
   bamfCombo: null | { step: number; t: number; nextAt: number; targetId: PlayerId };
   // Spider-Man Web Swing — pendulum physics
   swing: null | { ax: number; ay: number; len: number; angle: number; angV: number; t: number };
+  // Universal basic kick — light melee, 1 dmg
+  kickT: number;       // 0 = idle, otherwise progress through KICK_DUR
+  kickCd: number;
+  kickHit: boolean;    // ensures one hit per swing
 }
 
 interface SmokeCloud {
