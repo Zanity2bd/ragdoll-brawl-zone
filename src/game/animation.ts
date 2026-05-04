@@ -532,35 +532,50 @@ export function computeFlightPose(
   // Head sits naturally on the neck — no aggressive forward push that detaches it.
   const headOffsetY = -2 + bob * 0.3 - horiz * 0.4;
 
-  // ---- Legs: trail straight back when cruising, hang naturally when hovering ----
+  // ---- Legs: striding silhouette — one leg leads forward, one trails back ----
+  // Like a runner frozen mid-stride. Both legs distinguishable, never parallel.
   const back = -facing;
-  // Flutter only when actually moving — at hover the legs hang still, not splay.
-  const flutter = Math.sin(phase * 2.6) * (0.4 * horiz);
-  const trailReach = horiz * 38;              // 0 at hover (no sideways splay)
-  const kneeReach = horiz * 22;
-  // Legs hang vertically at hover, splay back at cruise
-  const droop = (1 - horiz) * 18 * (goingUp ? 0.3 : 1);
+  const fwd = facing;
+  // Subtle stride cycle so the legs feel alive, not pinned.
+  const strideCycle = Math.sin(phase * 1.8) * 0.25 + 0.75; // 0.5..1.0
+  const flutter = Math.sin(phase * 2.6) * (0.6 + 0.4 * horiz);
+
+  // Lead leg: bent at knee, foot tucked under/forward of body.
+  // Trail leg: extended back and slightly down — clearly the longer silhouette.
+  const leadReach = 10 + horiz * 8;            // foot forward of hip
+  const leadKneeUp = 14 + horiz * 6;           // knee lifted up toward chest
+  const trailReach = 22 + horiz * 30;          // foot back of hip
+  const trailDrop = 14 + (1 - horiz) * 10;     // foot drops down a bit
+  const trailKneeReach = 10 + horiz * 14;
+
   const verticalLean = goingUp ? 0.4 : (goingDown ? -0.18 : 0);
   const vY = verticalLean * 22;
 
-  // Cruise: knees nearly straight (very little Y separation between knee & foot).
-  // Hover: knees bent ~90deg with feet hanging below.
-  const footBaseY = hipY + 24 + droop - horiz * 14;
-  const kneeBaseY = hipY + 12 + droop * 0.6 - horiz * 8;
+  // Lead foot: forward + up (knee bent)
+  const leadFootX = fwd * leadReach + sway * 0.3;
+  const leadFootY = hipY + 8 - leadKneeUp * strideCycle - vY + flutter * 0.4;
+  const leadKneeX = fwd * (leadReach * 0.55);
+  const leadKneeY = hipY + 4 - leadKneeUp * 0.4 - vY * 0.5;
 
-  // Slight stagger between legs for organic feel — feet stay near body at hover
-  const legSplit = 3;
-  const footLX = back * trailReach - legSplit * 0.5;
-  const footRX = back * trailReach + legSplit * 0.5;
-  const kneeLX = back * kneeReach - legSplit * 0.4;
-  const kneeRX = back * kneeReach + legSplit * 0.4;
+  // Trail foot: back + down (mostly straight)
+  const trailFootX = back * trailReach * strideCycle + sway * 0.3;
+  const trailFootY = hipY + trailDrop - vY - flutter * 0.5;
+  const trailKneeX = back * trailKneeReach * strideCycle;
+  const trailKneeY = hipY + trailDrop * 0.55 - vY * 0.5;
 
-  const footL: [number, number] = [footLX + sway * 0.3, footBaseY - vY + flutter];
-  const footR: [number, number] = [footRX + sway * 0.3, footBaseY - vY - flutter * 0.7];
-  const legL: [number, number, number, number, number, number] =
-    [-3 + sway * 0.2, hipY, kneeLX, kneeBaseY - vY * 0.5 + flutter * 0.5, footL[0], footL[1]];
+  // Map to L/R based on facing so the lead leg is always the front leg visually.
+  // When facing right (+1): right leg leads, left leg trails.
+  // When facing left  (-1): left leg leads, right leg trails.
   const legR: [number, number, number, number, number, number] =
-    [3 + sway * 0.2, hipY, kneeRX, kneeBaseY - vY * 0.5 - flutter * 0.4, footR[0], footR[1]];
+    facing > 0
+      ? [3 + sway * 0.2, hipY, leadKneeX, leadKneeY, leadFootX, leadFootY]
+      : [3 + sway * 0.2, hipY, trailKneeX, trailKneeY, trailFootX, trailFootY];
+  const legL: [number, number, number, number, number, number] =
+    facing > 0
+      ? [-3 + sway * 0.2, hipY, trailKneeX, trailKneeY, trailFootX, trailFootY]
+      : [-3 + sway * 0.2, hipY, leadKneeX, leadKneeY, leadFootX, leadFootY];
+  const footL: [number, number] = [legL[4], legL[5]];
+  const footR: [number, number] = [legR[4], legR[5]];
 
   // ---- Arms: lead fist forward, trail arm tucked tight ----
   let leadHandX: number, leadHandY: number, leadElbowX: number, leadElbowY: number;
