@@ -258,6 +258,59 @@ export function computeAttackPose(
   };
 
   switch (kind) {
+    case "basicKick": {
+      // Snappy front kick: chamber knee up, snap shin out, retract.
+      const hipY = walk.hipY;
+      // Arc angle for the kicking foot (back leg whips forward).
+      // Wind-up: knee up & cocked back. Active: leg snaps forward and slightly up.
+      // Recover: leg drops back toward the ground.
+      let a: number;
+      let r: number;
+      if (inWind) {
+        a = -0.5 - 0.4 * wt;          // chamber: leg coiled back
+        r = 14 + 4 * wt;
+      } else if (inActive) {
+        a = -0.9 + 1.7 * at;          // explosive snap forward
+        r = 22 + 14 * at;
+      } else {
+        a = 0.7;
+        r = 22;
+      }
+      const footX = facing * Math.cos(a) * r;
+      const footY = hipY + 10 + Math.sin(a) * r * 0.55;
+      const kneeX = facing * Math.cos(a) * (r * 0.55);
+      const kneeY = hipY + 12 + Math.sin(a) * r * 0.3;
+      if (facing > 0) {
+        out.legR = [3, hipY, kneeX, kneeY, footX, footY];
+        out.footR = [footX, footY];
+        out.legL = [-3, hipY, -4, hipY + 14, -6, hipY + 24];
+        out.footL = [-6, hipY + 24];
+      } else {
+        out.legL = [-3, hipY, kneeX, kneeY, footX, footY];
+        out.footL = [footX, footY];
+        out.legR = [3, hipY, 4, hipY + 14, 6, hipY + 24];
+        out.footR = [6, hipY + 24];
+      }
+      // Arms: small counter-balance — back arm out, front arm guards.
+      const balX = -facing * 14, balY = sy + 4;
+      const guardX = facing * 8, guardY = sy + 2;
+      if (facing > 0) {
+        out.armL = [-sxF, sy, -facing * 7, sy + 2, balX, balY];
+        out.handL = [balX, balY];
+        out.armR = [sxF, sy, facing * 5, sy + 2, guardX, guardY];
+        out.handR = [guardX, guardY];
+      } else {
+        out.armR = [-sxF, sy, -facing * 7, sy + 2, balX, balY];
+        out.handR = [balX, balY];
+        out.armL = [sxF, sy, facing * 5, sy + 2, guardX, guardY];
+        out.handL = [guardX, guardY];
+      }
+      // Slight backward lean on chamber, forward push on snap.
+      const tilt = inWind ? -0.10 * wt : (inActive ? 0.10 + 0.18 * at : 0.18);
+      out.lean = (walk.lean ?? 0) + facing * tilt;
+      out.headOffsetY = walk.headOffsetY - (inActive ? 1 : 0);
+      break;
+    }
     case "heatPunch": {
       if (inWind) setCock(18 + 8 * wt, -2 - 6 * wt);
       else if (inActive) setStrike(28 + 12 * at, 2);
