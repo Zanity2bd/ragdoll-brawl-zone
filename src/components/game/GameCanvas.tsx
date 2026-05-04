@@ -211,11 +211,14 @@ export function GameCanvas() {
   };
 
   return (
-    <div className="relative w-full h-full select-none">
+    <div
+      className="relative select-none overflow-hidden"
+      style={{ width: "100%", height: "100%", minHeight: "100dvh" }}
+    >
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full"
-        style={{ touchAction: "none" }}
+        className="absolute inset-0 block"
+        style={{ width: "100%", height: "100%", touchAction: "none", imageRendering: "auto" }}
       />
       {screen === "fight" && snap && (
         <HUD
