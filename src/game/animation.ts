@@ -365,5 +365,85 @@ export function computeRagdollPose(t: number, H: number): Pose {
     shoulderRoll: 0,
   };
 }
-// keep H referenced
-void (typeof undefined);
+
+// ----- Flight pose -----
+// Superhero glide: body leans forward when fast, upright + bobbing when hovering.
+// Lead arm extended forward (Superman/Homelander), trailing arm tucked.
+export function computeFlightPose(
+  phase: number,
+  vx: number,
+  vy: number,
+  hoverPhase: number,
+  facing: 1 | -1,
+  _H: number,
+): Pose {
+  const speed = Math.hypot(vx, vy);
+  const horiz = Math.min(1, speed / 360);
+  const goingUp = vy < -40;
+  const goingDown = vy > 40;
+
+  const pitch = facing * (0.05 + horiz * 0.55) + (goingUp ? -0.12 : 0) + (goingDown ? 0.18 : 0);
+  const bob = (1 - horiz) * Math.sin(hoverPhase) * 1.8;
+
+  const shoulderY = 28 + bob;
+  const hipY = 56 + bob * 0.5;
+  const headOffsetY = -3 + bob * 0.4;
+
+  const trail = horiz;
+  const flutter = Math.sin(phase * 1.6) * (1 - horiz) * 1.4;
+  const legBackX = facing * (8 + trail * 22);
+  const legBackY = hipY + 22 + bob;
+  const kneeBackX = facing * (4 + trail * 12);
+  const kneeBackY = hipY + 12 + flutter;
+  const stagger = (1 - trail) * 6;
+
+  const footL: [number, number] = [legBackX - facing * 2, legBackY + flutter];
+  const footR: [number, number] = [legBackX + facing * 2, legBackY - flutter + stagger * 0.4];
+  const legL: [number, number, number, number, number, number] =
+    [-3, hipY, kneeBackX - facing * 2, kneeBackY + flutter, footL[0], footL[1]];
+  const legR: [number, number, number, number, number, number] =
+    [3, hipY, kneeBackX + facing * 2, kneeBackY - flutter + stagger * 0.3, footR[0], footR[1]];
+
+  const lead = horiz;
+  let leadHandX: number, leadHandY: number, leadElbowX: number, leadElbowY: number;
+  let trailHandX: number, trailHandY: number, trailElbowX: number, trailElbowY: number;
+
+  if (goingUp && horiz < 0.55) {
+    leadHandX = facing * 6; leadHandY = shoulderY - 22;
+    leadElbowX = facing * 4; leadElbowY = shoulderY - 8;
+    trailHandX = -facing * 6; trailHandY = shoulderY - 18;
+    trailElbowX = -facing * 4; trailElbowY = shoulderY - 6;
+  } else {
+    leadHandX = facing * (16 + lead * 14);
+    leadHandY = shoulderY + 4 - lead * 4;
+    leadElbowX = facing * (8 + lead * 6);
+    leadElbowY = shoulderY + 6;
+    trailHandX = -facing * (4 + (1 - lead) * 4);
+    trailHandY = shoulderY + 18 + (1 - lead) * 4;
+    trailElbowX = -facing * 6;
+    trailElbowY = shoulderY + 10;
+  }
+
+  const armR: [number, number, number, number, number, number] =
+    facing > 0
+      ? [4, shoulderY, leadElbowX, leadElbowY, leadHandX, leadHandY]
+      : [4, shoulderY, trailElbowX, trailElbowY, trailHandX, trailHandY];
+  const armL: [number, number, number, number, number, number] =
+    facing > 0
+      ? [-4, shoulderY, trailElbowX, trailElbowY, trailHandX, trailHandY]
+      : [-4, shoulderY, leadElbowX, leadElbowY, leadHandX, leadHandY];
+
+  return {
+    headOffsetY,
+    shoulderY,
+    hipY,
+    legL, legR,
+    armL, armR,
+    handL: [armL[4], armL[5]],
+    handR: [armR[4], armR[5]],
+    footL, footR,
+    lean: pitch,
+    shoulderRoll: Math.sin(phase * 0.5) * 0.03 * (1 - horiz),
+  };
+}
+
