@@ -21,32 +21,31 @@ function drawNeonCity(ctx: CanvasRenderingContext2D, t: number, W: number, H: nu
   ctx.fillRect(0, 0, W, H);
 
   // distant moon
-  ctx.shadowBlur = 60;
+  ctx.shadowBlur = 30;
   ctx.shadowColor = "oklch(0.85 0.1 320)";
   ctx.fillStyle = "oklch(0.9 0.05 320)";
   ctx.beginPath(); ctx.arc(W * 0.78, 130, 50, 0, Math.PI * 2); ctx.fill();
   ctx.shadowBlur = 0;
 
-  // back skyline (parallax slow)
+  // back skyline (parallax slow) — fewer buildings, no shadows
   const offB = (t * 8) % 80;
   ctx.fillStyle = "oklch(0.16 0.06 280)";
-  for (let i = -1; i < 18; i++) {
-    const x = i * 80 - offB;
+  for (let i = -1; i < 12; i++) {
+    const x = i * 110 - offB;
     const h = 80 + ((i * 53) % 90);
     ctx.fillRect(x, GROUND_Y - h - 60, 70, h);
   }
 
-  // front skyline
+  // front skyline — static window pattern (no per-frame flicker math)
   const offF = (t * 22) % 120;
-  for (let i = -1; i < 14; i++) {
+  for (let i = -1; i < 12; i++) {
     const x = i * 120 - offF;
     const h = 140 + ((i * 91) % 130);
     ctx.fillStyle = "oklch(0.10 0.05 280)";
     ctx.fillRect(x, GROUND_Y - h, 100, h);
-    // windows
-    ctx.fillStyle = `oklch(0.85 0.18 ${(i * 40) % 360} / ${0.4 + 0.4 * Math.abs(Math.sin(t * 2 + i))})`;
-    for (let wy = 0; wy < h - 20; wy += 18) {
-      for (let wx = 8; wx < 92; wx += 16) {
+    ctx.fillStyle = `oklch(0.78 0.18 ${(i * 40) % 360} / 0.7)`;
+    for (let wy = 0; wy < h - 20; wy += 20) {
+      for (let wx = 8; wx < 92; wx += 18) {
         if (((i * 7 + wx + wy) % 5) === 0) {
           ctx.fillRect(x + wx, GROUND_Y - h + wy + 10, 6, 8);
         }
@@ -54,21 +53,15 @@ function drawNeonCity(ctx: CanvasRenderingContext2D, t: number, W: number, H: nu
     }
   }
 
-  // billboard scrolling text glow
+  // billboard scrolling
   const bx = (W * 1.2 - (t * 60) % (W + 400));
-  ctx.shadowBlur = 30; ctx.shadowColor = "oklch(0.75 0.25 20)";
+  ctx.shadowBlur = 14; ctx.shadowColor = "oklch(0.75 0.25 20)";
   ctx.fillStyle = "oklch(0.65 0.25 25)";
   ctx.fillRect(bx, 200, 220, 36);
   ctx.shadowBlur = 0;
 
-  // lightning flicker
-  if (Math.sin(t * 0.7) > 0.995) {
-    ctx.fillStyle = "oklch(0.95 0.05 250 / 0.25)";
-    ctx.fillRect(0, 0, W, GROUND_Y);
-  }
-
   // ground neon line
-  ctx.shadowBlur = 28; ctx.shadowColor = "oklch(0.75 0.25 320)";
+  ctx.shadowBlur = 14; ctx.shadowColor = "oklch(0.75 0.25 320)";
   ctx.strokeStyle = "oklch(0.8 0.22 320)";
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(W, GROUND_Y); ctx.stroke();
