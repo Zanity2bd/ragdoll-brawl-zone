@@ -710,20 +710,27 @@ export class GameEngine {
       target.vx = 0; target.vy = 0; target.onGround = true;
       target.y = GROUND_Y - FIGHTER_H;
       target.x = f.x + f.facing * 96;
-      // Suppress target actions
+      // Force opponent flat on the ground (laying down) for the entire frenzy
       target.meleeKind = null; target.meleeT = 0;
-      target.iframeT = 0; target.ragdollT = 0; target.downedT = 0; target.getUpT = 0;
-      // Damage ticks + screen shake during punches
+      target.iframeT = 0; target.ragdollT = 0; target.getUpT = 0;
+      target.downedT = Math.max(target.downedT, 0.5);
+      target.ragdollAng = f.facing * (Math.PI / 2); // sideways/flat
+      // Continuous low-amplitude jitter while attack is active
+      const jitter = 6 + Math.sin(fr.t * 60) * 3;
+      this.shake = Math.max(this.shake, jitter);
+      // Damage ticks + heavy shake on each punch
       fr.nextTick -= dt;
       if (fr.nextTick <= 0) {
         fr.nextTick = FRENZY_TICK;
         target.hp = Math.max(0, target.hp - FRENZY_TICK_DMG);
-        target.hitFlash = 0.25;
-        target.ragdollAng = f.facing * 0.16;
-        this.shake = Math.max(this.shake, 14);
-        this.impactFlash = Math.max(this.impactFlash, 0.55);
-        this.burst(target.x, target.y + 40, "oklch(0.95 0.18 30)", 8);
-        Sfx.play("punch", 0.7);
+        target.hitFlash = 0.3;
+        // Brief flat-shake nudge
+        target.x += (Math.random() - 0.5) * 6;
+        this.shake = Math.max(this.shake, 22);
+        this.hitstopT = Math.max(this.hitstopT, 0.04);
+        this.impactFlash = Math.max(this.impactFlash, 0.7);
+        this.burst(target.x, target.y + 40, "oklch(0.95 0.18 30)", 10);
+        Sfx.play("punch", 0.8);
         if (target.hp <= 0 && this.phase === "fight") {
           this.phase = "ko"; this.winner = f.id;
         }
@@ -734,6 +741,7 @@ export class GameEngine {
         target.vx = dir * 720;
         target.vy = -380;
         target.onGround = false;
+        target.downedT = 0;
         target.ragdollT = 1.2;
         target.ragdollEnergy = 1;
         target.ragdollAV = dir * 6;
@@ -743,7 +751,7 @@ export class GameEngine {
         this.slowmoT = Math.max(this.slowmoT, 0.45);
         this.slowmoMode = "impact";
         this.impactFlash = 1;
-        this.shockwaves.push({ x: target.x, y: target.y + 40, r: 10, rMax: 320, life: 0.7, maxLife: 0.7, color: "oklch(0.7 0.18 145)" });
+        this.shockwaves.push({ x: target.x, y: target.y + 40, r: 10, rMax: 320, life: 0.7, maxLife: 0.7, color: "oklch(0.7 0.18 25)" });
         Sfx.play("boom", 1);
         f.frenzy = null;
       }

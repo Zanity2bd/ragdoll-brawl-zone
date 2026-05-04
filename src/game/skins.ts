@@ -46,11 +46,13 @@ export const SKINS: Skin[] = [
     glow: "oklch(0.78 0.14 200)" },
 
   { id: "hulk", name: "Hulk", universe: "Marvel",
-    body: "oklch(0.45 0.16 145)", limb: "oklch(0.45 0.16 145)",
-    head: "oklch(0.45 0.16 145)",
-    boots: "oklch(0.32 0.10 290)",
+    body: "oklch(0.32 0.18 25)", limb: "oklch(0.36 0.20 25)",
+    head: "oklch(0.30 0.18 25)",
+    gloves: "oklch(0.22 0.12 25)", boots: "oklch(0.18 0.08 25)",
+    glowingEyes: "oklch(0.88 0.22 60)",
+    emblem: { shape: "shield", color: "oklch(0.18 0.08 25)" },
     thickBody: true,
-    glow: "oklch(0.55 0.16 145)" },
+    glow: "oklch(0.62 0.24 25)" },
 
   { id: "nightcrawler", name: "Nightcrawler", universe: "Marvel",
     body: "oklch(0.32 0.12 260)", limb: "oklch(0.32 0.12 260)",
