@@ -96,6 +96,16 @@ interface Fighter {
   flying: boolean;
   hoverPhase: number;
   superCd: number;
+  // Cape & body secondary motion (spring-driven). All values are visual only.
+  capeSwingX: number;   // current horizontal cape offset (px)
+  capeSwingV: number;   // velocity of capeSwingX
+  capeLift: number;     // how much the cape bottom flares up (0..1)
+  bodyLagX: number;     // small body translation lag for impacts
+  bodyLagV: number;     // velocity of bodyLagX
+  bodyRoll: number;     // extra torso roll from turns/impacts (rad)
+  bodyRollV: number;    // velocity for bodyRoll
+  prevFacing: 1 | -1;   // to detect turns
+  prevHitFlash: number; // to detect new impacts
   // ledge / drop-through state
   dropT: number;
   ledgeFlash: number;
@@ -648,6 +658,9 @@ export class GameEngine {
       slowedT: 0,
       trail: [],
       canFly, flying: canFly, hoverPhase: 0, superCd: 0,
+      capeSwingX: 0, capeSwingV: 0, capeLift: 0,
+      bodyLagX: 0, bodyLagV: 0, bodyRoll: 0, bodyRollV: 0,
+      prevFacing: 1, prevHitFlash: 0,
       dropT: 0, ledgeFlash: 0,
       coyoteT: 0, jumpBufferT: 0, jumpHeldT: 0, airJumps: 0,
       wobble: createWobble(),
@@ -1641,6 +1654,50 @@ export class GameEngine {
     f.slowedT = Math.max(0, f.slowedT - dt);
     f.hoverPhase += dt * HOVER_RATE * Math.PI * 2;
 
+    // ---- Cape & body secondary motion (spring-mass) ----
+    // Drives a heavier, more grounded feel during turns, accel changes, and impacts.
+    {
+      const turn = f.facing !== f.prevFacing ? 1 : 0;
+      f.prevFacing = f.facing;
+      // New impact this frame? (hitFlash spikes upward on hit)
+      const impact = f.hitFlash > f.prevHitFlash + 0.05 ? Math.min(1, f.hitFlash) : 0;
+      f.prevHitFlash = f.hitFlash;
+
+      // Cape horizontal swing — wind drag + spring back to rest, plus turn whip & impact kick
+      const windTarget = -f.facing * Math.min(18, Math.abs(f.vx) * 0.045) + (f.flying ? -f.facing * 6 : 0);
+      const k = 42;     // stiffness
+      const c = 6.5;    // damping
+      const accel = (windTarget - f.capeSwingX) * k - f.capeSwingV * c;
+      f.capeSwingV += accel * dt;
+      // Turn whip: snap a strong impulse opposite the new facing
+      if (turn) f.capeSwingV += -f.facing * 38;
+      // Impact: shove cape back from impact direction
+      if (impact > 0) f.capeSwingV += -f.facing * 26 * impact;
+      f.capeSwingX += f.capeSwingV * dt;
+      f.capeSwingX = Math.max(-26, Math.min(26, f.capeSwingX));
+
+      // Cape lift (flares up under fast horizontal motion / flight)
+      const liftTarget = Math.min(1, Math.abs(f.vx) / 360 + (f.flying ? 0.35 : 0));
+      f.capeLift += (liftTarget - f.capeLift) * Math.min(1, dt * 5);
+
+      // Body translation lag (impacts only, decays fast)
+      const bk = 80, bc = 11;
+      const ba = (0 - f.bodyLagX) * bk - f.bodyLagV * bc;
+      f.bodyLagV += ba * dt;
+      if (impact > 0) f.bodyLagV += -f.facing * 90 * impact;
+      f.bodyLagX += f.bodyLagV * dt;
+
+      // Body roll from turn whip & impact (radians)
+      const rk = 60, rc = 9;
+      const ra = (0 - f.bodyRoll) * rk - f.bodyRollV * rc;
+      f.bodyRollV += ra * dt;
+      if (turn) f.bodyRollV += f.facing * 5.5;
+      if (impact > 0) f.bodyRollV += -f.facing * 4.2 * impact;
+      f.bodyRoll += f.bodyRollV * dt;
+      f.bodyRoll = Math.max(-0.55, Math.min(0.55, f.bodyRoll));
+    }
+
+
     // Per-fighter slow (a-train flurry victim)
     const localScale = f.slowedT > 0 ? 0.25 : 1;
     const ldt = dt * localScale;
@@ -2209,10 +2266,10 @@ export class GameEngine {
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
-    // Homelander signature VO — plays once per match, on his first laser cast.
+    // Homelander laser SFX — plays once per match, on his first laser cast.
     if (m.kind === "laserSweep" && f.skin.id === "homelander" && !this.homelanderVoPlayed) {
       this.homelanderVoPlayed = true;
-      Sfx.play("homelanderVO", 1.0);
+      Sfx.play("homelanderLaser", 1.0);
     }
     // Flash blink: instantly teleport behind opponent
     if (m.kind === "phaseStrike") {
@@ -3379,7 +3436,8 @@ export class GameEngine {
     }
 
     ctx.save();
-    ctx.translate(x, y);
+    // Body translation lag: small horizontal shove on impact, springs back to 0
+    ctx.translate(x + (ghost ? 0 : f.bodyLagX), y);
     if (bamfActive) {
       // Perspective scale anchored at the feet so the head/fist swell forward.
       ctx.translate(0, FIGHTER_H);
@@ -3403,7 +3461,7 @@ export class GameEngine {
       ctx.translate(0, -FIGHTER_H);
     }
     ctx.translate(0, FIGHTER_H);
-    ctx.rotate(pose.lean);
+    ctx.rotate(pose.lean + (ghost ? 0 : f.bodyRoll));
     ctx.translate(0, -FIGHTER_H);
 
     const headR = 10;
@@ -3434,18 +3492,22 @@ export class GameEngine {
 
     if (skin.cape) {
       ctx.save();
-      const sway = Math.sin(f.walkPhase * 0.6) * 3 + (-f.facing) * Math.min(10, Math.abs(f.vx) * 0.05);
+      const wobble = Math.sin(f.walkPhase * 0.6) * 2;
+      const sw = f.capeSwingX + wobble;        // bottom horizontal sway
+      const swMid = sw * 0.55;                 // anchored near shoulders
+      const lift = f.capeLift * 14;            // raises bottom edge in flight/sprints
+      const curl = -Math.sign(sw) * Math.min(6, Math.abs(sw) * 0.35); // trailing whip curl
       ctx.fillStyle = skin.cape;
       ctx.beginPath();
       ctx.moveTo(-7, shoulderY - 2);
       ctx.lineTo(7, shoulderY - 2);
-      ctx.quadraticCurveTo(11 + sway * f.facing, hipY + 22, 5 + sway * f.facing, hipY + 40);
-      ctx.lineTo(-5 + sway * f.facing, hipY + 40);
-      ctx.quadraticCurveTo(-11 + sway * f.facing, hipY + 22, -7, shoulderY - 2);
+      ctx.quadraticCurveTo(11 + swMid, hipY + 22 - lift * 0.4, 5 + sw + curl, hipY + 40 - lift);
+      ctx.lineTo(-5 + sw + curl, hipY + 40 - lift);
+      ctx.quadraticCurveTo(-11 + swMid, hipY + 22 - lift * 0.4, -7, shoulderY - 2);
       ctx.fill();
       if (skin.capeAccent) {
         ctx.fillStyle = skin.capeAccent;
-        ctx.fillRect(-1.5 + sway * f.facing * 0.5, shoulderY, 3, hipY + 36 - shoulderY);
+        ctx.fillRect(-1.5 + swMid * 0.5, shoulderY, 3, hipY + 36 - shoulderY - lift * 0.6);
       }
       ctx.restore();
     }
