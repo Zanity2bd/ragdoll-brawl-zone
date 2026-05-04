@@ -1104,22 +1104,36 @@ export class GameEngine {
 
     getMap(this.mapId).drawBackground(ctx, this.elapsed, W, H, GROUND_Y);
 
-    // Particles
+    // Particles — soft additive disks with a brighter core for premium feel
     ctx.globalCompositeOperation = "lighter";
     for (const p of this.particles) {
       const a = Math.max(0, p.life / p.maxLife);
-      ctx.fillStyle = p.color; ctx.globalAlpha = a;
+      // Soft halo
+      if (!this.lowPower) {
+        ctx.globalAlpha = a * 0.55;
+        ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+      // Bright core
+      ctx.globalAlpha = a;
+      ctx.fillStyle = p.color;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
 
-    // Platforms
+    // Platforms — beveled neon slab with rim light
     for (const pl of this.platforms) {
-      if (!this.lowPower) { ctx.shadowBlur = 16; ctx.shadowColor = "oklch(0.75 0.22 215)"; }
-      ctx.fillStyle = "oklch(0.4 0.15 230)";
+      if (!this.lowPower) { ctx.shadowBlur = 18; ctx.shadowColor = "oklch(0.75 0.22 215)"; }
+      const g = ctx.createLinearGradient(pl.x, pl.y, pl.x, pl.y + pl.h);
+      g.addColorStop(0, "oklch(0.55 0.18 230)");
+      g.addColorStop(1, "oklch(0.30 0.14 235)");
+      ctx.fillStyle = g;
       ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
       ctx.shadowBlur = 0;
+      // Top rim
+      ctx.fillStyle = "oklch(0.92 0.10 215 / 0.9)";
+      ctx.fillRect(pl.x, pl.y, pl.w, 1.2);
     }
 
     // Shockwaves
