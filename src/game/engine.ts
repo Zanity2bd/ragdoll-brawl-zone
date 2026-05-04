@@ -8,6 +8,7 @@ import { MOVES, type MoveSpec } from "./combat";
 import { Sfx } from "./sfx";
 import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, type WobbleState } from "./wobble";
 import { CpuController, type Difficulty } from "./ai";
+import { loadWalkSheet, isWalkSheetReady, drawWalkFrame, WALK_FRAME_COUNT } from "./walkSprite";
 
 export type PlayerId = "p1" | "p2";
 
@@ -499,6 +500,7 @@ export class GameEngine {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("no ctx");
     this.ctx = ctx;
+    loadWalkSheet();
     if (typeof document !== "undefined") {
       const v = document.createElement("video");
       v.src = "/fx/hulk-special.webm";
@@ -4813,6 +4815,52 @@ export class GameEngine {
   private drawFighterAt(f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
     const ctx = this.ctx;
     const skin = f.skin;
+
+    // ---- Sprite-sheet walk override ----
+    // Replace the procedural body render with the imported 66-frame walk
+    // animation when the fighter is in a normal grounded walk state. Falls
+    // back to the procedural renderer for attacks, ragdoll, flight, KO, etc.
+    if (
+      !ghost &&
+      f.onGround &&
+      f.ragdollT <= 0 &&
+      f.downedT <= 0 &&
+      f.getUpT <= 0 &&
+      !f.flying &&
+      f.attackAnim <= 0 &&
+      f.kickT <= 0 &&
+      f.meleeKind == null &&
+      isWalkSheetReady()
+    ) {
+      // ground shadow + accent glow pool
+      ctx.save();
+      if (!this.lowPower) {
+        const grad = ctx.createRadialGradient(x, y + FIGHTER_H - 1, 1, x, y + FIGHTER_H - 1, 30);
+        grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 35%, transparent)`);
+        grad.addColorStop(1, "transparent");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.ellipse(x, y + FIGHTER_H - 1, 30, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = "oklch(0 0 0 / 0.32)";
+      ctx.beginPath();
+      ctx.ellipse(x, y + FIGHTER_H - 2, 16, 3.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Frame index: cycle through 66 frames driven by walkPhase. When idle
+      // (low |vx|) we hold the first frame so the character doesn't moonwalk.
+      const moving = Math.abs(f.vx) > 18;
+      const frame = moving
+        ? Math.floor((f.walkPhase / (Math.PI * 2)) * WALK_FRAME_COUNT) % WALK_FRAME_COUNT
+        : 0;
+      const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
+      // Tint with main body color (limbs share). Hit flash flips to white-hot.
+      const tint = f.hitFlash > 0 ? "oklch(0.95 0.20 30)" : (skin.body);
+      drawWalkFrame(ctx, tint, frame, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H + 12);
+      return;
+    }
 
     // ---- Bamf strike depth FX (perspective scale + z-shadow) ----
     // Drives a punch-in zoom toward the camera plus a darker offset shadow underfoot
