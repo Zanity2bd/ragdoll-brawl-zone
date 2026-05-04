@@ -677,6 +677,7 @@ export class GameEngine {
         f.iframeT = 1.0;            // 1s post-rise invulnerability
         f.ragdollImmuneT = 2.0;     // additional anti-chain window (no re-ragdoll)
         f.ragdollAng = 0; f.ragdollAV = 0; f.ragdollEnergy = 0;
+        resetWobble(f.wobble);
       }
       return;
     }
