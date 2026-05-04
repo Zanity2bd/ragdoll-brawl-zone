@@ -385,6 +385,8 @@ export class GameEngine {
   private fireWalls: FireWall[] = [];
   private magmas: MagmaBlast[] = [];
   private smokeClouds: SmokeCloud[] = [];
+  // One-shot VO flags — reset each match.
+  private homelanderVoPlayed = false;
   // Global time-freeze (Flash power 1): freezes everything except the freezer.
   private timeFreezeT = 0;
   private timeFreezer: PlayerId | null = null;
