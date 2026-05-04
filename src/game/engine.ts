@@ -1227,6 +1227,41 @@ export class GameEngine {
     this.emit();
   }
 
+  /** Tap-to-swing for Spider-Man. Fires a web to the tapped point and starts a
+   *  pendulum swing. If already swinging, the tap releases (with a momentum
+   *  boost), then a follow-up tap re-attaches at the new point. The anchor is
+   *  clamped to sit above the player so pendulum motion is always natural. */
+  tapWebSwing(p: PlayerId, canvasX: number, canvasY: number): boolean {
+    const f = p === "p1" ? this.p1 : this.p2;
+    if (f.skin.id !== "spiderman") return false;
+    if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0 || f.stunT > 0) return false;
+    if (f.frenzy) return false;
+    if (f.swing) { this.releaseSwing(f, true); return true; }
+    const { sx, sy } = this.cssToStage(canvasX, canvasY);
+    const anchorX = Math.max(40, Math.min(W - 40, sx));
+    // Force anchor to sit above the player's head for a real pendulum arc.
+    const aboveHead = f.y - 80;
+    const anchorY = Math.max(40, Math.min(aboveHead, sy));
+    const dx = f.x - anchorX;
+    const dy = (f.y + FIGHTER_H * 0.35) - anchorY;
+    const len = Math.max(120, Math.min(420, Math.hypot(dx, dy)));
+    const angle = Math.atan2(dx, dy);
+    const tx = Math.cos(angle), ty = -Math.sin(angle);
+    const tangSpeed = f.vx * tx + f.vy * ty;
+    const dir = anchorX >= f.x ? 1 : -1;
+    const angV = tangSpeed / len + dir * 0.9;
+    f.swing = { ax: anchorX, ay: anchorY, len, angle, angV, t: 0 };
+    f.onGround = false;
+    f.airJumps = 1;
+    f.facing = dir;
+    f.power2Cd = 0.25;
+    Sfx.play("whoosh", 0.85);
+    // Silk burst at anchor + a faint puff at the hand to sell the shot.
+    this.burst(anchorX, anchorY, "oklch(0.97 0.03 240)", 14);
+    this.burst(f.x, f.y + 28, "oklch(0.97 0.03 240)", 5);
+    return true;
+  }
+
   /** Instantaneous tap-to-teleport for Nightcrawler. No aim, no slow-mo. */
   tapTeleport(p: PlayerId, canvasX: number, canvasY: number): boolean {
     const f = p === "p1" ? this.p1 : this.p2;
