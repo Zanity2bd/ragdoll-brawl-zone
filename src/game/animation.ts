@@ -440,8 +440,10 @@ export function computeRagdollPose(t: number, H: number): Pose {
 }
 
 // ----- Flight pose -----
-// Superhero glide: body leans forward when fast, upright + bobbing when hovering.
-// Lead arm extended forward (Superman/Homelander), trailing arm tucked.
+// Superman-style glide: body pitches forward into a horizontal streak when fast,
+// upright with a gentle hover bob when idle. One arm punches forward (lead fist),
+// the other tucks tight to the hip. Legs extend straight back with a subtle
+// flutter and bank to sell the speed.
 export function computeFlightPose(
   phase: number,
   vx: number,
@@ -451,66 +453,87 @@ export function computeFlightPose(
   _H: number,
 ): Pose {
   const speed = Math.hypot(vx, vy);
-  const horiz = Math.min(1, speed / 360);
+  const horiz = Math.min(1, speed / 320);
   const goingUp = vy < -40;
   const goingDown = vy > 40;
+  const cruising = horiz > 0.4;
 
-  const pitch = facing * (0.05 + horiz * 0.65) + (goingUp ? -0.18 : 0) + (goingDown ? 0.22 : 0);
-  const bob = (1 - horiz) * Math.sin(hoverPhase) * 1.8;
-  // Bank/roll: tilt sideways into lateral motion (Superman flight)
-  const bank = Math.max(-0.35, Math.min(0.35, vx / 600));
+  // Pitch: at full cruise the body lays nearly horizontal forward.
+  // Vertical motion adds nose-up / nose-down lean.
+  const cruisePitch = horiz * 0.85;
+  const verticalPitch = (goingUp ? -0.22 : 0) + (goingDown ? 0.28 : 0);
+  const pitch = facing * (0.04 + cruisePitch) + verticalPitch * facing;
+
+  // Idle hover bob (disabled when flying fast).
+  const bobAmp = (1 - horiz) * 2.2;
+  const bob = bobAmp * Math.sin(hoverPhase);
+  // Bank/roll into lateral motion.
+  const bank = Math.max(-0.42, Math.min(0.42, vx / 520));
+  // Soft body sway when banking hard
+  const sway = bank * 1.4;
 
   const shoulderY = 28 + bob;
   const hipY = 56 + bob * 0.5;
-  const headOffsetY = -3 + bob * 0.4;
+  // Head leads the body forward into the wind when cruising.
+  const headOffsetY = -3 + bob * 0.4 - horiz * 1.2;
 
-  // Legs trail BEHIND the body (opposite of facing direction).
-  const trail = horiz;
-  const flutter = Math.sin(phase * 1.8) * (0.4 + (1 - horiz) * 1.6);
-  // Behind = -facing direction
+  // ---- Legs: trail straight back when cruising, hang when hovering ----
   const back = -facing;
-  // When ascending, legs tuck more vertical (downward); cruising/descending, they stretch back.
-  const verticalLean = goingUp ? 0.35 : (goingDown ? -0.15 : 0);
-  const trailReach = 10 + trail * 26;
-  const kneeReach = 5 + trail * 14;
-  const droop = (1 - trail) * 14 * (goingUp ? 0.2 : 1); // legs hang when hovering, tuck when ascending
+  const flutter = Math.sin(phase * 2.6) * (0.6 + (1 - horiz) * 1.4);
+  const trailReach = 8 + horiz * 38;          // longer streak when fast
+  const kneeReach = 4 + horiz * 22;
+  // Legs hang vertically at hover, splay back at cruise
+  const droop = (1 - horiz) * 16 * (goingUp ? 0.3 : 1);
+  const verticalLean = goingUp ? 0.4 : (goingDown ? -0.18 : 0);
+  const vY = verticalLean * 22;
 
-  const footBaseY = hipY + 22 + droop + bob;
-  const kneeBaseY = hipY + 12 + droop * 0.6;
+  // Cruise: knees nearly straight (very little Y separation between knee & foot).
+  // Hover: knees bent ~90deg with feet hanging below.
+  const footBaseY = hipY + 22 + droop + bob - horiz * 14;
+  const kneeBaseY = hipY + 12 + droop * 0.6 - horiz * 8;
 
-  const footLX = back * trailReach - 3 * facing;
-  const footRX = back * trailReach + 3 * facing;
-  const kneeLX = back * kneeReach - 2 * facing;
-  const kneeRX = back * kneeReach + 2 * facing;
+  // Slight stagger between legs for organic feel
+  const legSplit = 4 + (1 - horiz) * 2;
+  const footLX = back * trailReach - legSplit * facing * 0.5;
+  const footRX = back * trailReach + legSplit * facing * 0.5;
+  const kneeLX = back * kneeReach - legSplit * facing * 0.4;
+  const kneeRX = back * kneeReach + legSplit * facing * 0.4;
 
-  // Vertical lean lifts feet up (ascending) or pushes them down (descending)
-  const vY = verticalLean * 18;
-
-  const footL: [number, number] = [footLX, footBaseY - vY + flutter];
-  const footR: [number, number] = [footRX, footBaseY - vY - flutter * 0.7];
+  const footL: [number, number] = [footLX + sway * 0.3, footBaseY - vY + flutter];
+  const footR: [number, number] = [footRX + sway * 0.3, footBaseY - vY - flutter * 0.7];
   const legL: [number, number, number, number, number, number] =
-    [-3, hipY, kneeLX, kneeBaseY - vY * 0.5 + flutter * 0.5, footL[0], footL[1]];
+    [-3 + sway * 0.2, hipY, kneeLX, kneeBaseY - vY * 0.5 + flutter * 0.5, footL[0], footL[1]];
   const legR: [number, number, number, number, number, number] =
-    [3, hipY, kneeRX, kneeBaseY - vY * 0.5 - flutter * 0.4, footR[0], footR[1]];
+    [3 + sway * 0.2, hipY, kneeRX, kneeBaseY - vY * 0.5 - flutter * 0.4, footR[0], footR[1]];
 
-  const lead = horiz;
+  // ---- Arms: lead fist forward, trail arm tucked tight ----
   let leadHandX: number, leadHandY: number, leadElbowX: number, leadElbowY: number;
   let trailHandX: number, trailHandY: number, trailElbowX: number, trailElbowY: number;
 
-  if (goingUp && horiz < 0.55) {
-    leadHandX = facing * 6; leadHandY = shoulderY - 22;
-    leadElbowX = facing * 4; leadElbowY = shoulderY - 8;
-    trailHandX = -facing * 6; trailHandY = shoulderY - 18;
-    trailElbowX = -facing * 4; trailElbowY = shoulderY - 6;
+  if (goingUp && horiz < 0.5) {
+    // Both fists punched up overhead — classic ascent pose
+    const u = 1 - horiz;
+    leadHandX = facing * 4 * u;
+    leadHandY = shoulderY - 30 - u * 6;
+    leadElbowX = facing * 3 * u;
+    leadElbowY = shoulderY - 12 - u * 4;
+    trailHandX = -facing * 4 * u;
+    trailHandY = shoulderY - 26 - u * 4;
+    trailElbowX = -facing * 3 * u;
+    trailElbowY = shoulderY - 10;
   } else {
-    leadHandX = facing * (16 + lead * 14);
-    leadHandY = shoulderY + 4 - lead * 4;
-    leadElbowX = facing * (8 + lead * 6);
-    leadElbowY = shoulderY + 6;
-    trailHandX = -facing * (4 + (1 - lead) * 4);
-    trailHandY = shoulderY + 18 + (1 - lead) * 4;
-    trailElbowX = -facing * 6;
-    trailElbowY = shoulderY + 10;
+    // Cruise: lead arm fully extended forward like a punch, trail arm pinned
+    // back to the hip for an aerodynamic silhouette.
+    const lead = horiz;
+    leadHandX = facing * (14 + lead * 26);
+    leadHandY = shoulderY + 2 - lead * 8 + flutter * 0.2;
+    leadElbowX = facing * (8 + lead * 14);
+    leadElbowY = shoulderY + 4 - lead * 4;
+    // Trail arm: glued to hip when cruising, casual otherwise
+    trailHandX = -facing * (4 + (1 - lead) * 6);
+    trailHandY = shoulderY + 18 + (1 - lead) * 6 + flutter * 0.15;
+    trailElbowX = -facing * (5 + (1 - lead) * 3);
+    trailElbowY = shoulderY + 11;
   }
 
   const armR: [number, number, number, number, number, number] =
@@ -532,7 +555,8 @@ export function computeFlightPose(
     handR: [armR[4], armR[5]],
     footL, footR,
     lean: pitch,
-    shoulderRoll: bank * 0.7 + Math.sin(phase * 0.5) * 0.03 * (1 - horiz),
+    // Banking + faint shoulder roll for life
+    shoulderRoll: bank * 0.85 + Math.sin(phase * 0.6) * 0.04 * (1 - horiz),
   };
 }
 
