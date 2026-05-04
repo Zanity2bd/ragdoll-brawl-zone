@@ -154,6 +154,8 @@ interface Fighter {
   speedBoostT: number;   // A-Train Sonic Sprint
   // Nightcrawler Bamf Combo — scripted 3-hit teleport sequence
   bamfCombo: null | { step: number; t: number; nextAt: number; targetId: PlayerId };
+  // Spider-Man Web Swing — pendulum physics
+  swing: null | { ax: number; ay: number; len: number; angle: number; angV: number; t: number };
 }
 
 interface SmokeCloud {
@@ -718,6 +720,7 @@ export class GameEngine {
       unibeamFireT: 0,
       invisT: 0, webSnareT: 0, speedBoostT: 0,
       bamfCombo: null,
+      swing: null,
     };
   }
 
@@ -1077,8 +1080,52 @@ export class GameEngine {
         a.iframeT = Math.max(a.iframeT, 0.2);
         return true;
       }
+      case "spiderman": {
+        // Web Swing — fire web upward to a high anchor and pendulum-swing.
+        // Anchoring rules:
+        //   - Picks an anchor in front of the player (in facing direction)
+        //   - Anchor sits well above current head height for satisfying arcs
+        //   - Cancels if already swinging (re-press releases)
+        if (a.swing) {
+          this.releaseSwing(a, true);
+          return true;
+        }
+        a.power2Cd = 0.5; // short tap CD; jump cancels & re-grapples freely
+        const dir = a.facing;
+        const anchorX = Math.max(80, Math.min(W - 80, a.x + dir * 220));
+        const anchorY = Math.max(60, Math.min(GROUND_Y - 220, a.y - 180));
+        const dx = a.x - anchorX, dy = (a.y + FIGHTER_H * 0.35) - anchorY;
+        const len = Math.hypot(dx, dy) || 1;
+        const angle = Math.atan2(dx, dy); // 0 = straight down
+        // Convert current linear velocity to tangential angular velocity
+        const tx = Math.cos(angle), ty = -Math.sin(angle); // tangent dir
+        const tangSpeed = a.vx * tx + a.vy * ty;
+        const angV = tangSpeed / len + dir * 1.6; // give a kick in facing dir
+        a.swing = { ax: anchorX, ay: anchorY, len, angle, angV, t: 0 };
+        a.onGround = false;
+        a.airJumps = 1;
+        Sfx.play("whoosh", 0.8);
+        // Web shoot burst at anchor
+        this.burst(anchorX, anchorY, "oklch(0.95 0.02 240)", 8);
+        return true;
+      }
     }
     return false;
+  }
+
+  /** Release Spider-Man from his current web swing, converting angular → linear velocity. */
+  private releaseSwing(a: Fighter, boost: boolean) {
+    const sw = a.swing;
+    if (!sw) return;
+    // Tangent: derivative of (ax + sin(angle)*len, ay + cos(angle)*len)
+    const tx = Math.cos(sw.angle);
+    const ty = -Math.sin(sw.angle);
+    const v = sw.angV * sw.len;
+    a.vx = tx * v * (boost ? 1.18 : 1.0);
+    a.vy = ty * v * (boost ? 1.18 : 1.0) - (boost ? 60 : 0);
+    a.swing = null;
+    a.onGround = false;
+    Sfx.play("whoosh", 0.6);
   }
 
   /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
@@ -2323,6 +2370,55 @@ export class GameEngine {
           });
         }
       }
+    } else if (f.swing) {
+      // ---- Spider-Man Web Swing: pendulum physics ----
+      const sw = f.swing;
+      sw.t += ldt;
+      if (f.jumpBufferT > 0) f.jumpBufferT = Math.max(0, f.jumpBufferT - ldt);
+      // Steering: left/right input pumps the pendulum (like a child on a swing)
+      let pump = 0;
+      if (intent.left) pump -= 1;
+      if (intent.right) pump += 1;
+      pump += intent.ax;
+      // Gravity-driven angular accel: a = -(g/len) * sin(angle)
+      const g = 1500;
+      const angA = -(g / sw.len) * Math.sin(sw.angle) + pump * 6.5;
+      sw.angV += angA * ldt;
+      // Light damping for stability — feels alive but never explodes
+      sw.angV *= Math.exp(-0.6 * ldt);
+      // Clamp angular velocity so the pendulum stays controllable
+      const maxAngV = 7.5;
+      if (sw.angV > maxAngV) sw.angV = maxAngV;
+      else if (sw.angV < -maxAngV) sw.angV = -maxAngV;
+      sw.angle += sw.angV * ldt;
+      // Position from pendulum
+      const newX = sw.ax + Math.sin(sw.angle) * sw.len;
+      const newY = sw.ay + Math.cos(sw.angle) * sw.len;
+      // Track linear velocity for smooth release
+      f.vx = (newX - f.x) / Math.max(ldt, 1e-4);
+      f.vy = (newY - f.y) / Math.max(ldt, 1e-4);
+      f.x = newX;
+      f.y = newY - FIGHTER_H * 0.35;
+      f.onGround = false;
+      f.facing = sw.angV >= 0 ? 1 : -1;
+      // Jump = release with momentum boost
+      if (intent.jump && f.jumpBufferT > 0) {
+        f.jumpBufferT = 0;
+        this.releaseSwing(f, true);
+      }
+      // Auto-release if anchor too far / fighter hits ground
+      if (f.y + FIGHTER_H >= GROUND_Y - 1 || sw.t > 4.5) {
+        this.releaseSwing(f, false);
+      }
+      // Subtle motion trail
+      if (!this.lowPower && Math.random() < 0.4) {
+        this.particles.push({
+          x: f.x + (Math.random() - 0.5) * 6,
+          y: f.y + 30,
+          vx: 0, vy: 0, life: 0.25, maxLife: 0.25,
+          color: "oklch(0.95 0.02 240 / 0.6)", size: 1.2,
+        });
+      }
     } else {
       // ---- Ground / standard physics ----
       let move = 0;
@@ -2570,7 +2666,7 @@ export class GameEngine {
 
     // Soft-body wobble (secondary motion). Skipped during full ragdoll/downed/getup
     // because those branches return early above and own the body completely.
-    stepWobble(f.wobble, dt, f.vx, f.vy, f.onGround, f.flying, this.lowPower);
+    stepWobble(f.wobble, dt, f.vx, f.vy, f.onGround, f.flying, this.lowPower, f.skin.id === "spiderman");
 
     // Maintain afterimage trail for fast skins (and during Bamf strikes for depth motion-blur)
     const fast = f.skin.id === "flash" || f.skin.id === "atrain";
@@ -4101,6 +4197,27 @@ export class GameEngine {
     const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
     if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
+    // Web-swing tethers
+    for (const f of [this.p1, this.p2]) {
+      if (!f.swing) continue;
+      const ctx = this.ctx; if (!ctx) continue;
+      const hx = f.x; const hy = f.y + 28;
+      ctx.save();
+      ctx.strokeStyle = "oklch(0.95 0.02 240 / 0.95)";
+      ctx.lineWidth = 1.6;
+      ctx.shadowColor = "oklch(0.95 0.02 240)";
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.moveTo(f.swing.ax, f.swing.ay);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      // Anchor pulse
+      ctx.fillStyle = "oklch(0.95 0.02 240 / 0.85)";
+      ctx.beginPath();
+      ctx.arc(f.swing.ax, f.swing.ay, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
 
     // Frenzy overlay — prefer frame sequence for mobile reliability, fall back to video.
     if (frenzyAttacker) {
@@ -5065,6 +5182,11 @@ function getPowerSpec(id: SkinId): PowerSpec {
       return {
         power1: { name: "Bamf Cloud", cd: BAMF_CLOUD_CD },
         power2: { name: "Bamf Combo", cd: BAMF_COMBO_CD },
+      };
+    case "spiderman":
+      return {
+        power1: { name: "Web Snare", cd: WEB_SNARE_CD },
+        power2: { name: "Web Swing", cd: 0.5 },
       };
     default:
       return {};

@@ -76,6 +76,7 @@ export function stepWobble(
   vx: number, vy: number,
   onGround: boolean, flying: boolean,
   lowPower: boolean,
+  agile: boolean = false,
 ) {
   if (dt <= 0) return;
   const h = Math.min(dt, 1 / 30);
@@ -115,18 +116,35 @@ export function stepWobble(
 
   if (flying) { kBody *= 1.15; dBody *= 1.05; }
 
+  // Agile fighters (Spider-Man) — looser springs for constant subtle sway
+  if (agile) {
+    kBody *= 0.78; dBody *= 0.72;
+    kLimb *= 0.7;  dLimb *= 0.7;
+  }
+
   // Body spring (toward 0,0)
   s.bvx += (-kBody * s.bx - dBody * s.bvx) * h;
   s.bvy += (-kBody * s.by - dBody * s.bvy) * h;
 
   // Subtle organic noise (only when not idle-near-rigid; perlin-ish via sin sums)
-  if (speed > 8 || s.staggerT > 0 || (!onGround && !flying)) {
+  if (agile || speed > 8 || s.staggerT > 0 || (!onGround && !flying)) {
     const n1 = Math.sin(s.noisePhase * 6.3) * Math.cos(s.noisePhase * 3.1);
     const n2 = Math.sin(s.noisePhase * 4.7 + 1.3) * Math.cos(s.noisePhase * 5.9 + 0.7);
-    const noiseAmp = (s.staggerT > 0 ? 14 : 4) * (lowPower ? 0.5 : 1);
+    const baseAmp = s.staggerT > 0 ? 14 : 4;
+    const noiseAmp = (agile ? baseAmp + 6 : baseAmp) * (lowPower ? 0.5 : 1);
     s.bvx += n1 * noiseAmp * h * 8;
     s.bvy += n2 * noiseAmp * h * 8;
-    s.tiltV += n1 * 0.6 * h * 8;
+    s.tiltV += n1 * (agile ? 1.1 : 0.6) * h * 8;
+    // Constant micro-sway in the limbs for agile characters
+    if (agile) {
+      const L = s.limb;
+      for (let i = 0; i < 4; i++) {
+        const o = i * 4;
+        const ph = s.noisePhase * (i % 2 === 0 ? 5.1 : 4.3) + i * 1.7;
+        L[o + 2] += Math.sin(ph) * 18 * h * 8;
+        L[o + 3] += Math.cos(ph * 0.9) * 14 * h * 8;
+      }
+    }
   }
 
   // Stagger: mild downward force on body & limbs (sense of weight)
