@@ -469,7 +469,7 @@ export class GameEngine {
     t.meleeKind = null; t.meleeT = 0;
     // Lock target out: clear ragdoll/getup to keep them upright in scene
     t.ragdollT = 0; t.downedT = 0; t.getUpT = 0;
-    a.frenzy = { t: 0, dur: FRENZY_DUR, target: t.id, nextTick: 0, transitionT: 0 };
+    a.frenzy = { t: 0, dur: FRENZY_DUR, target: t.id, nextTick: 0, transitionT: 0, punchPulse: 0 };
     this.shake = Math.max(this.shake, 24);
     this.hitstopT = Math.max(this.hitstopT, 0.08);
     this.impactFlash = 1;
