@@ -215,7 +215,7 @@ export function GameCanvas() {
         onSfx={setSfxVol} onMusic={setMusicVol}
         onClose={() => setAudioOpen(false)}
       />
-      {screen === "fight" && isTouch && engine && snap && <TouchControls engine={engine} snap={snap} />}
+      {screen === "fight" && isTouch && engine && snap && <TouchControls engine={engine} snap={snap} cpu={cpuEnabled} />}
 
       {screen === "splash" && (
         <Splash onPlay={() => { Sfx.unlock(); setScreen("map"); }} />
