@@ -9,7 +9,11 @@ import type { Skin } from "./skins";
 
 export const WALK_FRAME_W = 144;
 export const WALK_FRAME_H = 200;
-export const WALK_FRAME_COUNT = 14;
+export const WALK_FRAME_COUNT = 15;
+export const WALK_LOOP_FRAMES = 10;        // walk cycle: frames 0..9
+export const PUNCH_FRAME_START = 10;       // punch: frames 10..13
+export const PUNCH_FRAME_COUNT = 4;
+export const RECOVERY_FRAME = 14;          // one-shot transition
 export const WALK_FOOT_Y = 189;
 
 let sheet: HTMLImageElement | null = null;
