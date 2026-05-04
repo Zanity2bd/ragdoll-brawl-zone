@@ -1067,6 +1067,8 @@ export class GameEngine {
       if (!this.p1.ragdollT && !this.p1.downedT && !this.p1.getUpT && !isFrozenFor("p1")) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
       if (!this.p2.ragdollT && !this.p2.downedT && !this.p2.getUpT && !isFrozenFor("p2")) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
       this.resolveMelees();
+      this.updateBamfCombo(this.p1, dt);
+      this.updateBamfCombo(this.p2, dt);
     }
     for (const f of [this.p1, this.p2]) {
       if (freezeActive && f.id !== this.timeFreezer) continue;
