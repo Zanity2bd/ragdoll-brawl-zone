@@ -251,18 +251,17 @@ export function GameCanvas() {
           snap={snap}
           onRematch={() => engine?.reset()}
           onChange={() => setScreen("map")}
-          onOpenAudio={() => setAudioOpen(o => !o)}
-          muted={muted}
+          onOpenSettings={() => setSettingsOpen(o => !o)}
           onFrenzyP1={() => engineRef.current?.pressFrenzy("p1")}
         />
       )}
-      <AudioPanel
-        open={audioOpen && screen === "fight"}
+      <SettingsPanel
+        open={settingsOpen}
         muted={muted}
         onToggleMute={() => setMuted(m => !m)}
         sfxVol={sfxVol} musicVol={musicVol}
         onSfx={setSfxVol} onMusic={setMusicVol}
-        onClose={() => setAudioOpen(false)}
+        onClose={() => setSettingsOpen(false)}
       />
       {screen === "fight" && isTouch && engine && snap && <TouchControls engine={engine} snap={snap} cpu={cpuEnabled} />}
 
