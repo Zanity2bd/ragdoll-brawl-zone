@@ -525,12 +525,54 @@ export class GameEngine {
     const f = id === "p1" ? this.p1 : this.p2;
     if (f.teleCd > 0 || f.teleporting) return;
     f.teleCd = TELE_CD;
-    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
     Sfx.play("bamf", 0.9);
     f.x = Math.max(40, Math.min(W - 40, sx));
     f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy));
     f.vx = 0; f.vy = 0; f.teleporting = false;
-    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 32);
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
+  }
+
+  /** Signature Nightcrawler teleport puff: dense purple smoke + curling tendrils + sparks. */
+  private bamfPuff(x: number, y: number, mode: "depart" | "arrive" | "strike") {
+    const layers = mode === "strike" ? 2 : 3;
+    for (let i = 0; i < layers; i++) {
+      const off = (Math.random() - 0.5) * 14;
+      this.smokeClouds.push({
+        x: x + off, y: y + (Math.random() - 0.5) * 10,
+        r: 10 + i * 4,
+        rMax: 56 + i * 14 + (mode === "arrive" ? 8 : 0),
+        life: 0.55 + i * 0.12, maxLife: 0.55 + i * 0.12,
+      });
+    }
+    this.burst(x, y, "oklch(0.55 0.22 305)", mode === "arrive" ? 28 : 22);
+    const count = mode === "strike" ? 10 : 18;
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 30 + Math.random() * 90;
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 14,
+        y: y + (Math.random() - 0.5) * 14,
+        vx: Math.cos(ang) * sp * 0.6,
+        vy: Math.sin(ang) * sp * 0.4 - 40 - Math.random() * 30,
+        life: 0.7 + Math.random() * 0.5, maxLife: 1.2,
+        color: i % 3 === 0
+          ? "oklch(0.78 0.22 305)"
+          : (i % 3 === 1 ? "oklch(0.4 0.16 295)" : "oklch(0.25 0.08 290)"),
+        size: 3 + Math.random() * 3.5,
+      });
+    }
+    for (let i = 0; i < (mode === "arrive" ? 10 : 6); i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 160 + Math.random() * 200;
+      this.particles.push({
+        x, y,
+        vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 40,
+        life: 0.25 + Math.random() * 0.2, maxLife: 0.45,
+        color: "oklch(0.95 0.18 95)",
+        size: 1.4 + Math.random() * 1.6,
+      });
+    }
   }
 
   reset() {
@@ -990,12 +1032,12 @@ export class GameEngine {
     if (!this.teleTargeting) return;
     const f = this.teleTargeting === "p1" ? this.p1 : this.p2;
     const { sx, sy } = this.cssToStage(canvasX, canvasY);
-    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
     Sfx.play("bamf", 0.9);
     f.x = Math.max(40, Math.min(W - 40, sx));
     f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy - FIGHTER_H / 2));
     f.vx = 0; f.vy = 0; f.teleporting = false;
-    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 32);
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
     this.teleTargeting = null;
     if (this.slowmoMode === "tele") { this.slowmoT = 0; this.slowmoMode = null; }
     this.emit();
@@ -2335,9 +2377,8 @@ export class GameEngine {
     ];
     const s = steps[step];
 
-    // Departure burst + ghost trail at old position
-    this.burst(a.x, a.y + FIGHTER_H / 2, "oklch(0.55 0.20 305)", 22);
-    this.smokeClouds.push({ x: a.x, y: a.y + 36, r: 16, rMax: 64, life: 0.5, maxLife: 0.5 });
+    // Departure puff at old position + ghost trail
+    this.bamfPuff(a.x, a.y + FIGHTER_H / 2, "depart");
     for (let i = 0; i < 3; i++) {
       a.trail.push({
         x: a.x, y: a.y, phase: a.walkPhase, vx: 0, vy: 0,
@@ -2353,8 +2394,8 @@ export class GameEngine {
     a.onGround = a.y >= GROUND_Y - FIGHTER_H - 1;
     Sfx.play("bamf", 1.0);
 
-    // Arrival burst + impact ring
-    this.burst(a.x, a.y + FIGHTER_H / 2, "oklch(0.7 0.22 305)", 30);
+    // Arrival puff + sharp impact ring
+    this.bamfPuff(a.x, a.y + FIGHTER_H / 2, "arrive");
     this.shockwaves.push({
       x: a.x, y: a.y + FIGHTER_H / 2, r: 8, rMax: 64,
       life: 0.32, maxLife: 0.32, color: "oklch(0.75 0.22 305)",
@@ -2368,8 +2409,30 @@ export class GameEngine {
     a.attackAnim = stepDur;
     Sfx.play("whoosh", 0.5);
 
-    // Apply hit
-    if (t.iframeT <= 0 && t.downedT <= 0 && t.getUpT <= 0) {
+    // ---- Depth-aware hit alignment ----
+    // The visible strike limb extends ~38–40px (perspective-stretched) from the
+    // attacker's shoulder/hip toward the camera-facing direction. Place the hit
+    // and impact FX at that projected limb tip rather than at target.x so the
+    // 3D z-offset illusion lines up with the actual hitbox.
+    const reachWorld = s.kind === "bamfPunch" ? 40 : 36;
+    const limbTipX = a.x + a.facing * reachWorld;
+    // Strike Y matches limb height: punch ~ shoulder (head/upper-torso),
+    // kick ~ hip / mid-torso. Account for perspective scale lift (~6-8px up).
+    const shoulderWorldY = a.y + 28; // shoulder approx
+    const hipWorldY = a.y + 56;
+    const limbTipY = (s.kind === "bamfPunch" ? shoulderWorldY : hipWorldY) - 4;
+    // Hit only if depth-aware hitbox actually overlaps the target body
+    // Hit only if depth-aware hitbox actually overlaps the target body.
+    // Use a generous box for the overhead punch (step 0) since the attacker is
+    // directly above the target and the limb-tip projection is mostly vertical.
+    const horizPad = step === 0 ? 50 : 38;
+    const vertPad = step === 0 ? FIGHTER_H + 40 : FIGHTER_H + 8;
+    const hitsTarget =
+      Math.abs(limbTipX - t.x) < horizPad &&
+      limbTipY > t.y - 8 &&
+      limbTipY < t.y + vertPad;
+
+    if (hitsTarget && t.iframeT <= 0 && t.downedT <= 0 && t.getUpT <= 0) {
       t.ragdollImmuneT = 0;
       t.hp = Math.max(0, t.hp - s.dmg);
       t.hitFlash = 0.55;
@@ -2388,7 +2451,9 @@ export class GameEngine {
       this.slowmoT = Math.max(this.slowmoT, s.slow);
       this.slowmoMode = "impact";
 
-      const ix = t.x, iy = t.y + 40;
+      // Impact spawns AT the projected limb tip (pulled slightly toward target body)
+      const ix = limbTipX * 0.4 + t.x * 0.6;
+      const iy = limbTipY * 0.5 + (t.y + (s.kind === "bamfPunch" ? 32 : 50)) * 0.5;
       this.burst(ix, iy, "oklch(0.96 0.06 80)", 26);
       this.burst(ix, iy, "oklch(0.7 0.22 305)", 22);
       this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 70, life: 0.4, maxLife: 0.4, color: "oklch(0.95 0.18 95)" });
