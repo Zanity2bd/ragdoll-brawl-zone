@@ -452,8 +452,8 @@ export class GameEngine {
     if (this.phase === "fight") {
       this.updateFighter(this.p1, sdt);
       this.updateFighter(this.p2, sdt);
-      if (!this.p1.ragdollT) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
-      if (!this.p2.ragdollT) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
+      if (!this.p1.ragdollT && !this.p1.downedT && !this.p1.getUpT) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
+      if (!this.p2.ragdollT && !this.p2.downedT && !this.p2.getUpT) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
       this.resolveMelees();
     }
     for (const f of [this.p1, this.p2]) {
