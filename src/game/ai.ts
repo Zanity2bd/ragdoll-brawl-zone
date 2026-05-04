@@ -118,9 +118,36 @@ export class CpuController {
 
     // Apply intents — but occasionally drop a frame to feel human.
     const drop = cfg.mistakeChance > 0 && Math.random() < cfg.mistakeChance * dt * 4;
+
+    // ---- Flight steering: send analog ax/ay so flyers chase in 2D ----
+    // Without this the engine sees no axis input → exponential damping → flyer
+    // drifts to the ceiling and idles there.
+    let ax = 0, ay = 0;
+    if (meRect.canFly && meRect.flying) {
+      const dx = oppRect.x - meRect.x;
+      const adx = Math.abs(dx);
+      const skill = SKILLS[me.name.toLowerCase().replace("-", "") as SkinId] ?? SKILLS.homelander;
+      const pref = skill.preferred;
+      // Horizontal: close to preferred range, kite if too close (for ranged).
+      const dead = 28;
+      if (adx > pref + dead) ax = Math.sign(dx);
+      else if (adx < pref - dead && skill.ranged) ax = -Math.sign(dx);
+      else ax = 0;
+      // Vertical: match opponent's altitude with a small offset so we float just
+      // above and can dive in. Add gentle hover oscillation so we don't lock flat.
+      const targetY = oppRect.y - (skill.ranged ? 60 : 20);
+      const dy = targetY - meRect.y;
+      const ady = Math.abs(dy);
+      if (ady > 16) ay = Math.max(-1, Math.min(1, dy / 80));
+      // If opponent is on the ground and we're far above, dive down to engage.
+      if (oppRect.onGround && meRect.y < oppRect.y - 140) ay = 1;
+    }
+
     this.engine.setIntent(this.id, {
       left:  !drop && this.moveDir < 0,
       right: !drop && this.moveDir > 0,
+      ax: drop ? 0 : ax,
+      ay: drop ? 0 : ay,
     });
     if (this.wantJump) { this.engine.pressJump(this.id); this.wantJump = false; }
     if (this.wantSpecial) {
