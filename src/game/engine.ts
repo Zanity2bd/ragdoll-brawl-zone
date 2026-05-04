@@ -719,6 +719,8 @@ export class GameEngine {
       // Continuous low-amplitude jitter while attack is active
       const jitter = 6 + Math.sin(fr.t * 60) * 3;
       this.shake = Math.max(this.shake, jitter);
+      // Decay punch pulse (drives flash + motion blur in renderer)
+      fr.punchPulse = Math.max(0, fr.punchPulse - dt * 5);
       // Damage ticks + heavy shake on each punch
       fr.nextTick -= dt;
       if (fr.nextTick <= 0) {
@@ -729,8 +731,15 @@ export class GameEngine {
         target.x += (Math.random() - 0.5) * 6;
         this.shake = Math.max(this.shake, 22);
         this.hitstopT = Math.max(this.hitstopT, 0.04);
-        this.impactFlash = Math.max(this.impactFlash, 0.7);
-        this.burst(target.x, target.y + 40, "oklch(0.95 0.18 30)", 10);
+        this.impactFlash = Math.max(this.impactFlash, 0.85);
+        fr.punchPulse = 1;
+        // Radial impact flash ring at target
+        this.shockwaves.push({
+          x: target.x, y: target.y + 30, r: 6, rMax: 90,
+          life: 0.22, maxLife: 0.22, color: "oklch(0.95 0.18 35)",
+        });
+        this.burst(target.x, target.y + 40, "oklch(0.95 0.18 30)", 12);
+        this.burst(target.x + (Math.random() - 0.5) * 30, target.y + 20, "oklch(0.98 0.12 60)", 6);
         Sfx.play("punch", 0.8);
         if (target.hp <= 0 && this.phase === "fight") {
           this.phase = "ko"; this.winner = f.id;
