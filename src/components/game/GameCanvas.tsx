@@ -537,7 +537,7 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
 }
 
 function PlayerControls({
-  side, color, p, onMove, onJump, onFire, onPunch, onTele, canFly,
+  side, color, p, onMove, onJump, onFire, onPunch, onTele, onPower1, canFly,
 }: {
   side: "left" | "right";
   color: string;
@@ -547,14 +547,19 @@ function PlayerControls({
   onFire: () => void;
   onPunch: () => void;
   onTele: () => void;
+  onPower1?: () => void;
   canFly?: boolean;
 }) {
   const isHeatwave = p.name === "Heatwave";
   const isNightcrawler = p.name === "Nightcrawler";
-  const onSpecial = isHeatwave ? onFire : isNightcrawler ? onTele : onPunch;
-  const cd = isHeatwave ? p.fireCd : isNightcrawler ? p.teleCd : p.meleeCd;
-  const max = isHeatwave ? p.fireCdMax : isNightcrawler ? p.teleCdMax : p.meleeCdMax;
-  const label = isHeatwave ? "Fire" : isNightcrawler ? "Teleport" : p.meleeName;
+  const isFlash = p.name === "The Flash";
+  // Flash: HOLD activates Time Freeze (power1) instead of basic melee.
+  const onSpecial = isFlash && onPower1
+    ? onPower1
+    : (isHeatwave ? onFire : isNightcrawler ? onTele : onPunch);
+  const cd = isFlash ? p.power1Cd : isHeatwave ? p.fireCd : isNightcrawler ? p.teleCd : p.meleeCd;
+  const max = isFlash ? p.power1CdMax : isHeatwave ? p.fireCdMax : isNightcrawler ? p.teleCdMax : p.meleeCdMax;
+  const label = isFlash ? "Time Freeze" : isHeatwave ? "Fire" : isNightcrawler ? "Teleport" : p.meleeName;
   return (
     <div className={`flex items-end ${side === "right" ? "flex-row-reverse" : ""}`}>
       <Joystick
