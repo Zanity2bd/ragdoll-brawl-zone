@@ -2,11 +2,12 @@
 // Lazy-init on first user gesture (Splash PLAY tap).
 
 import bamfUrl from "@/assets/sfx/bamf.mp3";
+import homelanderVoUrl from "@/assets/audio/homelander-laser-vo.mp3";
 
 export type SfxName =
   | "punch" | "heavy" | "boom" | "laser" | "shock"
   | "whoosh" | "chirp" | "thud" | "jab" | "blip"
-  | "bamf";
+  | "bamf" | "homelanderVO";
 
 class SfxEngine {
   private ctx: AudioContext | null = null;
