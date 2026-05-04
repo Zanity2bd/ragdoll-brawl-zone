@@ -2456,6 +2456,24 @@ export class GameEngine {
         }
       }
 
+      // Solid props: block grounded fighters laterally. Flyers pass over freely.
+      // Buildings expose a walkable door so ground fighters can move through.
+      if (!f.flying) {
+        for (const p of this.props) {
+          if (p.destroyed) continue;
+          const hw = FIGHTER_W / 2;
+          const overlapX = f.x + hw > p.x && f.x - hw < p.x + p.w;
+          const overlapY = f.y + FIGHTER_H > p.y + 2 && f.y < p.y + p.h;
+          if (!overlapX || !overlapY) continue;
+          if (this.fighterInDoor(p, f.x, f.y)) continue; // walk through door
+          const fromLeft = (f.x + hw) - p.x;
+          const fromRight = (p.x + p.w) - (f.x - hw);
+          if (fromLeft < fromRight) { f.x = p.x - hw; if (f.vx > 0) f.vx = 0; }
+          else { f.x = p.x + p.w + hw; if (f.vx < 0) f.vx = 0; }
+        }
+      }
+
+
       let landedOn: Platform | null = null;
       const wasAirborne = !f.onGround;
       const landingVy = f.vy;
