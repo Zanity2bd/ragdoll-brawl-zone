@@ -5162,12 +5162,6 @@ export class GameEngine {
     ctx.fillStyle = headColor;
     ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
     if (!ghost) {
-      const headRimOffset = outlineW * 0.5;
-      ctx.strokeStyle = outlineColor;
-      ctx.lineWidth = outlineW;
-      ctx.beginPath(); ctx.arc(0, headY, headR + headRimOffset, 0, Math.PI * 2); ctx.stroke();
-    }
-    if (!ghost) {
       ctx.save();
       const hg = ctx.createRadialGradient(
         f.facing * -2.5, headY - headR * 0.55, 0.5,
