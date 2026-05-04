@@ -131,9 +131,9 @@ export function GameCanvas() {
       // Flash: V = Time Freeze (P1), C = Lightning Blast (P1)
       if (e.code === "KeyV") { e.preventDefault(); engine.pressPower1("p1"); return; }
       if (e.code === "KeyC") { e.preventDefault(); engine.pressPower2("p1"); return; }
-      // Universal basic kick: T = P1, P = P2 (when not CPU)
-      if (e.code === "KeyT") { e.preventDefault(); engine.pressKick("p1"); return; }
-      if (e.code === "KeyP" && !cpuEnabledRef.current) { e.preventDefault(); engine.pressKick("p2"); return; }
+      // Universal basic punch: T = P1, P = P2 (when not CPU)
+      if (e.code === "KeyT") { e.preventDefault(); engine.pressPunch("p1"); return; }
+      if (e.code === "KeyP" && !cpuEnabledRef.current) { e.preventDefault(); engine.pressPunch("p2"); return; }
       const m = KEY_MAP[e.code];
       if (!m) return;
       if (m.p === "p2" && cpuEnabledRef.current) return;
@@ -791,13 +791,13 @@ function Joystick({
 
 function KickButton({ engine, snap, cpu }: { engine: GameEngine; snap: GameSnapshot; cpu: boolean }) {
   const fire = (p: PlayerId) => {
-    engine.pressKick(p);
+    engine.pressPunch(p);
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(12);
   };
   const Btn = ({ side, p, color }: { side: "left" | "right"; p: PlayerId; color: string }) => (
     <button
       type="button"
-      aria-label="Kick"
+      aria-label="Punch"
       onPointerDown={(e) => { e.preventDefault(); fire(p); }}
       onClick={(e) => e.preventDefault()}
       className="pointer-events-auto absolute rounded-full font-black flex items-center justify-center select-none touch-none active:scale-95 transition-transform"

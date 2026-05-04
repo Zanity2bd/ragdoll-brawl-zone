@@ -17,6 +17,6 @@ export const WALK_FRAME_W = 144;
 export const WALK_FRAME_H = 200;
 
 export const WALK_ANCHORS: ReadonlyArray<WalkAnchor> = Array.from(
-  { length: 14 },
+  { length: 15 },
   () => SHARED,
 );

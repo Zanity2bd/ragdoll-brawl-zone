@@ -8,7 +8,7 @@ import { MOVES, type MoveSpec } from "./combat";
 import { Sfx } from "./sfx";
 import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, type WobbleState } from "./wobble";
 import { CpuController, type Difficulty } from "./ai";
-import { loadWalkSheet, isWalkSheetReady, drawWalkFrame, WALK_FRAME_COUNT } from "./walkSprite";
+import { loadWalkSheet, isWalkSheetReady, drawWalkFrame, WALK_LOOP_FRAMES, PUNCH_FRAME_START, RECOVERY_FRAME } from "./walkSprite";
 
 export type PlayerId = "p1" | "p2";
 
@@ -157,10 +157,11 @@ interface Fighter {
   bamfCombo: null | { step: number; t: number; nextAt: number; targetId: PlayerId };
   // Spider-Man Web Swing — pendulum physics
   swing: null | { ax: number; ay: number; len: number; angle: number; angV: number; t: number };
-  // Universal basic kick — light melee, 1 dmg
-  kickT: number;       // 0 = idle, otherwise progress through KICK_DUR
-  kickCd: number;
-  kickHit: boolean;    // ensures one hit per swing
+  // Universal basic punch — sprite-driven (frames 11–14 + recovery 15)
+  punchT: number;       // 0 = idle, otherwise progress through PUNCH_DUR
+  punchCd: number;
+  punchHit: boolean;    // ensures one hit per swing
+  recoverT: number;     // frame-15 transition timer (visual only)
 }
 
 interface SmokeCloud {
@@ -240,7 +241,7 @@ export interface Intents {
   fire: boolean;
   teleport: boolean;
   melee: boolean;
-  kick: boolean;
+  punch: boolean;
   // Analog flight steering, -1..1. When flying, replaces ground walk input.
   ax: number;
   ay: number;
@@ -264,14 +265,17 @@ const COYOTE_T = 0.10;             // post-leave grace
 const JUMP_BUFFER_T = 0.13;        // press buffer
 const MAX_AIR_JUMPS = 1;            // double-jump for non-flyers
 const FIGHTER_H = 90;
-// Universal basic kick — light, snappy melee available to all ground fighters.
-const KICK_WINDUP = 0.07;
-const KICK_ACTIVE = 0.09;
-const KICK_RECOVER = 0.18;
-const KICK_DUR = KICK_WINDUP + KICK_ACTIVE + KICK_RECOVER;
-const KICK_CD = 0.55;
-const KICK_RANGE = 56;
-const KICK_DMG = 1;
+// Universal basic punch — sprite-driven (frames 11–14 + recovery 15).
+// Speed up frames 12–13 (impact window) for snap.
+const PUNCH_F11 = 0.10;  // windup    -> frame 10
+const PUNCH_F12 = 0.05;  // impact 1  -> frame 11 (hit active)
+const PUNCH_F13 = 0.05;  // impact 2  -> frame 12 (hit active)
+const PUNCH_F14 = 0.10;  // followthr -> frame 13
+const PUNCH_DUR = PUNCH_F11 + PUNCH_F12 + PUNCH_F13 + PUNCH_F14;
+const PUNCH_RECOVERY = 0.10;  // frame 14, no hit
+const PUNCH_CD = 0.55;
+const PUNCH_RANGE = 60;
+const PUNCH_DMG = 1;
 const FIGHTER_W = 30;
 
 const FIRE_CD = 0.8;
@@ -464,8 +468,8 @@ export class GameEngine {
   ];
 
   private intents: Record<PlayerId, Intents> = {
-    p1: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false, kick: false, ax: 0, ay: 0, toggleFlight: false },
-    p2: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false, kick: false, ax: 0, ay: 0, toggleFlight: false },
+    p1: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false, punch: false, ax: 0, ay: 0, toggleFlight: false },
+    p2: { left: false, right: false, jump: false, fire: false, teleport: false, melee: false, punch: false, ax: 0, ay: 0, toggleFlight: false },
   };
 
   private teleTargeting: PlayerId | null = null;
@@ -736,7 +740,7 @@ export class GameEngine {
       invisT: 0, webSnareT: 0, speedBoostT: 0,
       bamfCombo: null,
       swing: null,
-      kickT: 0, kickCd: 0, kickHit: false,
+      punchT: 0, punchCd: 0, punchHit: false, recoverT: 0,
     };
   }
 
@@ -768,7 +772,7 @@ export class GameEngine {
     if (f) f.jumpBufferT = JUMP_BUFFER_T;
   }
   pressMelee(p: PlayerId) { this.intents[p].melee = true; }
-  pressKick(p: PlayerId) { this.intents[p].kick = true; }
+  pressPunch(p: PlayerId) { this.intents[p].punch = true; }
   setAirSteering(p: PlayerId, ax: number, ay: number) {
     this.intents[p].ax = Math.max(-1, Math.min(1, ax));
     this.intents[p].ay = Math.max(-1, Math.min(1, ay));
@@ -2330,7 +2334,7 @@ export class GameEngine {
     const powerLocked = f.stunT > 0 || f.unibeamChargeT > 0 || f.unibeamFireT > 0 || f.heatVisionT > 0;
     if (powerLocked) {
       intent.left = false; intent.right = false;
-      intent.melee = false; intent.fire = false; intent.kick = false;
+      intent.melee = false; intent.fire = false; intent.punch = false;
       intent.ax = 0; intent.ay = 0;
     }
 
@@ -2350,54 +2354,58 @@ export class GameEngine {
       }
     }
 
-    // ---- Universal basic kick ----
-    f.kickCd = Math.max(0, f.kickCd - dt);
-    if (f.kickT > 0) {
-      f.kickT += dt;
-      const kt = f.kickT;
-      const inActive = kt >= KICK_WINDUP && kt < KICK_WINDUP + KICK_ACTIVE;
-      if (inActive && !f.kickHit) {
+    // ---- Universal basic punch (sprite-driven, frames 11–14 + recovery 15) ----
+    f.punchCd = Math.max(0, f.punchCd - dt);
+    if (f.recoverT > 0) f.recoverT = Math.max(0, f.recoverT - dt);
+    if (f.punchT > 0) {
+      f.punchT += dt;
+      const pt = f.punchT;
+      // Hit window = frames 12–13 (after windup, before follow-through)
+      const hitStart = PUNCH_F11;
+      const hitEnd = PUNCH_F11 + PUNCH_F12 + PUNCH_F13;
+      const inActive = pt >= hitStart && pt < hitEnd;
+      if (inActive && !f.punchHit) {
         const target = f.id === "p1" ? this.p2 : this.p1;
         const dx = (target.x - f.x) * f.facing;
-        if (dx > -10 && dx < KICK_RANGE && Math.abs(target.y - f.y) < FIGHTER_H) {
-          // Cover blocks the kick (and takes a tiny chip of damage)
-          if (this.meleeBlockedByProp(f, KICK_RANGE, KICK_DMG)) {
-            f.kickHit = true;
+        if (dx > -10 && dx < PUNCH_RANGE && Math.abs(target.y - f.y) < FIGHTER_H) {
+          if (this.meleeBlockedByProp(f, PUNCH_RANGE, PUNCH_DMG)) {
+            f.punchHit = true;
             this.shake = Math.max(this.shake, 3);
             Sfx.play("thud", 0.35);
           } else if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
-            f.kickHit = true;
-            target.hp = Math.max(0, target.hp - KICK_DMG);
+            f.punchHit = true;
+            target.hp = Math.max(0, target.hp - PUNCH_DMG);
             target.hitFlash = 0.22;
             target.vx += f.facing * 90;
             target.vy -= 30;
-            // Snappy impact frames — ring + sparks at the foot height
+            // Chest-height impact for a punch
             const ix = target.x;
-            const iy = target.y + 56;
+            const iy = target.y + 36;
             this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 38, life: 0.18, maxLife: 0.18, color: "oklch(0.95 0.04 80)" });
             this.shockwaves.push({ x: ix, y: iy, r: 2, rMax: 22, life: 0.12, maxLife: 0.12, color: "oklch(0.99 0.02 250)" });
             this.burst(ix, iy, "oklch(0.95 0.06 80)", 8);
             this.shake = Math.max(this.shake, 6);
-            this.hitstopT = Math.max(this.hitstopT, 0.05);
+            this.hitstopT = Math.max(this.hitstopT, 0.06); // slight pause on hit
             this.impactFlash = Math.max(this.impactFlash, 0.22);
-            Sfx.play("jab", 0.7); Sfx.play("punch", 0.35);
+            Sfx.play("punch", 0.8);
             if (target.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
           }
         }
       }
-      if (kt >= KICK_DUR) {
-        f.kickT = 0;
-        f.kickHit = false;
+      if (pt >= PUNCH_DUR) {
+        f.punchT = 0;
+        f.punchHit = false;
+        f.recoverT = PUNCH_RECOVERY;
       }
     }
-    if (intent.kick && f.kickT === 0 && f.kickCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
-      f.kickT = 0.0001;
-      f.kickHit = false;
-      f.kickCd = KICK_CD;
-      f.attackAnim = Math.max(f.attackAnim, KICK_WINDUP + KICK_ACTIVE);
-      Sfx.play("whoosh", 0.4);
+    if (intent.punch && f.punchT === 0 && f.recoverT === 0 && f.punchCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
+      f.punchT = 0.0001;
+      f.punchHit = false;
+      f.punchCd = PUNCH_CD;
+      f.attackAnim = Math.max(f.attackAnim, PUNCH_DUR);
+      Sfx.play("whoosh", 0.35);
     }
-    intent.kick = false;
+    intent.punch = false;
     if (f.canFly) f.flying = true;
 
     if (f.flying && f.canFly) {
@@ -4089,7 +4097,7 @@ export class GameEngine {
     const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
     const base = f.flying
       ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, renderFacing, FIGHTER_H)
-      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0 || f.kickT > 0, renderFacing, FIGHTER_H);
+      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0 || f.punchT > 0, renderFacing, FIGHTER_H);
     let posed: Pose;
     if (f.dash) {
       // Cinematic super-punch pose during the dash. Superman = 1-hand cross,
@@ -4114,15 +4122,6 @@ export class GameEngine {
       const wp = 0.25, ap = 0.7;
       const prog = isCharge ? wp * 0.6 : wp + ap * 0.5;
       posed = computeAttackPose(base, "laserSweep", prog, { wp, ap }, renderFacing);
-    } else if (f.kickT > 0) {
-      const wp = KICK_WINDUP / KICK_DUR;
-      const ap = KICK_ACTIVE / KICK_DUR;
-      const prog = Math.min(1, f.kickT / KICK_DUR);
-      // Airborne kick: keep the flying-kick walk pose (already set in `base`).
-      // Grounded kick: apply the snap-kick attack overlay.
-      posed = f.onGround
-        ? computeAttackPose(base, "basicKick", prog, { wp, ap }, renderFacing)
-        : base;
     } else {
       posed = base;
     }
@@ -4848,18 +4847,34 @@ export class GameEngine {
         ctx.restore();
       }
 
-      // Drive frame index off walkPhase. Smooth via fractional blending: draw
-      // the next frame on top with alpha = fractional part for a softer cycle.
-      const moving = Math.abs(f.vx) > 18;
-      const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
-      const fIdx = moving ? cycleF * WALK_FRAME_COUNT : 0;
-      const f0 = Math.floor(fIdx) % WALK_FRAME_COUNT;
-      const f1 = (f0 + 1) % WALK_FRAME_COUNT;
-      const frac = fIdx - Math.floor(fIdx);
       const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
       const tint = f.hitFlash > 0 ? "oklch(0.95 0.20 30)" : skin.body;
       void tint;
-      // Match procedural FIGHTER_H exactly so attacks don't visually shrink.
+
+      // ---- Punch one-shot (frames 10..13) ----
+      if (f.punchT > 0) {
+        const pt = f.punchT;
+        let pIdx = 0;
+        if (pt < PUNCH_F11) pIdx = 0;
+        else if (pt < PUNCH_F11 + PUNCH_F12) pIdx = 1;
+        else if (pt < PUNCH_F11 + PUNCH_F12 + PUNCH_F13) pIdx = 2;
+        else pIdx = 3;
+        drawWalkFrame(ctx, skin, PUNCH_FRAME_START + pIdx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+        return;
+      }
+      // ---- Recovery (frame 14) ----
+      if (f.recoverT > 0) {
+        drawWalkFrame(ctx, skin, RECOVERY_FRAME, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+        return;
+      }
+
+      // Drive walk loop frame index off walkPhase. Loop is frames 0..9 only.
+      const moving = Math.abs(f.vx) > 18;
+      const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
+      const fIdx = moving ? cycleF * WALK_LOOP_FRAMES : 0;
+      const f0 = Math.floor(fIdx) % WALK_LOOP_FRAMES;
+      const f1 = (f0 + 1) % WALK_LOOP_FRAMES;
+      const frac = fIdx - Math.floor(fIdx);
       drawWalkFrame(ctx, skin, f0, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
       if (moving && frac > 0.01) {
         ctx.save();
@@ -4868,8 +4883,8 @@ export class GameEngine {
         ctx.restore();
       }
 
-      // If not attacking/kicking, sprite is the whole body — done.
-      if (f.attackAnim <= 0 && f.kickT <= 0 && f.meleeKind == null) {
+      // If not attacking via a special, sprite is the whole body — done.
+      if (f.attackAnim <= 0 && f.meleeKind == null) {
         return;
       }
       // Otherwise fall through so the procedural attack pose renders the

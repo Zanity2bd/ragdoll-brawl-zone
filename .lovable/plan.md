@@ -1,58 +1,48 @@
 ## Goal
-Keep the imported 14-frame walk silhouette as the universal body/animation for every fighter, but render each character with their own colors AND character-specific face + costume details (mask, cowl, cape, chest emblem, eyes) drawn on top of the frames. No more generic gray stickman — Spider-Man looks like Spider-Man, Batman has the cowl + bat emblem, Homelander has the cape + H, etc.
+Use the new 15-frame `walk2-3.zip` sheet exactly as specced:
+- **Walk** = frames 1–10 (loop)
+- **Punch** = frames 11–14 (one-shot, hit active on 12–13)
+- **Recovery** = frame 15 (one-shot transition back to idle/walk)
 
-## What I'll build
+The current T-key kick (procedural foot swing, jab SFX) is removed entirely and replaced with a sprite-driven punch that uses these new frames.
 
-### 1. Bake per-frame anatomy anchors (one-off, dev-time)
-Run a script over the existing sheet (`src/assets/walk-sheet.png`, 14×144×200) to extract, per frame:
-- `head`: {x, y, r} — top cluster centroid + radius
-- `chest`: {x, y} — mid-torso point (~35% down the silhouette)
-- `hipY`, `footY` — vertical anchors
+## Changes
 
-Result: a static `WALK_ANCHORS: WalkAnchor[]` table written to `src/game/walkAnchors.ts` (~14 × 6 floats). No runtime cost beyond a lookup.
+### 1. Sprite sheet rebuild
+Already staged: `src/assets/walk-sheet.png` rebuilt as a 15×144×200 horizontal strip from `walk2-3.zip` (frames foot-anchored at the bottom, alpha-cropped, scaled to fit).
 
-### 2. Extend the skin schema
-Add to `src/game/skins.ts`:
-- `face`: `"full-mask" | "cowl" | "open" | "goggles" | "visor"` 
-- `faceColor`, `eyeColor`, `eyeShape` (`"slit" | "round" | "spider-lens" | "domino"`)
-- `chestEmblem`: existing `emblem` extended with size + offset
-- `capeShape`: `"long" | "short" | "tattered" | null`
+### 2. `src/game/walkSprite.ts`
+- `WALK_FRAME_COUNT = 15`
+- New exports: `WALK_LOOP_FRAMES = 10`, `PUNCH_FRAME_START = 10`, `PUNCH_FRAME_COUNT = 4`, `RECOVERY_FRAME = 14`
+- Composited per-skin sheet bakes overlays for all 15 frames (no other change to overlay logic).
 
-Fill in plausible values for the 11 existing characters (Spider-Man → full-mask + spider-lens eyes + spider emblem; Batman → cowl with ears + oval bat emblem + cape; Homelander → open face + cape + H emblem; etc.).
+### 3. `src/game/engine.ts`
+- Rename fighter state `kickT/kickCd/kickHit` → `punchT/punchCd/punchHit`. Add `recoverT` for the frame-15 transition.
+- New timing (4-frame swing with sped-up impact + slight pause-on-hit):
+  - frame 11 windup ~0.10s
+  - frames 12–13 impact ~0.05s each (hitbox active here only)
+  - frame 14 follow-through ~0.10s
+  - frame 15 recovery ~0.10s (visual only, no hit)
+  - cooldown 0.55s, range 60, dmg 1, SFX `punch`
+- Hit logic same as old kick but: chest-height impact origin, `Sfx.play("punch")`, brief hitstop ~0.06s.
+- Rename `pressKick` → `pressPunch` (engine method + intent flag).
+- Renderer (lines ~4851–4877):
+  - Walk loop modulo uses `WALK_LOOP_FRAMES` (10), not 14/15.
+  - If `punchT > 0`: pick frame 10/11/12/13 from elapsed time, draw it, skip procedural attack overlay, return.
+  - Else if `recoverT > 0`: draw frame 14, return.
+- Update `computeWalkPose` arg (line 4092): `f.kickT > 0` → `f.punchT > 0 || f.recoverT > 0`.
+- Remove the grounded-kick branch in `poseFor` (lines 4117–4125) — no longer needed since the sprite drives the punch.
+- Remove `KICK_*` constants.
 
-### 3. Per-skin composited sheet (cache)
-Rewrite `getTintedSheet(skin)` in `src/game/walkSprite.ts` to take the full `Skin` object (not just a color string) and return a per-character cached canvas:
-1. Tint the silhouette using `skin.limb` (legs/arms).
-2. Re-tint the torso area (using anchors) with `skin.body` via a soft mask so legs and torso can differ (Superman blue body / red boots, Batman all-black, Iron Man red+gold).
-3. Tint the head region with `skin.head` / `skin.faceColor`.
-4. Draw character overlays per frame, pinned to the anchors:
-   - Cowl ears (Batman) — two small triangles above head
-   - Cape (Superman, Batman, Homelander) — soft shape behind/under, drawn as a separate trailing layer
-   - Chest emblem — shape from `skin.emblem` scaled to chest anchor
-   - Eyes — drawn at head anchor (white spider lenses, glowing red for Homelander/Hulk, yellow Batman slits)
-   - Beard (Butcher) — short dark patch under head anchor
-   - Speed streaks (Flash, A-Train) — drawn at runtime in the engine, not baked
+### 4. `src/components/game/GameCanvas.tsx`
+- T (P1) and P (P2) handlers + `KickButton` touch button → call `engine.pressPunch`. Update comment + aria-label to "Punch". (Component name kept as `KickButton` internally is fine, or renamed — minor.)
 
-Cache key = `skin.id`. Caches are tiny (≈14 × 144 × 200 RGBA ≈ 1.6 MB per skin worst case; only currently-fighting skins are cached, max 2).
-
-### 4. Update the engine call site
-`src/game/engine.ts` already calls `drawWalkFrame(ctx, tint, frame, …)`. Change signature to `drawWalkFrame(ctx, skin, frame, …)` and pass `f.skin` instead of a color string. Speed streaks for Flash/A-Train stay as the existing runtime overlay (they're motion-dependent).
-
-### 5. Cleanup
-- Remove the universal-gray fallback path; the sprite is now skin-aware always.
-- Keep the procedural attack-arms overlay on top of the sprite legs unchanged.
-- Mobile budget: per-frame draw is still one `drawImage` from a cached canvas — no per-frame compositing on the hot path.
-
-## Files touched
-- `src/game/walkAnchors.ts` (new) — baked anchor table
-- `src/game/walkSprite.ts` — per-skin compositor + cache + overlays
-- `src/game/skins.ts` — extended face/cape/emblem fields for all 11 skins
-- `src/game/engine.ts` — pass skin object instead of tint string
-
-## Risk / fallback
-If a character looks off, each overlay is independent — I can adjust head/chest anchor offsets or per-skin overlay params without touching the core sprite path. If anchor extraction misreads a frame (silhouette too thin), I fall back to the average across frames so overlays stay stable instead of jittering.
+### 5. `src/game/ai.ts`
+No `pressKick` calls — nothing to update.
 
 ## Acceptance
-- Each of the 11 characters reads as themselves at a glance during walk, idle, and attack.
-- Frame rate unchanged on the mobile preview (still one `drawImage` per fighter per frame in the hot path).
-- No new runtime dependencies.
+- Walking only cycles frames 1–10.
+- T / P play frames 11→14 once with a 1-dmg hit on 12–13 + brief hit-pause.
+- Frame 15 plays once after each punch as recovery, never loops, never appears mid-walk.
+- All skins inherit the punch (overlays are baked per-frame already).
+- No leftover `kickT` / `KICK_*` references.
