@@ -758,6 +758,7 @@ export class GameEngine {
     if (f) f.jumpBufferT = JUMP_BUFFER_T;
   }
   pressMelee(p: PlayerId) { this.intents[p].melee = true; }
+  pressKick(p: PlayerId) { this.intents[p].kick = true; }
   setAirSteering(p: PlayerId, ax: number, ay: number) {
     this.intents[p].ax = Math.max(-1, Math.min(1, ax));
     this.intents[p].ay = Math.max(-1, Math.min(1, ay));
