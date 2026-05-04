@@ -540,9 +540,66 @@ export class GameEngine {
     return null;
   }
 
-  /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
-  pressSuperDash(attacker: PlayerId): boolean {
+  /** Power 1 (HOLD-joystick): currently Flash Time Freeze. Returns true if activated. */
+  pressPower1(attacker: PlayerId): boolean {
     const a = attacker === "p1" ? this.p1 : this.p2;
+    const t = attacker === "p1" ? this.p2 : this.p1;
+    if (a.skin.id === "flash") {
+      if (a.power1Cd > 0) return false;
+      if (a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
+      a.power1Cd = TIMEFREEZE_CD;
+      this.timeFreezeT = TIMEFREEZE_DUR;
+      this.timeFreezer = a.id;
+      t.freezeT = TIMEFREEZE_DUR;
+      // Cinematic flash + slight global hitstop
+      this.impactFlash = 1;
+      this.shake = Math.max(this.shake, 18);
+      this.hitstopT = Math.max(this.hitstopT, 0.08);
+      // Burst FX around target
+      this.burst(t.x, t.y + 40, "oklch(0.92 0.18 220)", 28);
+      this.burst(a.x, a.y + 40, "oklch(0.92 0.18 60)", 24);
+      this.shockwaves.push({
+        x: t.x, y: t.y + 40, r: 8, rMax: 260,
+        life: 0.6, maxLife: 0.6, color: "oklch(0.92 0.18 220)",
+      });
+      Sfx.play("blip", 0.9);
+      Sfx.play("whoosh", 0.7);
+      return true;
+    }
+    return false;
+  }
+
+  /** Power 2 (TAP-opponent): currently Flash Lightning Blast. Returns true if activated. */
+  pressPower2(attacker: PlayerId): boolean {
+    const a = attacker === "p1" ? this.p1 : this.p2;
+    const t = attacker === "p1" ? this.p2 : this.p1;
+    if (a.skin.id === "flash") {
+      if (a.power2Cd > 0) return false;
+      if (a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
+      a.power2Cd = LIGHTNING_CD;
+      // Spawn a chasing lightning orb at attacker's hand
+      const sx = a.x + a.facing * 14;
+      const sy = a.y + 30;
+      const dxn = Math.sign(t.x - sx) || a.facing;
+      this.lightnings.push({
+        owner: a.id, target: t.id,
+        x: sx, y: sy,
+        vx: dxn * LIGHTNING_SPEED, vy: -40,
+        life: LIGHTNING_DUR, maxLife: LIGHTNING_DUR,
+        phase: 0, hit: false, tickAcc: 0,
+      });
+      this.burst(sx, sy, "oklch(0.95 0.18 95)", 22);
+      this.shockwaves.push({
+        x: sx, y: sy, r: 6, rMax: 80,
+        life: 0.3, maxLife: 0.3, color: "oklch(0.95 0.18 95)",
+      });
+      Sfx.play("blip", 0.7);
+      Sfx.play("whoosh", 0.8);
+      return true;
+    }
+    return false;
+  }
+
     const t = attacker === "p1" ? this.p2 : this.p1;
     if (!a.canFly || !a.flying) return false;
     if (a.dash || a.meleeKind || a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
