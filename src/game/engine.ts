@@ -535,6 +535,15 @@ export class GameEngine {
           target.onGround = false;
         }
         this.shake = 14;
+        this.hitstopT = Math.max(this.hitstopT, 0.025);
+        this.impactFlash = Math.max(this.impactFlash, 0.55);
+        if (target.wobble.staggerImmuneT <= 0) {
+          const dir = (Math.sign(pr.vx) || 1) as 1 | -1;
+          target.wobble.staggerT = 0.22;
+          target.wobble.staggerDir = dir;
+          target.wobble.staggerMag = 0.6;
+          applyImpulse(target.wobble, dir, -0.35, 0.7);
+        }
         this.burst(pr.x, pr.y, pr.glow, 18);
         Sfx.play(pr.kind === "batarang" ? "punch" : (pr.kind === "web" ? "thud" : "punch"), 0.7);
         pr.life = 0;
