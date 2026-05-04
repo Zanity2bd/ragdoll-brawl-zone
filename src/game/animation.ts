@@ -290,7 +290,11 @@ export function computeAttackPose(
       // Front snap kick: plant support leg, chamber knee high, snap foot
       // forward at hip height, retract. Body pivots over the support hip.
       const hipY = walk.hipY;
-      const groundY = H; // ground = FIGHTER_H from origin (feet planted)
+      const groundY = hipY + 34; // feet plant on ground (FIGHTER_H - hipYBase)
+      const recT = !inWind && !inActive
+        ? Math.min(1, Math.max(0, (p - timing.wp - timing.ap) / Math.max(0.0001, 1 - timing.wp - timing.ap)))
+        : 0;
+      const rt = recT;
 
       // Easing helpers
       const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
