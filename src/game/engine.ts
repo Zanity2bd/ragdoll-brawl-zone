@@ -685,6 +685,76 @@ export class GameEngine {
       if (f.y < minY) { f.y = minY; f.vy = Math.max(0, f.vy); }
       if (f.y > maxY) { f.y = maxY; f.vy = Math.min(0, f.vy); }
       f.onGround = false;
+
+      // ---- Premium flight VFX: speed trails + aura + directional sparks ----
+      const flySpeed = Math.hypot(f.vx, f.vy);
+      const cruising = flySpeed > 90;
+      const ascending = f.vy < -120;
+      const descending = f.vy > 120;
+
+      if (cruising && !this.lowPower) {
+        f.trail.push({
+          x: f.x, y: f.y, phase: f.walkPhase, vx: f.vx, vy: f.vy,
+          onGround: false, facing: f.facing, pose: this.poseFor(f),
+        });
+        const cap = Math.min(14, 4 + Math.round(flySpeed / 40));
+        while (f.trail.length > cap) f.trail.shift();
+      } else if (f.trail.length > 0 && Math.random() < 0.25) {
+        f.trail.shift();
+      }
+
+      if (!this.lowPower && this.particles.length < 240) {
+        if (Math.random() < (idle ? 0.55 : 0.3)) {
+          this.particles.push({
+            x: f.x + (Math.random() - 0.5) * 18,
+            y: f.y + FIGHTER_H * 0.7 + (Math.random() - 0.5) * 8,
+            vx: (Math.random() - 0.5) * 20,
+            vy: 30 + Math.random() * 30,
+            life: 0.5, maxLife: 0.5,
+            color: f.skin.glow,
+            size: 2 + Math.random() * 2.5,
+          });
+        }
+        if (cruising) {
+          const back = -Math.sign(f.vx || f.facing);
+          const sparkN = Math.min(3, 1 + Math.floor(flySpeed / 140));
+          for (let i = 0; i < sparkN; i++) {
+            this.particles.push({
+              x: f.x + back * (8 + Math.random() * 14),
+              y: f.y + FIGHTER_H * 0.45 + (Math.random() - 0.5) * 18,
+              vx: -f.vx * 0.18 + (Math.random() - 0.5) * 30,
+              vy: -f.vy * 0.18 + (Math.random() - 0.5) * 30,
+              life: 0.32, maxLife: 0.32,
+              color: i === 0 ? "oklch(0.97 0.05 80)" : f.skin.glow,
+              size: 1.6 + Math.random() * 2,
+            });
+          }
+        }
+        if (ascending) {
+          for (let i = 0; i < 2; i++) {
+            this.particles.push({
+              x: f.x + (Math.random() - 0.5) * 14,
+              y: f.y + FIGHTER_H * 0.85,
+              vx: (Math.random() - 0.5) * 40,
+              vy: 120 + Math.random() * 80,
+              life: 0.35, maxLife: 0.35,
+              color: "oklch(0.97 0.06 80)",
+              size: 2.2 + Math.random() * 2,
+            });
+          }
+        }
+        if (descending && Math.random() < 0.5) {
+          this.particles.push({
+            x: f.x + (Math.random() - 0.5) * 16,
+            y: f.y + FIGHTER_H * 0.2,
+            vx: (Math.random() - 0.5) * 20,
+            vy: -40 - Math.random() * 30,
+            life: 0.3, maxLife: 0.3,
+            color: f.skin.glow,
+            size: 1.5 + Math.random() * 1.5,
+          });
+        }
+      }
     } else {
       // ---- Ground / standard physics ----
       let move = 0;
