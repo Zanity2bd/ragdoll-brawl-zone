@@ -610,24 +610,8 @@ export class GameEngine {
       }
     }
 
-    // Edge-triggered flight toggle for flyers.
-    if (f.canFly && intent.toggleFlight && !f.meleeKind) {
-      f.flying = !f.flying;
-      if (f.flying) {
-        // Liftoff impulse for cinematic launch.
-        f.vy = -260;
-        f.onGround = false;
-        if (f.y > GROUND_Y - FIGHTER_H - 20) f.y = GROUND_Y - FIGHTER_H - 20;
-        this.burst(f.x, f.y + FIGHTER_H, f.skin.glow, 16);
-        Sfx.play("whoosh", 0.7);
-      } else {
-        // Soft drop — gravity will resume below.
-        Sfx.play("blip", 0.4);
-      }
-    }
-
-    let move = 0;
-    const locked = f.meleeKind && f.meleeKind !== "laserSweep";
+    // Flyers stay airborne — flight is always on, no toggle needed.
+    if (f.canFly) f.flying = true;
 
     if (f.flying && f.canFly) {
       // ---- Flight kinematics: smooth analog steering with damping ----
@@ -648,7 +632,8 @@ export class GameEngine {
       if (f.vy < targetVy) f.vy = Math.min(targetVy, f.vy + accel);
       else if (f.vy > targetVy) f.vy = Math.max(targetVy, f.vy - accel);
       // No input → exponential damping back toward natural hover
-      if (mag < 0.05) {
+      const idle = mag < 0.05;
+      if (idle) {
         const k = Math.exp(-FLY_DAMP * ldt);
         f.vx *= k; f.vy *= k;
       }
@@ -661,17 +646,19 @@ export class GameEngine {
       f.walkPhase += ldt * 1.4;
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
-      // Stage bounds + ceiling
+      // Idle hover bob — gentle vertical oscillation when not steering
+      if (idle) {
+        const bob = Math.sin(f.hoverPhase) * HOVER_AMP * 0.6;
+        f.y += bob * ldt;
+      }
+      // Stage bounds + ceiling. Floor clamp keeps flyers always airborne.
+      const minY = 30;
+      const maxY = GROUND_Y - FIGHTER_H - 40; // never touch the ground
       if (f.x < 30) { f.x = 30; f.vx = 0; }
       if (f.x > W - 30) { f.x = W - 30; f.vx = 0; }
-      if (f.y < 30) { f.y = 30; f.vy = 0; }
-      // If they fly into the ground, stop and resume ground physics.
-      if (f.y + FIGHTER_H >= GROUND_Y) {
-        f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
-        f.flying = false;
-      } else {
-        f.onGround = false;
-      }
+      if (f.y < minY) { f.y = minY; f.vy = Math.max(0, f.vy); }
+      if (f.y > maxY) { f.y = maxY; f.vy = Math.min(0, f.vy); }
+      f.onGround = false;
     } else {
       // ---- Ground / standard physics ----
       if (!locked) {
