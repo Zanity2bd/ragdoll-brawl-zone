@@ -525,12 +525,54 @@ export class GameEngine {
     const f = id === "p1" ? this.p1 : this.p2;
     if (f.teleCd > 0 || f.teleporting) return;
     f.teleCd = TELE_CD;
-    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
     Sfx.play("bamf", 0.9);
     f.x = Math.max(40, Math.min(W - 40, sx));
     f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy));
     f.vx = 0; f.vy = 0; f.teleporting = false;
-    this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 32);
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
+  }
+
+  /** Signature Nightcrawler teleport puff: dense purple smoke + curling tendrils + sparks. */
+  private bamfPuff(x: number, y: number, mode: "depart" | "arrive" | "strike") {
+    const layers = mode === "strike" ? 2 : 3;
+    for (let i = 0; i < layers; i++) {
+      const off = (Math.random() - 0.5) * 14;
+      this.smokeClouds.push({
+        x: x + off, y: y + (Math.random() - 0.5) * 10,
+        r: 10 + i * 4,
+        rMax: 56 + i * 14 + (mode === "arrive" ? 8 : 0),
+        life: 0.55 + i * 0.12, maxLife: 0.55 + i * 0.12,
+      });
+    }
+    this.burst(x, y, "oklch(0.55 0.22 305)", mode === "arrive" ? 28 : 22);
+    const count = mode === "strike" ? 10 : 18;
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 30 + Math.random() * 90;
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 14,
+        y: y + (Math.random() - 0.5) * 14,
+        vx: Math.cos(ang) * sp * 0.6,
+        vy: Math.sin(ang) * sp * 0.4 - 40 - Math.random() * 30,
+        life: 0.7 + Math.random() * 0.5, maxLife: 1.2,
+        color: i % 3 === 0
+          ? "oklch(0.78 0.22 305)"
+          : (i % 3 === 1 ? "oklch(0.4 0.16 295)" : "oklch(0.25 0.08 290)"),
+        size: 3 + Math.random() * 3.5,
+      });
+    }
+    for (let i = 0; i < (mode === "arrive" ? 10 : 6); i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 160 + Math.random() * 200;
+      this.particles.push({
+        x, y,
+        vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 40,
+        life: 0.25 + Math.random() * 0.2, maxLife: 0.45,
+        color: "oklch(0.95 0.18 95)",
+        size: 1.4 + Math.random() * 1.6,
+      });
+    }
   }
 
   reset() {
