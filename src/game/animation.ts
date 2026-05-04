@@ -330,12 +330,64 @@ export function computeAttackPose(
       break;
     }
     case "laserSweep": {
-      // heroic stance, hands at hips
-      out.armL = [-4, sy, -8, sy + 6, -10, sy + 16];
-      out.armR = [4, sy, 8, sy + 6, 10, sy + 16];
-      out.handL = [-10, sy + 16];
-      out.handR = [10, sy + 16];
-      out.headOffsetY -= 1;
+      // Menacing beam stance: chin up, chest pushed forward, weight back on the
+      // rear leg, lead leg planted forward. Hands clenched at the sides — one
+      // slightly forward like channeling power, the other curled tight back.
+      // Subtle vertical sway (charging tremor) on the active sustain.
+      const tremor = inActive ? Math.sin(at * Math.PI * 14) * 1.2 : 0;
+      const cock = inWind ? wt : 1;
+      // Forward chest push grows during wind-up, peaks during sustain
+      const push = 2 * cock;
+      // Head tipped back so the eyes (beam origin) face slightly up — menacing.
+      out.headOffsetY = walk.headOffsetY - 3 - cock * 1.5 + tremor * 0.3;
+      // Slight backward body lean (tilted into the beam direction)
+      out.lean = (walk.lean ?? 0) + facing * (-0.12 - cock * 0.06);
+      out.shoulderRoll = (walk.shoulderRoll ?? 0) + facing * 0.08;
+
+      // Lead arm: held at the side, fist curled forward like braced for the beam recoil.
+      // Trail arm: pulled back tight, elbow flared, fist clenched at the hip (power channel).
+      const leadHandX = facing * (8 + push);
+      const leadHandY = sy + 14 + tremor;
+      const leadElbowX = facing * (7 + push * 0.5);
+      const leadElbowY = sy + 7;
+      const trailHandX = -facing * 6;
+      const trailHandY = sy + 18 + tremor * 0.6;
+      const trailElbowX = -facing * 9;
+      const trailElbowY = sy + 8;
+      if (facing > 0) {
+        out.armR = [sxF, sy, leadElbowX, leadElbowY, leadHandX, leadHandY];
+        out.handR = [leadHandX, leadHandY];
+        out.armL = [-sxF, sy, trailElbowX, trailElbowY, trailHandX, trailHandY];
+        out.handL = [trailHandX, trailHandY];
+      } else {
+        out.armL = [sxF, sy, leadElbowX, leadElbowY, leadHandX, leadHandY];
+        out.handL = [leadHandX, leadHandY];
+        out.armR = [-sxF, sy, trailElbowX, trailElbowY, trailHandX, trailHandY];
+        out.handR = [trailHandX, trailHandY];
+      }
+
+      // Power stance legs: rear leg planted back, lead leg forward + slightly bent.
+      // Only override when grounded (walk pose's airborne legs already read fine).
+      const hipY = walk.hipY;
+      const rearX = -facing * 8;
+      const leadX = facing * 6;
+      const rearKneeX = -facing * 7;
+      const leadKneeX = facing * 5;
+      const rearKneeY = hipY + 14;
+      const leadKneeY = hipY + 16;
+      const rearFootY = hipY + 24;
+      const leadFootY = hipY + 24;
+      if (facing > 0) {
+        out.legL = [-3, hipY, rearKneeX, rearKneeY, rearX, rearFootY];
+        out.footL = [rearX, rearFootY];
+        out.legR = [3, hipY, leadKneeX, leadKneeY, leadX, leadFootY];
+        out.footR = [leadX, leadFootY];
+      } else {
+        out.legR = [3, hipY, rearKneeX, rearKneeY, rearX, rearFootY];
+        out.footR = [rearX, rearFootY];
+        out.legL = [-3, hipY, leadKneeX, leadKneeY, leadX, leadFootY];
+        out.footL = [leadX, leadFootY];
+      }
       break;
     }
     case "bamfPunch": {
