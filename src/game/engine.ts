@@ -2377,9 +2377,8 @@ export class GameEngine {
     ];
     const s = steps[step];
 
-    // Departure burst + ghost trail at old position
-    this.burst(a.x, a.y + FIGHTER_H / 2, "oklch(0.55 0.20 305)", 22);
-    this.smokeClouds.push({ x: a.x, y: a.y + 36, r: 16, rMax: 64, life: 0.5, maxLife: 0.5 });
+    // Departure puff at old position + ghost trail
+    this.bamfPuff(a.x, a.y + FIGHTER_H / 2, "depart");
     for (let i = 0; i < 3; i++) {
       a.trail.push({
         x: a.x, y: a.y, phase: a.walkPhase, vx: 0, vy: 0,
@@ -2395,8 +2394,8 @@ export class GameEngine {
     a.onGround = a.y >= GROUND_Y - FIGHTER_H - 1;
     Sfx.play("bamf", 1.0);
 
-    // Arrival burst + impact ring
-    this.burst(a.x, a.y + FIGHTER_H / 2, "oklch(0.7 0.22 305)", 30);
+    // Arrival puff + sharp impact ring
+    this.bamfPuff(a.x, a.y + FIGHTER_H / 2, "arrive");
     this.shockwaves.push({
       x: a.x, y: a.y + FIGHTER_H / 2, r: 8, rMax: 64,
       life: 0.32, maxLife: 0.32, color: "oklch(0.75 0.22 305)",
