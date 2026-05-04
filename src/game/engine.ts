@@ -3500,8 +3500,15 @@ export class GameEngine {
       const wob = Math.sin(t * 6.2) * wobAmp;
       const breath = 1 + Math.sin(t * 2.4) * 0.012;
       const squash = 1 + Math.sin(t * 5.5) * (0.018 + hit * 0.04);
+      // Subtle motion-driven squash & stretch (anchored at the feet).
+      const moveStretch = 1 + moving * 0.04;
+      const moveSquash = 1 / moveStretch;
+      const hitSquash = 1 + hit * 0.18;
+      const hitStretch = 1 / hitSquash;
+      const ssX = moveSquash * hitSquash;
+      const ssY = moveStretch * hitStretch;
       ctx.translate(0, FIGHTER_H);
-      ctx.scale(squash, 2 - squash);
+      ctx.scale(squash * ssX, (2 - squash) * ssY);
       ctx.scale(breath, breath);
       ctx.rotate(wob);
       ctx.translate(0, -FIGHTER_H);
