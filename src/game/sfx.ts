@@ -2,11 +2,12 @@
 // Lazy-init on first user gesture (Splash PLAY tap).
 
 import bamfUrl from "@/assets/sfx/bamf.mp3";
+import homelanderVoUrl from "@/assets/audio/homelander-laser-vo.mp3";
 
 export type SfxName =
   | "punch" | "heavy" | "boom" | "laser" | "shock"
   | "whoosh" | "chirp" | "thud" | "jab" | "blip"
-  | "bamf";
+  | "bamf" | "homelanderVO";
 
 class SfxEngine {
   private ctx: AudioContext | null = null;
@@ -41,6 +42,7 @@ class SfxEngine {
       this.noise = buf;
       // Lazy-load sample assets
       this.loadSample("bamf", bamfUrl);
+      this.loadSample("homelanderVO", homelanderVoUrl);
     } catch { /* no audio */ }
   }
 
@@ -214,6 +216,17 @@ class SfxEngine {
         const src = ctx.createBufferSource();
         src.buffer = sample;
         const g = ctx.createGain(); g.gain.value = 0.9 * vol;
+        src.connect(g); g.connect(this.sfxGain);
+        src.start(t);
+        setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch { /* */ } }, (sample.duration + 0.1) * 1000);
+        break;
+      }
+      case "homelanderVO": {
+        const sample = this.samples["homelanderVO"];
+        if (!sample) break;
+        const src = ctx.createBufferSource();
+        src.buffer = sample;
+        const g = ctx.createGain(); g.gain.value = 1.0 * vol;
         src.connect(g); g.connect(this.sfxGain);
         src.start(t);
         setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch { /* */ } }, (sample.duration + 0.1) * 1000);
