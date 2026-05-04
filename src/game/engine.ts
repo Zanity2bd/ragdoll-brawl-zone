@@ -489,6 +489,18 @@ export class GameEngine {
         if (sp > cap) { pr.vx = pr.vx / sp * cap; pr.vy = pr.vy / sp * cap; }
       }
       pr.x += pr.vx * sdt; pr.y += pr.vy * sdt; pr.life -= dt;
+      // Cover blocks projectiles (web/batarang excluded — web is a tether, batarang homes)
+      if (pr.kind === "bolt") {
+        for (const pl of this.platforms) {
+          if (pl.kind !== "cover") continue;
+          if (pr.x > pl.x && pr.x < pl.x + pl.w && pr.y > pl.y && pr.y < pl.y + pl.h) {
+            this.burst(pr.x, pr.y, pr.glow, 14);
+            this.shake = Math.max(this.shake, 6);
+            pr.life = 0;
+            break;
+          }
+        }
+      }
       if (pr.kind === "bolt" && (!this.lowPower || Math.random() < 0.5)) {
         this.particles.push({
           x: pr.x, y: pr.y,
