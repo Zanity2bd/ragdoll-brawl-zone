@@ -1,6 +1,40 @@
 // Procedural walk-cycle pose for stickman fighters.
-// Premium gait: smooth sinusoidal swing, planted stance, gentle vertical bob,
-// active arm counter-swing, subtle hand bob and shoulder/hip roll.
+// Grounded gait is driven by a baked Mixamo walk-cycle table (walkCycle.ts);
+// idle, jump, attack, and flying-kick branches stay procedural.
+
+import { WALK_CYCLE, WALK_HIP_SWAY } from "./walkCycle";
+
+// Lerp a single 2D bone between two adjacent baked frames.
+const N_WALK = WALK_CYCLE.length;
+function lerp2(a: readonly [number, number], b: readonly [number, number], k: number): [number, number] {
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+}
+// Sample the baked walk cycle at a normalized time t (0..1, wraps).
+// Returns the bones we actually use, in the same 2D normalized space (Y up,
+// X = forward in facing direction, |hip→foot| ≈ 1).
+function sampleWalk(t: number) {
+  const f = (((t % 1) + 1) % 1) * N_WALK;
+  const i = Math.floor(f) % N_WALK;
+  const j = (i + 1) % N_WALK;
+  const k = f - Math.floor(f);
+  const A = WALK_CYCLE[i], B = WALK_CYCLE[j];
+  return {
+    LU: lerp2(A.LeftUpLeg, B.LeftUpLeg, k),
+    LK: lerp2(A.LeftLeg, B.LeftLeg, k),
+    LF: lerp2(A.LeftFoot, B.LeftFoot, k),
+    RU: lerp2(A.RightUpLeg, B.RightUpLeg, k),
+    RK: lerp2(A.RightLeg, B.RightLeg, k),
+    RF: lerp2(A.RightFoot, B.RightFoot, k),
+    LA: lerp2(A.LeftArm, B.LeftArm, k),
+    LE: lerp2(A.LeftForeArm, B.LeftForeArm, k),
+    LH: lerp2(A.LeftHand, B.LeftHand, k),
+    RA: lerp2(A.RightArm, B.RightArm, k),
+    RE: lerp2(A.RightForeArm, B.RightForeArm, k),
+    RH: lerp2(A.RightHand, B.RightHand, k),
+    sway: WALK_HIP_SWAY[i] + (WALK_HIP_SWAY[j] - WALK_HIP_SWAY[i]) * k,
+  };
+}
+
 
 export interface Pose {
   headOffsetY: number;
@@ -195,72 +229,67 @@ export function computeWalkPose(
   // Smoothstep amp ramp — eliminates the hard idle/walk snap when vx crosses threshold
   const ampLin = Math.min(1, speed / 160);
   const amp = ampLin * ampLin * (3 - 2 * ampLin);
-  // ---- High-knee run cycle (matches the reference run video) ----
-  // Sharper, taller knee lift, deeper stride. Walk reads as walk at low amp.
-  const stride = 14 * amp + 10 * amp * amp;          // up to ~24 at sprint
-  const lift = 18 * amp + 18 * amp * amp;            // knees punch up to hip line
-
-
-  // Phase-delayed body bobs: hips lead, shoulders & head lag (~80–140ms).
-  // The spine "follows" the pelvis instead of moving in lockstep.
+  // Phase-delayed body bobs (kept from procedural cycle so spine "follows" hips)
   const bobHip = moving ? (1 - Math.cos(phase * 2)) * 0.9 * amp : 0;
   const bobShoulder = moving ? (1 - Math.cos(phase * 2 - 0.5)) * 0.9 * amp : 0;
   const bobHead = moving ? (1 - Math.cos(phase * 2 - 0.9)) * 0.9 * amp : 0;
-  // Heel-strike micro-dip biases the dip onto the contact half — gives weight
   const heelDip = moving ? Math.max(0, -Math.cos(phase * 2)) * 1.0 * amp : 0;
-
-  // Hip sway: pelvis shifts toward the planted foot each step.
   const hipSwayX = moving ? Math.sin(phase) * 1.6 * amp : 0;
-
   const shoulderY = shoulderYBase - bobShoulder * 0.6;
   const hipY = hipYBase + bobHip * 0.4 + heelDip;
-
-  // Slight torso roll opposite to swinging leg
   const shoulderRoll = moving ? Math.sin(phase) * 0.04 * amp : 0;
 
-  // Asymmetric leg signature (universal — left strides slightly longer, right lifts higher).
-  // Breaks the perfect-mirror loop without per-character state.
-  const strideL = stride * 1.00;
-  const strideR = stride * 1.04;
-  const liftL = lift * 1.03;
-  const liftR = lift * 1.00;
+  // ---- Baked Mixamo walk cycle ----
+  // Sample the FBX walk at the current phase and project into renderer space.
+  // Renderer Y is down; FBX Y is up → invert. Bone scale = hip→foot pixels.
+  const S = H - hipYBase; // ~34 in current rig
+  const W = sampleWalk(phase / (Math.PI * 2));
+
+  // Hip/shoulder anchors (with hip sway preserved from procedural code)
   const hxL = -3 + hipSwayX, hxR = 3 + hipSwayX;
-  const cycL = phase / (Math.PI * 2);
-  const cycR = cycL + 0.5;
-
-  const L = legPose(cycL, hxL, hipY, strideL, liftL, facing, H, amp);
-  const R = legPose(cycR, hxR, hipY, strideR, liftR, facing, H, amp);
-
-  // Arms counter-swing the legs; idle arms have a gentle micro-sway.
-  // Shoulder anchor counter-sways the hips for natural balance.
   const sxL = -4 - hipSwayX * 0.5, sxR = 4 - hipSwayX * 0.5;
-  // Big deep arm pump at run speed — fists swing high in front, far behind back.
-  const armSwingMax = moving ? 18 * amp + 18 * amp * amp : 0;
-  const idleSwayL = moving ? 0 : Math.sin(phase * 0.7) * 0.6;
-  const idleSwayR = moving ? 0 : Math.sin(phase * 0.7 + Math.PI) * 0.6;
-  // Arm L counter-swings R leg, and vice versa
-  const swingL = Math.cos((cycR) * Math.PI * 2);
-  const swingR = Math.cos((cycL) * Math.PI * 2);
 
-  // Front-pump (positive swing toward facing) lifts the fist near chin level.
-  // Back-pump drops & extends back. Mirrors the runner's piston arm cycle.
-  const frontL = Math.max(0, swingL * facing);
-  const frontR = Math.max(0, swingR * facing);
-  const handLBob = moving ? Math.max(0, -swingL) * 2.5 - frontL * 12 * amp : 0;
-  const handRBob = moving ? Math.max(0, -swingR) * 2.5 - frontR * 12 * amp : 0;
+  // Helper: project a baked bone (hip-relative, normalized) → renderer XY
+  // anchored at (anchorX, anchorY). amp blends idle→walk so start/stop is smooth.
+  const proj = (b: readonly [number, number], anchorX: number, anchorY: number): [number, number] => [
+    anchorX + facing * b[0] * S * amp,
+    anchorY + (-b[1]) * S * amp,
+  ];
 
-  const handLX = sxL + swingL * armSwingMax + idleSwayL;
-  const handLY = shoulderY + 22 + handLBob;
-  const handRX = sxR + swingR * armSwingMax + idleSwayR;
-  const handRY = shoulderY + 22 + handRBob;
+  // Legs: knee/foot are hip-relative in the FBX (Hips at origin), so we anchor
+  // them off hipY rather than the slightly tilted leg-hip.
+  const lHipX = hxL + facing * W.LU[0] * S * amp;
+  const lHipY = hipY + (-W.LU[1]) * S * amp;
+  const rHipX = hxR + facing * W.RU[0] * S * amp;
+  const rHipY = hipY + (-W.RU[1]) * S * amp;
+  const lKnee = proj(W.LK, hxL, hipY);
+  const lFoot = proj(W.LF, hxL, hipY);
+  const rKnee = proj(W.RK, hxR, hipY);
+  const rFoot = proj(W.RF, hxR, hipY);
 
-  // Asymmetric elbow bend: more bend on back-swing, straighter on forward swing.
-  const backL = Math.max(0, -swingL); // 0..1 when L arm goes back relative to facing
-  const backR = Math.max(0, -swingR);
-  const elbowLX = (sxL + handLX) / 2 + facing * 1.5 + (handLX < sxL ? -1 : 1) - facing * backL * 3 * amp;
-  const elbowLY = (shoulderY + handLY) / 2 + 5 + backL * 4 * amp;
-  const elbowRX = (sxR + handRX) / 2 - facing * 1.5 + (handRX > sxR ? 1 : -1) - facing * backR * 3 * amp;
-  const elbowRY = (shoulderY + handRY) / 2 + 5 + backR * 4 * amp;
+  const L = {
+    joints: [lHipX, lHipY, lKnee[0], lKnee[1], lFoot[0], lFoot[1]] as [number, number, number, number, number, number],
+    foot: lFoot,
+  };
+  const R = {
+    joints: [rHipX, rHipY, rKnee[0], rKnee[1], rFoot[0], rFoot[1]] as [number, number, number, number, number, number],
+    foot: rFoot,
+  };
+
+  // Arms: elbows + hands are hip-relative in the FBX. Anchor off
+  // (sxL/sxR, hipY) so they ride the body. Idle micro-sway only when amp is
+  // tiny (i.e. stopping/starting).
+  const idleSway = (1 - amp) * Math.sin(phase * 0.7) * 0.6;
+  const lElbow = proj(W.LE, sxL, hipY);
+  const lHandP = proj(W.LH, sxL, hipY);
+  const rElbow = proj(W.RE, sxR, hipY);
+  const rHandP = proj(W.RH, sxR, hipY);
+
+  const handLX = lHandP[0] + idleSway, handLY = lHandP[1];
+  const handRX = rHandP[0] - idleSway, handRY = rHandP[1];
+  const elbowLX = lElbow[0], elbowLY = lElbow[1];
+  const elbowRX = rElbow[0], elbowRY = rElbow[1];
+
 
   // Idle fighting stance — feet planted wide, knees bent, fists up in guard.
   // Subtle breathing keeps it from feeling frozen. Activates when not moving
