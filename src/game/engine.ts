@@ -146,7 +146,10 @@ interface Fighter {
   bamfCombo: null | { step: number; t: number; nextAt: number; targetId: PlayerId };
 }
 
-interface SmokeCloud { x: number; y: number; r: number; rMax: number; life: number; maxLife: number; }
+interface SmokeCloud {
+  x: number; y: number; r: number; rMax: number; life: number; maxLife: number;
+  vx?: number; vy?: number; hue?: number; seed?: number; dense?: boolean;
+}
 
 interface Projectile {
   owner: PlayerId;
@@ -535,42 +538,68 @@ export class GameEngine {
 
   /** Signature Nightcrawler teleport puff: dense purple smoke + curling tendrils + sparks. */
   private bamfPuff(x: number, y: number, mode: "depart" | "arrive" | "strike") {
-    const layers = mode === "strike" ? 2 : 3;
-    for (let i = 0; i < layers; i++) {
-      const off = (Math.random() - 0.5) * 14;
+    // Realistic billowing brimstone: many small overlapping puffs that drift
+    // upward with turbulence rather than a few hard discs.
+    const puffs = mode === "strike" ? 10 : (mode === "arrive" ? 18 : 16);
+    for (let i = 0; i < puffs; i++) {
+      const ox = (Math.random() - 0.5) * 28;
+      const oy = (Math.random() - 0.5) * 22;
+      const rMax = 18 + Math.random() * 22 + (mode === "arrive" ? 6 : 0);
+      const life = 0.9 + Math.random() * 0.7;
+      // Hue: deep violet -> dusty grey-purple (brimstone)
+      const hue = 290 + Math.random() * 25;
       this.smokeClouds.push({
-        x: x + off, y: y + (Math.random() - 0.5) * 10,
-        r: 10 + i * 4,
-        rMax: 56 + i * 14 + (mode === "arrive" ? 8 : 0),
-        life: 0.55 + i * 0.12, maxLife: 0.55 + i * 0.12,
+        x: x + ox, y: y + oy,
+        r: 6 + Math.random() * 6,
+        rMax,
+        life, maxLife: life,
+        vx: (Math.random() - 0.5) * 28,
+        vy: -18 - Math.random() * 36,
+        hue,
+        seed: Math.random() * 1000,
+        dense: true,
       });
     }
-    this.burst(x, y, "oklch(0.55 0.22 305)", mode === "arrive" ? 28 : 22);
-    const count = mode === "strike" ? 10 : 18;
+    // Low ground hugging dark cloud
+    if (mode !== "strike") {
+      for (let i = 0; i < 6; i++) {
+        const ox = (Math.random() - 0.5) * 50;
+        this.smokeClouds.push({
+          x: x + ox, y: y + 10 + Math.random() * 8,
+          r: 8, rMax: 26 + Math.random() * 14,
+          life: 1.3, maxLife: 1.3,
+          vx: ox * 0.6, vy: -4 - Math.random() * 8,
+          hue: 285 + Math.random() * 10,
+          seed: Math.random() * 1000,
+          dense: true,
+        });
+      }
+    }
+    this.burst(x, y, "oklch(0.55 0.22 305)", mode === "arrive" ? 22 : 18);
+    // Glowing embers / sulphur sparks
+    const count = mode === "strike" ? 8 : 16;
     for (let i = 0; i < count; i++) {
       const ang = Math.random() * Math.PI * 2;
       const sp = 30 + Math.random() * 90;
       this.particles.push({
         x: x + (Math.random() - 0.5) * 14,
         y: y + (Math.random() - 0.5) * 14,
-        vx: Math.cos(ang) * sp * 0.6,
-        vy: Math.sin(ang) * sp * 0.4 - 40 - Math.random() * 30,
+        vx: Math.cos(ang) * sp * 0.7,
+        vy: Math.sin(ang) * sp * 0.4 - 60 - Math.random() * 40,
         life: 0.7 + Math.random() * 0.5, maxLife: 1.2,
-        color: i % 3 === 0
-          ? "oklch(0.78 0.22 305)"
-          : (i % 3 === 1 ? "oklch(0.4 0.16 295)" : "oklch(0.25 0.08 290)"),
-        size: 3 + Math.random() * 3.5,
+        color: i % 2 === 0 ? "oklch(0.78 0.22 305)" : "oklch(0.92 0.18 60)",
+        size: 1.6 + Math.random() * 2.2,
       });
     }
-    for (let i = 0; i < (mode === "arrive" ? 10 : 6); i++) {
+    for (let i = 0; i < (mode === "arrive" ? 12 : 6); i++) {
       const ang = Math.random() * Math.PI * 2;
-      const sp = 160 + Math.random() * 200;
+      const sp = 200 + Math.random() * 220;
       this.particles.push({
         x, y,
         vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 40,
-        life: 0.25 + Math.random() * 0.2, maxLife: 0.45,
-        color: "oklch(0.95 0.18 95)",
-        size: 1.4 + Math.random() * 1.6,
+        life: 0.22 + Math.random() * 0.18, maxLife: 0.45,
+        color: "oklch(0.97 0.18 95)",
+        size: 1.3 + Math.random() * 1.4,
       });
     }
   }
@@ -1194,6 +1223,24 @@ export class GameEngine {
 
     for (const p of this.particles) { p.x += p.vx * sdt; p.y += p.vy * sdt; p.life -= dt; }
     this.particles = this.particles.filter(p => p.life > 0);
+
+    // Smoke clouds — drift, expand, swirl, fade
+    for (const sc of this.smokeClouds) {
+      sc.life -= dt;
+      sc.r += (sc.rMax - sc.r) * Math.min(1, dt * 1.6);
+      if (sc.vx !== undefined) {
+        const t = (sc.maxLife - sc.life);
+        // Turbulence: gentle sinusoidal swirl
+        const seed = sc.seed ?? 0;
+        const swirl = Math.sin(t * 3 + seed) * 16;
+        sc.x += (sc.vx + swirl) * sdt;
+        sc.y += (sc.vy ?? 0) * sdt;
+        // Air drag + buoyant rise
+        sc.vx *= Math.exp(-1.2 * dt);
+        sc.vy = (sc.vy ?? 0) * Math.exp(-0.6 * dt) - 8 * dt;
+      }
+    }
+    this.smokeClouds = this.smokeClouds.filter(s => s.life > 0);
 
     for (const sw of this.shockwaves) {
       sw.life -= dt; sw.r += (sw.rMax - sw.r) * Math.min(1, dt * 4);
@@ -2771,6 +2818,48 @@ export class GameEngine {
     ctx.setTransform(worldScale, 0, 0, worldScale, offX, offY);
 
     getMap(this.mapId).drawBackground(ctx, this.elapsed, W, H, GROUND_Y);
+
+    // Smoke clouds — multi-blob volumetric brimstone with soft alpha falloff.
+    // Drawn under particles so glowing embers/sparks pop on top.
+    if (this.smokeClouds.length) {
+      ctx.globalCompositeOperation = "source-over";
+      for (const sc of this.smokeClouds) {
+        const t = sc.life / sc.maxLife;
+        // Fade in fast, out slow — looks like dispersing smoke
+        const fade = t < 0.85 ? Math.min(1, t / 0.25) * (t / 0.85) : (1 - (t - 0.85) / 0.15) * 0.0 + 1;
+        const alpha = Math.max(0, Math.min(1, fade)) * 0.55;
+        const hue = sc.hue ?? 295;
+        const seed = sc.seed ?? 0;
+        // Lightness drifts darker as smoke ages and rises
+        const L1 = 0.32 - (1 - t) * 0.06;
+        const L2 = 0.18 - (1 - t) * 0.04;
+        // Outer halo (soft, dark)
+        ctx.globalAlpha = alpha * 0.55;
+        ctx.fillStyle = `oklch(${L2} 0.06 ${hue.toFixed(0)})`;
+        ctx.beginPath(); ctx.arc(sc.x, sc.y, sc.r * 1.35, 0, Math.PI * 2); ctx.fill();
+        // Body — multi-blob clusters for billowing look
+        if (sc.dense && !this.lowPower) {
+          const blobs = 5;
+          for (let i = 0; i < blobs; i++) {
+            const ang = (i / blobs) * Math.PI * 2 + seed;
+            const off = sc.r * 0.45;
+            const bx = sc.x + Math.cos(ang) * off;
+            const by = sc.y + Math.sin(ang) * off * 0.7;
+            const br = sc.r * (0.55 + 0.18 * Math.sin(seed + i * 1.7));
+            ctx.globalAlpha = alpha * 0.7;
+            ctx.fillStyle = `oklch(${L1} 0.08 ${hue.toFixed(0)})`;
+            ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
+          }
+        }
+        // Core highlight (slight purple glow)
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = alpha * 0.18;
+        ctx.fillStyle = `oklch(0.55 0.18 ${hue.toFixed(0)})`;
+        ctx.beginPath(); ctx.arc(sc.x, sc.y, sc.r * 0.7, 0, Math.PI * 2); ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
+      }
+      ctx.globalAlpha = 1;
+    }
 
     // Particles — soft additive disks with a brighter core for premium feel
     ctx.globalCompositeOperation = "lighter";
