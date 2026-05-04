@@ -146,8 +146,8 @@ export function GameCanvas() {
       const hitW = 70, hitH = 120;
       if (Math.abs(sx - opp.x) < hitW / 2 && sy > opp.y - 15 && sy < opp.y + hitH) {
         const p1Name = engine.getSkinIdFor("p1");
-        // Hulk: try Rage Frenzy first when in close range
-        if (p1Name === "hulk" && engine.pressFrenzy("p1")) return true;
+        // NOTE: Rage Frenzy is NOT triggered by tapping — it must be activated
+        // explicitly via the Rage Frenzy HUD button or the dedicated key (B).
         if (engine.canFly("p1") && engine.isFlying("p1")) {
           if (engine.pressSuperDash("p1")) return true;
         }
