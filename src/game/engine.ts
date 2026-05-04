@@ -1260,7 +1260,8 @@ export class GameEngine {
     }
     for (const f of [this.p1, this.p2]) {
       if (freezeActive && f.id !== this.timeFreezer) continue;
-      f.facingT += (f.facing - f.facingT) * Math.min(1, dt * 8);
+      // Slower, smoother yaw lerp so the turn reads as a 3D pivot, not a snap-flip.
+      f.facingT += (f.facing - f.facingT) * Math.min(1, dt * 5.5);
     }
 
     for (const pr of this.projectiles) {
@@ -3926,13 +3927,22 @@ export class GameEngine {
     }
     ctx.translate(0, FIGHTER_H);
     ctx.rotate(pose.lean + (ghost ? 0 : f.bodyRoll));
-    // Yaw turn: pose is computed in the rendered facing (sign of facingT), so
-    // we scale X by |facingT| only — that gives a smooth squash through a flat
-    // mid-frame when changing direction, with no pose/render desync. At rest
-    // |facingT| = 1 so the body renders at full width.
+    // Yaw turn: fake a 3D pivot around the spine. Pose is computed in the rendered
+    // facing (sign of facingT). We:
+    //  - scale X by |facingT| (perspective foreshortening as the torso rotates)
+    //  - skew slightly so the leading edge of the body slips forward (depth cue)
+    //  - tilt vertically a hair so the chest pitches with the spin (no paper-flat look)
+    // Floor the magnitude so the silhouette never fully collapses to a line.
     if (!ghost) {
-      const yawMag = Math.max(0.05, Math.abs(f.facingT));
-      ctx.scale(yawMag, 1);
+      const t = f.facingT;
+      const mag = Math.abs(t);
+      const yawMag = 0.22 + 0.78 * mag;            // 0.22..1
+      const turnAmt = 1 - mag;                     // 0..1, peaks mid-turn
+      // Skew direction: lead with the new facing
+      const skew = (f.facing) * turnAmt * 0.18;    // radians-ish (canvas matrix uses tan)
+      const ysquash = 1 - turnAmt * 0.06;          // small vertical settle
+      // Apply a single matrix: [yawMag, 0, skew, ysquash, 0, 0]
+      ctx.transform(yawMag, 0, Math.tan(skew * 0.6) * 0.4, ysquash, 0, 0);
     }
     ctx.translate(0, -FIGHTER_H);
 
