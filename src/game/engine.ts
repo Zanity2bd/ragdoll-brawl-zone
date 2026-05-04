@@ -3159,6 +3159,151 @@ export class GameEngine {
     return best === null ? null : { dist: best };
   }
 
+  /** Build flavor props (cars, buildings, etc.) per map. Walk-through; shatterable by laser overload. */
+  private buildPropsForMap(mapId: MapId): Prop[] {
+    const out: Prop[] = [];
+    const gy = GROUND_Y;
+    const add = (p: Prop) => out.push(p);
+    switch (mapId) {
+      case "neon-city": {
+        // Cyber sedan + neon storefront w/ glowing door + lamppost
+        add({ kind: "car", x: 80, y: gy - 56, w: 170, h: 56, hue: 320, accent: 200, seed: 1 });
+        add({ kind: "building", x: 320, y: gy - 220, w: 170, h: 220, hue: 280, accent: 180, hasDoor: true, seed: 2 });
+        add({ kind: "lamppost", x: 530, y: gy - 240, w: 8, h: 240, accent: 60 });
+        add({ kind: "vending", x: 1030, y: gy - 110, w: 60, h: 110, hue: 200, accent: 150 });
+        add({ kind: "car", x: 1130, y: gy - 56, w: 150, h: 56, hue: 25, accent: 60, seed: 3 });
+        break;
+      }
+      case "cyber-dojo": {
+        add({ kind: "barrel", x: 100, y: gy - 70, w: 44, h: 70, hue: 30, accent: 60, seed: 1 });
+        add({ kind: "barrel", x: 150, y: gy - 70, w: 44, h: 70, hue: 30, accent: 60, seed: 2 });
+        add({ kind: "pillar", x: 1080, y: gy - 220, w: 36, h: 220, hue: 20, accent: 30 });
+        add({ kind: "crate", x: 1140, y: gy - 70, w: 70, h: 70, hue: 40, accent: 60, seed: 3 });
+        break;
+      }
+      case "hells-arena": {
+        add({ kind: "pillar", x: 60, y: gy - 260, w: 40, h: 260, hue: 20, accent: 35 });
+        add({ kind: "pillar", x: 1180, y: gy - 260, w: 40, h: 260, hue: 20, accent: 35 });
+        add({ kind: "barrel", x: 1110, y: gy - 70, w: 44, h: 70, hue: 25, accent: 50, seed: 1 });
+        break;
+      }
+      case "backstreet": {
+        add({ kind: "car", x: 70, y: gy - 56, w: 160, h: 56, hue: 25, accent: 60, seed: 1 });
+        add({ kind: "trashcan", x: 250, y: gy - 70, w: 36, h: 70, hue: 150, accent: 80 });
+        add({ kind: "vending", x: 1030, y: gy - 110, w: 56, h: 110, hue: 25, accent: 60 });
+        add({ kind: "building", x: 1100, y: gy - 240, w: 180, h: 240, hue: 30, accent: 80, hasDoor: true, seed: 2 });
+        break;
+      }
+      case "car-park": {
+        add({ kind: "car", x: 60, y: gy - 56, w: 160, h: 56, hue: 0, accent: 25, seed: 1 });
+        add({ kind: "car", x: 1080, y: gy - 56, w: 160, h: 56, hue: 230, accent: 200, seed: 2 });
+        add({ kind: "barrel", x: 60, y: gy - 70, w: 36, h: 70, hue: 30, accent: 60, seed: 3 });
+        break;
+      }
+      case "temple": {
+        add({ kind: "pillar", x: 1180, y: gy - 280, w: 40, h: 280, hue: 60, accent: 50 });
+        add({ kind: "crate", x: 90, y: gy - 60, w: 60, h: 60, hue: 40, accent: 60 });
+        break;
+      }
+      case "living-room": {
+        add({ kind: "vending", x: 60, y: gy - 110, w: 50, h: 110, hue: 30, accent: 60 });
+        add({ kind: "trashcan", x: 1190, y: gy - 60, w: 32, h: 60, hue: 90, accent: 50 });
+        break;
+      }
+      case "spaceship": {
+        add({ kind: "barrel", x: 70, y: gy - 70, w: 44, h: 70, hue: 200, accent: 25, seed: 1 });
+        add({ kind: "crate", x: 1180, y: gy - 70, w: 70, h: 70, hue: 220, accent: 200, seed: 2 });
+        break;
+      }
+      case "rooftop-dusk": {
+        add({ kind: "building", x: 60, y: gy - 240, w: 160, h: 240, hue: 30, accent: 60, hasDoor: true, seed: 1 });
+        add({ kind: "vending", x: 1140, y: gy - 110, w: 50, h: 110, hue: 220, accent: 200 });
+        break;
+      }
+      case "warehouse": {
+        add({ kind: "crate", x: 70, y: gy - 70, w: 70, h: 70, hue: 40, accent: 60, seed: 1 });
+        add({ kind: "crate", x: 145, y: gy - 70, w: 70, h: 70, hue: 40, accent: 60, seed: 2 });
+        add({ kind: "barrel", x: 1100, y: gy - 70, w: 44, h: 70, hue: 30, accent: 60, seed: 3 });
+        add({ kind: "barrel", x: 1150, y: gy - 70, w: 44, h: 70, hue: 30, accent: 60, seed: 4 });
+        break;
+      }
+      case "subway": {
+        add({ kind: "vending", x: 70, y: gy - 110, w: 56, h: 110, hue: 0, accent: 25 });
+        add({ kind: "trashcan", x: 1190, y: gy - 60, w: 32, h: 60, hue: 240, accent: 220 });
+        break;
+      }
+      case "forest": {
+        add({ kind: "barrel", x: 70, y: gy - 70, w: 44, h: 70, hue: 90, accent: 130, seed: 1 });
+        add({ kind: "crate", x: 1180, y: gy - 60, w: 60, h: 60, hue: 60, accent: 90, seed: 2 });
+        break;
+      }
+      case "space": {
+        add({ kind: "crate", x: 70, y: gy - 60, w: 60, h: 60, hue: 260, accent: 220 });
+        add({ kind: "crate", x: 1180, y: gy - 60, w: 60, h: 60, hue: 260, accent: 220 });
+        break;
+      }
+    }
+    return out;
+  }
+
+  /** Shatter a prop into many debris chunks + ember burst. */
+  private shatterProp(p: Prop, sx: number, sy: number) {
+    if (p.destroyed) return;
+    p.destroyed = true;
+    this.shake = Math.max(this.shake, 18);
+    this.impactFlash = Math.max(this.impactFlash, 0.5);
+    this.shockwaves.push({
+      x: p.x + p.w / 2, y: p.y + p.h / 2,
+      r: 8, rMax: Math.max(p.w, p.h) * 1.8,
+      life: 0.5, maxLife: 0.5, color: "oklch(0.85 0.22 40)",
+    });
+    const cols = Math.max(3, Math.round(p.w / 16));
+    const rows = Math.max(3, Math.round(p.h / 16));
+    const cw = p.w / cols, ch = p.h / rows;
+    const baseHue = p.hue ?? 250;
+    for (let cy = 0; cy < rows; cy++) {
+      for (let cx = 0; cx < cols; cx++) {
+        const px = p.x + cx * cw + cw / 2;
+        const py = p.y + cy * ch + ch / 2;
+        const blast = 220 + Math.random() * 240;
+        const ang2 = Math.atan2(py - sy, px - sx);
+        this.debris.push({
+          x: px, y: py,
+          vx: Math.cos(ang2) * blast + (Math.random() - 0.5) * 90,
+          vy: Math.sin(ang2) * blast - 140 - Math.random() * 160,
+          w: cw * (0.7 + Math.random() * 0.4),
+          h: ch * (0.7 + Math.random() * 0.4),
+          rot: Math.random() * Math.PI,
+          rotV: (Math.random() - 0.5) * 14,
+          life: 1.4 + Math.random() * 0.8, maxLife: 2.2,
+          color: `oklch(${0.28 + Math.random() * 0.18} 0.06 ${baseHue})`,
+        });
+      }
+    }
+    for (let i = 0; i < 22; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const s = 80 + Math.random() * 240;
+      this.particles.push({
+        x: p.x + p.w / 2, y: p.y + p.h / 2,
+        vx: Math.cos(a) * s, vy: Math.sin(a) * s - 60,
+        life: 0.6, maxLife: 0.6,
+        color: Math.random() < 0.5 ? "oklch(0.80 0.26 30)" : "oklch(0.95 0.20 70)",
+        size: 2 + Math.random() * 2.4,
+      });
+    }
+    Sfx.play("boom", 0.55);
+  }
+
+  /** During laser overload, shatter any prop the beam segment crosses. */
+  private overloadShatterProps(sx: number, sy: number, ex: number, ey: number) {
+    for (const p of this.props) {
+      if (p.destroyed) continue;
+      if (this.segmentIntersectsRect(sx, sy, ex, ey, p.x, p.y, p.w, p.h)) {
+        this.shatterProp(p, sx, sy);
+      }
+    }
+  }
+
   private buildSnapshot(): GameSnapshot {
     return {
       p1: this.snapPlayer(this.p1),
