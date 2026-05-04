@@ -144,9 +144,8 @@ export function GameCanvas() {
 function HUD({ snap, onRematch, onChange }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void }) {
   return (
     <>
-      <div className="pointer-events-none absolute top-0 left-0 right-0 p-4 flex gap-4 items-start">
+      <div className="pointer-events-none absolute top-0 left-0 right-0 p-2 sm:p-4 flex gap-2 sm:gap-4 items-start">
         <HpBar p={snap.p1} side="left" />
-        <div className="flex-1" />
         <HpBar p={snap.p2} side="right" />
       </div>
 
