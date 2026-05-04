@@ -2113,6 +2113,69 @@ export class GameEngine {
       ctx.restore();
     }
 
+    // ---- Hulk: muscle bulges on limbs ----
+    if (skin.id === "hulk" && !ghost) {
+      const muscleFill = `color-mix(in oklab, ${limbColor} 70%, white)`;
+      const muscleShade = `color-mix(in oklab, ${limbColor} 60%, black)`;
+      const drawMuscle = (j: [number, number, number, number, number, number], rx: number, ry: number) => {
+        // bulge near upper segment (between joint and mid)
+        const ux = (j[0] + j[2]) / 2;
+        const uy = (j[1] + j[3]) / 2;
+        const ang = Math.atan2(j[3] - j[1], j[2] - j[0]);
+        ctx.save();
+        ctx.translate(ux, uy);
+        ctx.rotate(ang);
+        ctx.fillStyle = muscleFill;
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath(); ctx.ellipse(0, -ry * 0.4, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = muscleShade;
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath(); ctx.ellipse(0, ry * 0.5, rx * 0.85, ry * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      };
+      // Biceps + forearms
+      drawMuscle(pose.armL, 7, 4.5);
+      drawMuscle(pose.armR, 7, 4.5);
+      drawMuscle([pose.armL[2], pose.armL[3], pose.armL[4], pose.armL[5], pose.armL[4], pose.armL[5]], 5.5, 3.6);
+      drawMuscle([pose.armR[2], pose.armR[3], pose.armR[4], pose.armR[5], pose.armR[4], pose.armR[5]], 5.5, 3.6);
+      // Quads + calves
+      drawMuscle(pose.legL, 8, 5);
+      drawMuscle(pose.legR, 8, 5);
+      drawMuscle([pose.legL[2], pose.legL[3], pose.legL[4], pose.legL[5], pose.legL[4], pose.legL[5]], 6, 4);
+      drawMuscle([pose.legR[2], pose.legR[3], pose.legR[4], pose.legR[5], pose.legR[4], pose.legR[5]], 6, 4);
+      ctx.globalAlpha = 1;
+
+      // Pecs + abs on torso
+      const torsoMid = (shoulderY + hipY) / 2;
+      ctx.save();
+      // Pecs (two large ellipses just below shoulder line)
+      ctx.fillStyle = muscleFill;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath(); ctx.ellipse(-5, shoulderY + 6, 6, 5, -0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(5, shoulderY + 6, 6, 5, 0.2, 0, Math.PI * 2); ctx.fill();
+      // Pec separation shadow
+      ctx.strokeStyle = muscleShade;
+      ctx.lineWidth = 1.4;
+      ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.moveTo(0, shoulderY + 2); ctx.lineTo(0, shoulderY + 11); ctx.stroke();
+      // Abs (3 horizontal pairs)
+      ctx.lineWidth = 1.2;
+      ctx.globalAlpha = 0.5;
+      for (let i = 0; i < 3; i++) {
+        const ay = torsoMid - 1 + i * 4;
+        ctx.beginPath(); ctx.moveTo(-4, ay); ctx.lineTo(-1, ay); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(1, ay); ctx.lineTo(4, ay); ctx.stroke();
+      }
+      // Center ab line
+      ctx.beginPath(); ctx.moveTo(0, shoulderY + 12); ctx.lineTo(0, hipY - 2); ctx.stroke();
+      // Shoulder traps
+      ctx.fillStyle = muscleFill;
+      ctx.globalAlpha = 0.45;
+      ctx.beginPath(); ctx.ellipse(-7, shoulderY - 1, 4, 2.5, -0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(7, shoulderY - 1, 4, 2.5, 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
     if (skin.boots) {
       drawBoot(ctx, pose.footL, f.facing, skin.boots);
       drawBoot(ctx, pose.footR, f.facing, skin.boots);
@@ -2234,6 +2297,59 @@ export class GameEngine {
       const r = charging ? 2.6 : 1.8;
       ctx.beginPath(); ctx.arc(-3, headY, r, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(3, headY, r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // ---- Hulk: angry expression (furrowed brows, scowl, bared teeth) ----
+    if (skin.id === "hulk" && !ghost) {
+      ctx.save();
+      // Furrowed thick brows angled inward over the eyes
+      ctx.strokeStyle = "oklch(0.10 0.05 25)";
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = "round";
+      // Left brow: outer-low to inner-high (angry V)
+      ctx.beginPath();
+      ctx.moveTo(-5.5, headY - 2.6);
+      ctx.lineTo(-1.2, headY - 1.4);
+      ctx.stroke();
+      // Right brow
+      ctx.beginPath();
+      ctx.moveTo(5.5, headY - 2.6);
+      ctx.lineTo(1.2, headY - 1.4);
+      ctx.stroke();
+      // Brow shadow / forehead crease
+      ctx.strokeStyle = "oklch(0.18 0.10 25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-3, headY - 4);
+      ctx.lineTo(0, headY - 3.4);
+      ctx.lineTo(3, headY - 4);
+      ctx.stroke();
+      // Snarling mouth — open, downturned, with bared teeth
+      const my = headY + 4.5;
+      // Dark mouth interior
+      ctx.fillStyle = "oklch(0.12 0.02 25)";
+      ctx.beginPath();
+      ctx.moveTo(-4.5, my);
+      ctx.quadraticCurveTo(-2, my + 2.4, 0, my + 1.8);
+      ctx.quadraticCurveTo(2, my + 2.4, 4.5, my);
+      ctx.quadraticCurveTo(2, my + 0.4, 0, my + 0.6);
+      ctx.quadraticCurveTo(-2, my + 0.4, -4.5, my);
+      ctx.closePath();
+      ctx.fill();
+      // Bared teeth
+      ctx.fillStyle = "oklch(0.95 0.02 80)";
+      ctx.fillRect(-3.2, my + 0.7, 1.2, 1.2);
+      ctx.fillRect(-1.6, my + 0.9, 1.2, 1.2);
+      ctx.fillRect(0.4, my + 0.9, 1.2, 1.2);
+      ctx.fillRect(2.0, my + 0.7, 1.2, 1.2);
+      // Strong jawline shadow
+      ctx.strokeStyle = "oklch(0.16 0.06 25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-headR + 1, headY + 2);
+      ctx.quadraticCurveTo(0, headY + headR - 1, headR - 1, headY + 2);
+      ctx.stroke();
       ctx.restore();
     }
 
