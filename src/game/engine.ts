@@ -3573,7 +3573,10 @@ export class GameEngine {
       }
     }
 
-    // Debris chunks (cover/platforms shattered by laser overload)
+    // Foreground props (cars, buildings, lampposts, barrels, etc.) — shatterable by overload.
+    this.drawProps(ctx);
+
+
     if (this.debris.length) {
       ctx.globalCompositeOperation = "source-over";
       for (const d of this.debris) {
