@@ -2768,10 +2768,26 @@ export class GameEngine {
             const dx = tx - sx; const dy = ty - sy;
             const desired = Math.atan2(dy, dx);
             const angle = desired;
-            // Normal beam: blocked by cover. Overload: pierces everything.
+            // Normal beam: blocked by cover AND props (whichever is closer).
+            // Overload: pierces everything (chain-shatter handled below).
             const beamMaxLen = m.range;
-            const blockHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
-            const beamLen = blockHit ? blockHit.dist : beamMaxLen;
+            const platHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
+            let beamLen = platHit ? platHit.dist : beamMaxLen;
+            let blockedProp: Prop | null = null;
+            if (!overload) {
+              const exFull = sx + Math.cos(desired) * beamLen;
+              const eyFull = sy + Math.sin(desired) * beamLen;
+              const ph = this.firstPropHit(sx, sy, exFull, eyFull);
+              if (ph) {
+                beamLen = beamLen * ph.t;
+                blockedProp = ph.prop;
+              }
+            }
+            const blockHit: { dist: number } | null = platHit || (blockedProp ? { dist: beamLen } : null);
+            if (blockedProp) {
+              // Sustained damage on the prop while the beam holds against it
+              this.damageProp(blockedProp, m.damage * 1.5 * dt, sx, sy);
+            }
             // Tag the beam so the renderer can switch to the red overload look.
             this.beams.push({
               owner: f.id, x: sx, y: sy, angle: desired, length: beamLen, life: 0.05,
