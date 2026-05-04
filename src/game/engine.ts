@@ -914,6 +914,35 @@ export class GameEngine {
     }
   }
 
+  private resolveSuperPunch(attacker: Fighter, targetId: PlayerId) {
+    const t = targetId === "p1" ? this.p1 : this.p2;
+    if (t.id === attacker.id) return;
+    t.hp = Math.max(0, t.hp - SUPER_DAMAGE);
+    t.hitFlash = 0.4;
+    const dir = Math.sign(t.x - attacker.x) || attacker.facing;
+    t.vx = dir * SUPER_KB_X;
+    t.vy = SUPER_KB_Y;
+    t.onGround = false;
+    t.ragdollT = SUPER_RAGDOLL;
+    t.ragdollPhase = 0;
+    this.shake = Math.max(this.shake, SUPER_SHAKE);
+    this.hitstopT = SUPER_HITSTOP;
+    this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
+    this.slowmoMode = "impact";
+    this.impactFlash = 1;
+    this.burst(t.x, t.y + FIGHTER_H * 0.5, attacker.skin.glow, 48);
+    this.burst(t.x, t.y + FIGHTER_H * 0.5, "oklch(0.95 0.08 80)", 28);
+    this.shockwaves.push({
+      x: t.x, y: t.y + FIGHTER_H * 0.5, r: 10, rMax: 220,
+      life: 0.55, maxLife: 0.55, color: attacker.skin.glow,
+    });
+    Sfx.play("boom", 0.9);
+    Sfx.play("heavy", 0.8);
+    if (t.hp <= 0 && this.phase === "fight") {
+      this.phase = "ko"; this.winner = attacker.id;
+    }
+  }
+
   private fire(f: Fighter) {
     f.fireCd = FIRE_CD;
     f.attackAnim = 0.25;
