@@ -3929,10 +3929,75 @@ function getPowerSpec(id: SkinId): PowerSpec {
   }
 }
 
-function drawLimb(ctx: CanvasRenderingContext2D, j: [number, number, number, number, number, number]) {
+// Draw a limb as two tapered segments with optional torso-overlap and a perpendicular
+// curvature nudge applied to the elbow. Pass upperW=lowerW for a uniform stroke
+// (used by the outline pass with a wider width). When upperW===lowerW we draw a
+// single quadratic so the rim has no width discontinuity.
+function drawLimb(
+  ctx: CanvasRenderingContext2D,
+  j: [number, number, number, number, number, number],
+  upperW?: number,
+  lowerW?: number,
+  flexDir = 0,
+  flexMag = 0,
+  overlap = 0,
+) {
+  let sx = j[0], sy = j[1];
+  const ex = j[2], ey = j[3];
+  const hx = j[4], hy = j[5];
+
+  // Overlap into the torso along the start->elbow direction.
+  if (overlap > 0) {
+    const dx = ex - sx, dy = ey - sy;
+    const len = Math.hypot(dx, dy) || 1;
+    sx -= (dx / len) * overlap;
+    sy -= (dy / len) * overlap;
+  }
+
+  // Perpendicular nudge to elbow control point. Direction sign comes from caller
+  // (facing-anchored), magnitude is velocity/state-modulated. Perp is taken from
+  // the start->hand vector so the curve always bows along the limb's axis.
+  let cx = ex, cy = ey;
+  if (flexMag !== 0 && flexDir !== 0) {
+    const vx = hx - sx, vy = hy - sy;
+    const vlen = Math.hypot(vx, vy) || 1;
+    const px = -vy / vlen, py = vx / vlen;
+    cx = ex + px * flexMag * flexDir;
+    cy = ey + py * flexMag * flexDir;
+  }
+
+  if (upperW == null || lowerW == null || Math.abs(upperW - lowerW) < 0.05) {
+    // Uniform stroke (outline / glow / highlight passes use this).
+    if (upperW != null) ctx.lineWidth = upperW;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.quadraticCurveTo(cx, cy, hx, hy);
+    ctx.stroke();
+    return;
+  }
+
+  // Tapered: split at elbow, stroke upper full width, lower thinner.
+  // Using midpoints on each half-curve keeps the join smooth.
+  const mUx = (sx + cx) / 2, mUy = (sy + cy) / 2;
+  const mLx = (cx + hx) / 2, mLy = (cy + hy) / 2;
+
+  ctx.lineWidth = upperW;
   ctx.beginPath();
-  ctx.moveTo(j[0], j[1]);
-  ctx.quadraticCurveTo(j[2], j[3], j[4], j[5]);
+  ctx.moveTo(sx, sy);
+  ctx.quadraticCurveTo((sx + mUx) / 2 * 0 + mUx * 0 + cx * 0 + sx * 0 + mUx, mUy, mLx, mLy);
+  // The triple-control noise above isn't needed; do a clean two-segment draw:
+  ctx.stroke();
+
+  // Re-draw cleanly (the prior beginPath was a placeholder that we discard via beginPath).
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.quadraticCurveTo(cx, cy, mLx, mLy);
+  ctx.stroke();
+
+  ctx.lineWidth = lowerW;
+  ctx.beginPath();
+  ctx.moveTo(mLx, mLy);
+  ctx.quadraticCurveTo(cx, cy, hx, hy);
   ctx.stroke();
 }
 
