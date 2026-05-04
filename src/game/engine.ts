@@ -1676,6 +1676,11 @@ export class GameEngine {
       this.debris = this.debris.filter(d => d.life > 0);
     }
 
+    // Decay prop damage-flash each tick
+    for (const p of this.props) {
+      if (p.damageFlash > 0) p.damageFlash = Math.max(0, p.damageFlash - dt * 3);
+    }
+
 
     for (const ms of this.missiles) {
       if (freezeActive && ms.owner !== this.timeFreezer) continue;
