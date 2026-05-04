@@ -1557,7 +1557,7 @@ export class GameEngine {
         const tx = tgt.x; const ty = tgt.y + 30;
         const dxh = tx - sx; const dyh = ty - sy;
         const desired = Math.atan2(dyh, dxh);
-        const beamMaxLen = 520;
+        const beamMaxLen = overload ? 4000 : 520;
         const blockHit = overload ? null : this.raycastPlatforms(sx, sy, desired, beamMaxLen);
         const beamLen = blockHit ? blockHit.dist : beamMaxLen;
         this.beams.push({
