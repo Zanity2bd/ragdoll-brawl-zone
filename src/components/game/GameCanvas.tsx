@@ -4,6 +4,7 @@ import { type MapId } from "@/game/maps";
 import { type SkinId } from "@/game/skins";
 import { Lobby } from "./Lobby";
 import { SkinSelect } from "./SkinSelect";
+import { Splash } from "./Splash";
 
 const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" }> = {
   KeyA: { p: "p1", action: "left" },
@@ -18,14 +19,14 @@ const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" |
   KeyL: { p: "p2", action: "teleport" },
 };
 
-type Screen = "map" | "skin" | "fight";
+type Screen = "splash" | "map" | "skin" | "fight";
 
 export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
   const [snap, setSnap] = useState<GameSnapshot | null>(null);
   const [isTouch, setIsTouch] = useState(false);
-  const [screen, setScreen] = useState<Screen>("map");
+  const [screen, setScreen] = useState<Screen>("splash");
   const [mapId, setMapId] = useState<MapId>("neon-city");
   const [p1Skin, setP1Skin] = useState<SkinId>("spiderman");
   const [p2Skin, setP2Skin] = useState<SkinId>("homelander");
@@ -128,6 +129,9 @@ export function GameCanvas() {
       )}
       {screen === "fight" && isTouch && engine && <TouchControls engine={engine} />}
 
+      {screen === "splash" && (
+        <Splash onPlay={() => setScreen("map")} />
+      )}
       {screen === "map" && (
         <Lobby onPickMap={(id) => { setMapId(id); setScreen("skin"); }} />
       )}
