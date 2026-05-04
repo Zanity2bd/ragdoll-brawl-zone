@@ -125,7 +125,7 @@ export function GameCanvas() {
       const m = KEY_MAP[e.code];
       if (!m) return;
       if (m.p === "p2" && cpuEnabledRef.current) return;
-      if (m.action === "left" || m.action === "right") {
+      if (m.action === "left" || m.action === "right" || m.action === "jump") {
         engine.setIntent(m.p, { [m.action]: false });
       }
     };
