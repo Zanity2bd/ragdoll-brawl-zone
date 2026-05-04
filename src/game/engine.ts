@@ -2939,6 +2939,23 @@ export class GameEngine {
     }
   }
 
+  /** Liang-Barsky segment-vs-AABB test. */
+  private segmentIntersectsRect(x1: number, y1: number, x2: number, y2: number, rx: number, ry: number, rw: number, rh: number): boolean {
+    const dx = x2 - x1, dy = y2 - y1;
+    let t0 = 0, t1 = 1;
+    const p = [-dx, dx, -dy, dy];
+    const q = [x1 - rx, (rx + rw) - x1, y1 - ry, (ry + rh) - y1];
+    for (let i = 0; i < 4; i++) {
+      if (p[i] === 0) { if (q[i] < 0) return false; }
+      else {
+        const r = q[i] / p[i];
+        if (p[i] < 0) { if (r > t1) return false; if (r > t0) t0 = r; }
+        else { if (r < t0) return false; if (r < t1) t1 = r; }
+      }
+    }
+    return true;
+  }
+
   /** Raycast against blocking platforms (cover blocks fully; thin platforms also block lasers). Returns nearest hit or null. */
   private raycastPlatforms(sx: number, sy: number, angle: number, maxLen: number): { dist: number } | null {
     const dx = Math.cos(angle), dy = Math.sin(angle);
