@@ -289,14 +289,26 @@ function RotatePrompt() {
 function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onOpenAudio: () => void }) {
   return (
     <>
-      <div className="pointer-events-none absolute top-0 left-0 right-0 p-2 sm:p-4 flex gap-2 sm:gap-4 items-start">
-        <HpBar p={snap.p1} side="left" />
-        <HpBar p={snap.p2} side="right" />
+      <div
+        className="pointer-events-none absolute left-0 right-0 flex justify-center"
+        style={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+      >
+        <div className="flex gap-3 sm:gap-6 items-start w-full px-3 sm:px-6" style={{ maxWidth: "min(1200px, 96vw)" }}>
+          <HpBar p={snap.p1} side="left" />
+          <HpBar p={snap.p2} side="right" />
+        </div>
       </div>
       <button
         onClick={onOpenAudio}
         aria-label="Audio settings"
-        className="absolute top-2 right-2 sm:top-3 sm:right-3 w-9 h-9 rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-30"
+        className="absolute rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-30"
+        style={{
+          top: "calc(env(safe-area-inset-top, 0px) + 8px)",
+          right: "calc(env(safe-area-inset-right, 0px) + 8px)",
+          width: "min(10vw, 40px)",
+          height: "min(10vw, 40px)",
+          fontSize: "min(4vw, 16px)",
+        }}
       >
         {muted ? "🔇" : "🔊"}
       </button>
@@ -304,8 +316,9 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
       {snap.phase === "intro" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div
-            className="text-7xl font-black tracking-widest"
+            className="font-black tracking-widest"
             style={{
+              fontSize: "clamp(2.5rem, 12vw, 6rem)",
               color: "oklch(0.95 0.15 60)",
               textShadow: "0 0 30px oklch(0.75 0.22 45)",
               animation: "fade-in 0.4s ease-out",
@@ -317,31 +330,32 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
       )}
 
       {snap.phase === "ko" && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
-          <div className="text-center">
+        <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm px-4">
+          <div className="text-center" style={{ animation: "fade-in 0.35s ease-out" }}>
             <div
-              className="text-8xl font-black tracking-widest mb-4"
+              className="font-black tracking-widest mb-4"
               style={{
+                fontSize: "clamp(3.5rem, 16vw, 8rem)",
                 color: snap.winner === "p1" ? "oklch(0.85 0.18 210)" : "oklch(0.72 0.28 340)",
                 textShadow: `0 0 40px ${snap.winner === "p1" ? "oklch(0.75 0.22 215)" : "oklch(0.65 0.30 345)"}`,
               }}
             >
               K.O.
             </div>
-            <div className="text-2xl text-foreground/80 mb-6 font-mono">
+            <div className="text-foreground/80 mb-6 font-mono" style={{ fontSize: "clamp(0.95rem, 3vw, 1.5rem)" }}>
               {snap.winner === "p1" ? snap.p1.name : snap.p2.name} wins
             </div>
-            <div className="flex gap-3 justify-center">
+            <div className="flex gap-3 justify-center flex-wrap">
               <button
                 onClick={onRematch}
-                className="px-8 py-3 rounded-md font-mono uppercase tracking-widest text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors"
+                className="px-6 sm:px-8 py-3 rounded-md font-mono uppercase tracking-widest text-xs sm:text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors"
                 style={{ color: "oklch(0.95 0.05 250)" }}
               >
                 Rematch
               </button>
               <button
                 onClick={onChange}
-                className="px-8 py-3 rounded-md font-mono uppercase tracking-widest text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors text-foreground/70"
+                className="px-6 sm:px-8 py-3 rounded-md font-mono uppercase tracking-widest text-xs sm:text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors text-foreground/70"
               >
                 Change setup
               </button>
@@ -352,7 +366,7 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio }: { snap: GameSnap
 
       {snap.slowmo && (
         <div className="pointer-events-none absolute inset-0 flex items-end justify-center pb-32">
-          <div className="font-mono text-sm tracking-widest text-foreground/70 animate-pulse">
+          <div className="font-mono text-xs sm:text-sm tracking-widest text-foreground/70 animate-pulse">
             ◇ SELECT TELEPORT TARGET ◇
           </div>
         </div>
