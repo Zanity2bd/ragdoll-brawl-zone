@@ -275,6 +275,10 @@ export class GameEngine {
   private particles: Particle[] = [];
   private shockwaves: Shockwave[] = [];
   private beams: Beam[] = [];
+  private lightnings: LightningOrb[] = [];
+  // Global time-freeze (Flash power 1): freezes everything except the freezer.
+  private timeFreezeT = 0;
+  private timeFreezer: PlayerId | null = null;
   // Multi-tier interactive level: low cover blocks, mid ledges, a high vantage.
   private platforms: Platform[] = [
     // Low cover blocks (solid) — partial cover / tactical positioning
