@@ -402,8 +402,11 @@ export class GameEngine {
   private fireWalls: FireWall[] = [];
   private magmas: MagmaBlast[] = [];
   private smokeClouds: SmokeCloud[] = [];
+  private debris: Debris[] = [];
   // One-shot VO flags — reset each match.
   private homelanderVoPlayed = false;
+  // Beam edge-trigger tracking for start/end recoil + shake + audio.
+  private beamWasActive: Record<PlayerId, boolean> = { p1: false, p2: false };
   // Deferred SFX cues — fire at engine-time T (survives pause; cleared on reset).
   private pendingSfx: Array<{ at: number; name: import("./sfx").SfxName; vol: number }> = [];
   // Global time-freeze (Flash power 1): freezes everything except the freezer.
