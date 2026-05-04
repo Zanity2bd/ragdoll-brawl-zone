@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GameEngine, type GameSnapshot, type PlayerId } from "@/game/engine";
 import { type MapId } from "@/game/maps";
 import { type SkinId } from "@/game/skins";
+import type { Difficulty } from "@/game/ai";
 import { Sfx } from "@/game/sfx";
 import { Lobby } from "./Lobby";
 import { SkinSelect } from "./SkinSelect";
