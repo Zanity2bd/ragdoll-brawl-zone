@@ -5009,15 +5009,12 @@ export class GameEngine {
     ctx.lineJoin = "round";
 
     // ---- Size-driven dimensions ----
-    // Chunky silhouette proportions (matches reference run-cycle artstyle):
-    // thicker limbs, beefier torso. Iconic accents (cape, ears, mask) layer on top.
-    const baseW = skin.thickBody ? 9.5 : 8.0;
-    const lowerW = baseW * 0.72;                                     // less taper, chunkier shins/forearms
-    const torsoW = skin.thickBody ? 11 : 9;
-    const outlineW = Math.max(2.0, Math.min(3.6, baseW * 0.42));
-    const torsoOutlineW = Math.max(2.2, Math.min(3.4, torsoW * 0.36));
-    const overlap = baseW * 0.45;
-    const outlineColor = "oklch(0.10 0.02 250)";
+    // Match the SkinPicker preview look: slim stickman lines, no chunky
+    // outline pass. Iconic accents (cape, ears, mask, emblem) layer on top.
+    const baseW = skin.thickBody ? 5 : 4;
+    const lowerW = baseW;                                            // uniform stroke like preview
+    const torsoW = skin.thickBody ? 7 : 5;
+    const overlap = 0;
 
     // ---- Curvature: facing-anchored sign, velocity / state amplitude ----
     const speedNorm = Math.min(1, Math.abs(f.vx) / 210);
@@ -5041,27 +5038,14 @@ export class GameEngine {
       drawLimb(ctx, pose.armR, uW, lW, dirArmR, m, overlap);
     };
 
-    // ---- 1. Dark outline pass (limbs + torso, NO head) ----
-    if (!ghost) {
-      ctx.save();
-      ctx.strokeStyle = outlineColor;
-      const outerLimbW = baseW + outlineW * 2;
-      const outerLowerW = lowerW + outlineW * 2;
-      drawAllLimbs(outerLimbW, outerLowerW, true);
-      // Torso outline
-      ctx.lineWidth = torsoW + torsoOutlineW * 2;
-      ctx.beginPath(); ctx.moveTo(0, shoulderY - overlap * 0.4); ctx.lineTo(0, hipY + overlap * 0.4); ctx.stroke();
-      ctx.restore();
-    }
-
-    // ---- 2. Outer glow pass ----
+    // ---- Outer glow pass (subtle accent, no dark outline) ----
     if (!this.lowPower && !ghost) {
       ctx.save();
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 10;
       ctx.shadowColor = skin.glow;
-      ctx.strokeStyle = `color-mix(in oklab, ${skin.glow} 70%, transparent)`;
-      ctx.globalAlpha = 0.55;
-      const gW = baseW + 2.5;
+      ctx.strokeStyle = `color-mix(in oklab, ${skin.glow} 60%, transparent)`;
+      ctx.globalAlpha = 0.4;
+      const gW = baseW + 1.5;
       drawAllLimbs(gW, gW, true);
       ctx.beginPath(); ctx.moveTo(0, shoulderY); ctx.lineTo(0, hipY); ctx.stroke();
       ctx.shadowBlur = 0;
@@ -5069,20 +5053,9 @@ export class GameEngine {
       ctx.restore();
     }
 
-    // ---- 3. Main limb stroke (tapered) ----
+    // ---- Main limb stroke ----
     ctx.strokeStyle = limbColor;
     drawAllLimbs(baseW, lowerW, true);
-
-    // ---- 4. Inner highlight (mirrors taper) ----
-    if (!ghost) {
-      ctx.save();
-      ctx.strokeStyle = `color-mix(in oklab, ${limbColor} 40%, white)`;
-      ctx.globalAlpha = 0.38;
-      const hUp = Math.max(1, baseW - 2.4);
-      const hLo = Math.max(0.8, lowerW - 2.0);
-      drawAllLimbs(hUp, hLo, true);
-      ctx.restore();
-    }
 
     // ---- Hulk: muscle bulges on limbs ----
     if (skin.id === "hulk" && !ghost) {
@@ -5188,12 +5161,6 @@ export class GameEngine {
     // Head: fill disc first, then proportional rim. Highlight follows below.
     ctx.fillStyle = headColor;
     ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
-    if (!ghost) {
-      const headRimOffset = outlineW * 0.5;
-      ctx.strokeStyle = outlineColor;
-      ctx.lineWidth = outlineW;
-      ctx.beginPath(); ctx.arc(0, headY, headR + headRimOffset, 0, Math.PI * 2); ctx.stroke();
-    }
     if (!ghost) {
       ctx.save();
       const hg = ctx.createRadialGradient(
