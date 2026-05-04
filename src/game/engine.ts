@@ -2480,7 +2480,22 @@ export class GameEngine {
   }
 }
 
-function drawLimb(ctx: CanvasRenderingContext2D, j: [number, number, number, number, number, number]) {
+interface PowerSpec {
+  power1?: { name: string; cd: number };
+  power2?: { name: string; cd: number };
+}
+function getPowerSpec(id: SkinId): PowerSpec {
+  switch (id) {
+    case "flash":
+      return {
+        power1: { name: "Time Freeze", cd: TIMEFREEZE_CD },
+        power2: { name: "Lightning Blast", cd: LIGHTNING_CD },
+      };
+    default:
+      return {};
+  }
+}
+
   ctx.beginPath();
   ctx.moveTo(j[0], j[1]);
   ctx.quadraticCurveTo(j[2], j[3], j[4], j[5]);
