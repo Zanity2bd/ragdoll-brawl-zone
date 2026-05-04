@@ -369,7 +369,7 @@ export class GameEngine {
     const a = attacker === "p1" ? this.p1 : this.p2;
     const t = attacker === "p1" ? this.p2 : this.p1;
     if (!a.canFly || !a.flying) return false;
-    if (a.dash || a.meleeKind || a.ragdollT > 0) return false;
+    if (a.dash || a.meleeKind || a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
     if (a.superCd > 0) return false;
     a.superCd = SUPER_CD;
     const x0 = a.x, y0 = a.y + FIGHTER_H * 0.4;
