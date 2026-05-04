@@ -2744,6 +2744,7 @@ export class GameEngine {
             if (overload) {
               const ex = sx + Math.cos(desired) * beamLen;
               const ey = sy + Math.sin(desired) * beamLen;
+              this.overloadShatterProps(sx, sy, ex, ey);
               for (const pl of this.platforms) {
                 if (pl.destroyed) continue;
                 if (!this.segmentIntersectsRect(sx, sy, ex, ey, pl.x, pl.y, pl.w, pl.h)) continue;
