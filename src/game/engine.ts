@@ -80,6 +80,9 @@ interface Fighter {
   flying: boolean;
   hoverPhase: number;
   superCd: number;
+  // ledge / drop-through state
+  dropT: number;            // ignore one-way platforms while > 0
+  ledgeFlash: number;       // brief glow on auto-grab landing
   // super-dash
   dash: null | {
     t: number;
