@@ -468,9 +468,8 @@ export class GameEngine {
     );
 
     ctx.save();
-    // Origin at fighter top-center
     ctx.translate(f.x, f.y);
-    // small body lean
+    // body lean from feet
     ctx.translate(0, FIGHTER_H);
     ctx.rotate(pose.lean);
     ctx.translate(0, -FIGHTER_H);
@@ -480,38 +479,44 @@ export class GameEngine {
     const shoulderY = pose.shoulderY;
     const hipY = pose.hipY;
 
-    const bodyColor = f.hitFlash > 0 ? "oklch(0.95 0.2 30)" : skin.body;
+    const bodyColor = f.hitFlash > 0 ? "oklch(0.95 0.20 30)" : skin.body;
     const limbColor = skin.limb ?? bodyColor;
+    const headColor = skin.head ?? bodyColor;
+
+    // Soft contact shadow under feet
+    if (f.onGround) {
+      ctx.fillStyle = "oklch(0 0 0 / 0.28)";
+      ctx.beginPath();
+      ctx.ellipse(0, FIGHTER_H - 2, 18, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // Cape (drawn behind torso)
     if (skin.cape) {
       ctx.save();
-      const sway = Math.sin(f.walkPhase * 0.6) * 3 + (-f.facing) * Math.min(8, Math.abs(f.vx) * 0.05);
-      ctx.shadowBlur = 14; ctx.shadowColor = skin.cape;
+      const sway = Math.sin(f.walkPhase * 0.6) * 3 + (-f.facing) * Math.min(10, Math.abs(f.vx) * 0.05);
       ctx.fillStyle = skin.cape;
       ctx.beginPath();
-      ctx.moveTo(-6, shoulderY - 2);
-      ctx.lineTo(6, shoulderY - 2);
-      ctx.quadraticCurveTo(10 + sway * f.facing, hipY + 18, 4 + sway * f.facing, hipY + 36);
-      ctx.lineTo(-4 + sway * f.facing, hipY + 36);
-      ctx.quadraticCurveTo(-10 + sway * f.facing, hipY + 18, -6, shoulderY - 2);
+      ctx.moveTo(-7, shoulderY - 2);
+      ctx.lineTo(7, shoulderY - 2);
+      ctx.quadraticCurveTo(11 + sway * f.facing, hipY + 22, 5 + sway * f.facing, hipY + 40);
+      ctx.lineTo(-5 + sway * f.facing, hipY + 40);
+      ctx.quadraticCurveTo(-11 + sway * f.facing, hipY + 22, -7, shoulderY - 2);
       ctx.fill();
       if (skin.capeAccent) {
         ctx.fillStyle = skin.capeAccent;
-        ctx.fillRect(-2 + sway * f.facing * 0.5, shoulderY, 4, hipY + 32 - shoulderY);
+        ctx.fillRect(-1.5 + sway * f.facing * 0.5, shoulderY, 3, hipY + 36 - shoulderY);
       }
       ctx.restore();
     }
 
-    // Speed streaks
+    // Speed streaks (subtle, no extra glow on mobile)
     if (skin.streaks && Math.abs(f.vx) > 80 && f.onGround) {
       ctx.save();
-      ctx.globalCompositeOperation = "lighter";
       ctx.strokeStyle = skin.streaks;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       for (let i = 0; i < 4; i++) {
-        const a = 0.6 - i * 0.15;
-        ctx.globalAlpha = a;
+        ctx.globalAlpha = 0.5 - i * 0.12;
         ctx.beginPath();
         const sx = -f.facing * (10 + i * 8);
         const ey = 30 + i * 12;
@@ -522,102 +527,144 @@ export class GameEngine {
       ctx.restore();
     }
 
-    ctx.shadowBlur = 22;
-    ctx.shadowColor = skin.glow;
     ctx.lineCap = "round";
-    ctx.lineWidth = skin.thickBody ? 5 : 3.5;
+    ctx.lineJoin = "round";
 
-    // Body (torso line)
+    // Limbs first (drawn behind torso fill so torso reads cleanly)
+    ctx.strokeStyle = limbColor;
+    ctx.lineWidth = skin.thickBody ? 4.5 : 3.5;
+    drawLimb(ctx, pose.legL);
+    drawLimb(ctx, pose.legR);
+    drawLimb(ctx, pose.armL);
+    drawLimb(ctx, pose.armR);
+
+    // Boots (small filled rect at each foot)
+    if (skin.boots) {
+      drawBoot(ctx, pose.footL, f.facing, skin.boots);
+      drawBoot(ctx, pose.footR, f.facing, skin.boots);
+    }
+    // Gloves / fists (small filled circle at each hand)
+    if (skin.gloves) {
+      drawFist(ctx, pose.handL, skin.gloves);
+      drawFist(ctx, pose.handR, skin.gloves);
+    }
+
+    // Torso line (slightly thicker)
     ctx.strokeStyle = bodyColor;
+    ctx.lineWidth = skin.thickBody ? 6 : 4.5;
     ctx.beginPath();
     ctx.moveTo(0, shoulderY);
     ctx.lineTo(0, hipY);
     ctx.stroke();
 
-    // Head
-    ctx.beginPath();
-    ctx.arc(0, headY, headR, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Cowl ears (Batman)
-    if (skin.cowlEars) {
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath();
-      ctx.moveTo(-headR + 2, headY - headR + 2);
-      ctx.lineTo(-headR - 2, headY - headR - 8);
-      ctx.lineTo(-2, headY - headR);
-      ctx.closePath(); ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(headR - 2, headY - headR + 2);
-      ctx.lineTo(headR + 2, headY - headR - 8);
-      ctx.lineTo(2, headY - headR);
-      ctx.closePath(); ctx.fill();
-    }
-
-    // Glowing eyes (Homelander)
-    if (skin.glowingEyes) {
-      ctx.save();
-      ctx.globalCompositeOperation = "lighter";
-      const flick = 0.6 + 0.4 * Math.sin(performance.now() * 0.02);
-      ctx.shadowBlur = 14; ctx.shadowColor = skin.glowingEyes;
-      ctx.fillStyle = skin.glowingEyes;
-      ctx.globalAlpha = flick;
-      ctx.beginPath(); ctx.arc(-3, headY, 1.6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(3, headY, 1.6, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
-
-    // Beard (Butcher)
-    if (skin.beard) {
-      ctx.fillStyle = "oklch(0.15 0.02 60)";
-      ctx.beginPath(); ctx.ellipse(0, headY + 4, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
-    }
-
-    // Spider eye patches
-    if (skin.id === "spiderman") {
-      ctx.fillStyle = "oklch(0.95 0.02 250)";
-      ctx.beginPath(); ctx.ellipse(-4, headY - 1, 3, 2, -0.3, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(4, headY - 1, 3, 2, 0.3, 0, Math.PI * 2); ctx.fill();
-    }
+    // Shoulder caps for solidity
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath(); ctx.arc(-4, shoulderY, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4, shoulderY, 2.5, 0, Math.PI * 2); ctx.fill();
+    // Hip cap
+    ctx.beginPath(); ctx.arc(0, hipY, 2.5, 0, Math.PI * 2); ctx.fill();
 
     // Emblem on chest
     if (skin.emblem) {
       const ey = (shoulderY + hipY) / 2;
       ctx.fillStyle = skin.emblem.color;
-      ctx.shadowBlur = 12; ctx.shadowColor = skin.emblem.color;
-      switch (skin.emblem.shape) {
-        case "circle":
-          ctx.beginPath(); ctx.arc(0, ey, 4, 0, Math.PI * 2); ctx.fill(); break;
-        case "oval":
-          ctx.beginPath(); ctx.ellipse(0, ey, 6, 3, 0, 0, Math.PI * 2); ctx.fill(); break;
-        case "shield":
-          ctx.beginPath();
-          ctx.moveTo(-5, ey - 3); ctx.lineTo(5, ey - 3);
-          ctx.lineTo(0, ey + 5); ctx.closePath(); ctx.fill(); break;
-        case "stripe":
-          ctx.fillRect(-2, shoulderY + 2, 4, hipY - shoulderY - 4); break;
-        case "spider":
-          ctx.beginPath(); ctx.arc(0, ey, 2.5, 0, Math.PI * 2); ctx.fill();
-          ctx.strokeStyle = skin.emblem.color; ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(-5, ey - 3); ctx.lineTo(5, ey + 3);
-          ctx.moveTo(5, ey - 3); ctx.lineTo(-5, ey + 3);
-          ctx.stroke();
-          break;
-      }
-      ctx.shadowBlur = 22; ctx.shadowColor = skin.glow;
+      ctx.strokeStyle = skin.emblem.color;
+      drawEmblem(ctx, skin.emblem, ey, shoulderY, hipY);
     }
 
-    // Limbs
-    ctx.strokeStyle = limbColor;
-    ctx.lineWidth = skin.thickBody ? 4.5 : 3.5;
+    // ----- HEAD -----
+    // Head as filled mask, outlined.
+    ctx.fillStyle = headColor;
+    ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
 
-    // legs
-    drawLimb(ctx, pose.legL);
-    drawLimb(ctx, pose.legR);
-    // arms
-    drawLimb(ctx, pose.armL);
-    drawLimb(ctx, pose.armR);
+    // Exposed face skin (jaw arc) for heroes with skinTone
+    if (skin.skinTone) {
+      ctx.fillStyle = skin.skinTone;
+      ctx.beginPath();
+      // Lower-front face oval
+      ctx.ellipse(f.facing * 1.5, headY + 2, headR - 2.5, headR - 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Cowl ears (Batman)
+    if (skin.cowlEars) {
+      ctx.fillStyle = headColor;
+      ctx.beginPath();
+      ctx.moveTo(-headR + 3, headY - headR + 4);
+      ctx.lineTo(-headR - 1, headY - headR - 7);
+      ctx.lineTo(-1, headY - headR + 1);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(headR - 3, headY - headR + 4);
+      ctx.lineTo(headR + 1, headY - headR - 7);
+      ctx.lineTo(1, headY - headR + 1);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // Hair tuft (Superman / Homelander)
+    if (skin.id === "superman") {
+      ctx.fillStyle = "oklch(0.18 0.02 30)";
+      ctx.beginPath();
+      ctx.moveTo(-headR + 3, headY - headR + 5);
+      ctx.quadraticCurveTo(0, headY - headR - 4, headR - 3, headY - headR + 5);
+      ctx.quadraticCurveTo(headR - 1, headY - 4, headR - 5, headY - 5);
+      ctx.lineTo(-headR + 5, headY - 5);
+      ctx.quadraticCurveTo(-headR + 1, headY - 4, -headR + 3, headY - headR + 5);
+      ctx.fill();
+      // signature spit-curl
+      ctx.fillStyle = "oklch(0.18 0.02 30)";
+      ctx.beginPath();
+      ctx.arc(-2 + f.facing * 1, headY - 3, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (skin.id === "homelander") {
+      // Blonde hair sweep on top of mask
+      ctx.fillStyle = "oklch(0.78 0.10 85)";
+      ctx.beginPath();
+      ctx.moveTo(-headR + 3, headY - headR + 4);
+      ctx.quadraticCurveTo(f.facing * 4, headY - headR - 3, headR - 3, headY - headR + 4);
+      ctx.quadraticCurveTo(0, headY - headR + 1, -headR + 3, headY - headR + 4);
+      ctx.fill();
+    }
+
+    // Eyes — small, dark, two dots (default for masked heroes)
+    const eyeColor = skin.id === "spiderman" ? "oklch(0.95 0.02 250)" : "oklch(0.10 0 0)";
+    ctx.fillStyle = eyeColor;
+    if (skin.id === "spiderman") {
+      // Iconic teardrop lenses
+      ctx.beginPath(); ctx.ellipse(-3.5, headY - 1, 3, 2, -0.35, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(3.5, headY - 1, 3, 2, 0.35, 0, Math.PI * 2); ctx.fill();
+    } else if (skin.cowlEars) {
+      // Batman white slits
+      ctx.fillStyle = "oklch(0.92 0.02 250)";
+      ctx.fillRect(-5, headY - 1, 3, 1.6);
+      ctx.fillRect(2, headY - 1, 3, 1.6);
+    } else {
+      ctx.beginPath(); ctx.arc(-3, headY, 1.4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3, headY, 1.4, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Glowing laser eyes (Homelander) — replace dots when active
+    if (skin.glowingEyes) {
+      const flick = 0.7 + 0.3 * Math.sin(performance.now() * 0.018);
+      ctx.save();
+      ctx.shadowBlur = 10; ctx.shadowColor = skin.glowingEyes;
+      ctx.fillStyle = skin.glowingEyes;
+      ctx.globalAlpha = flick;
+      ctx.beginPath(); ctx.arc(-3, headY, 1.8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3, headY, 1.8, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // Beard (Butcher)
+    if (skin.beard) {
+      ctx.fillStyle = "oklch(0.14 0.02 60)";
+      ctx.beginPath();
+      ctx.ellipse(0, headY + 5, 7, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // mustache
+      ctx.fillRect(-5, headY + 1, 10, 1.4);
+    }
 
     ctx.restore();
   }
@@ -626,7 +673,62 @@ export class GameEngine {
 function drawLimb(ctx: CanvasRenderingContext2D, j: [number, number, number, number, number, number]) {
   ctx.beginPath();
   ctx.moveTo(j[0], j[1]);
-  ctx.lineTo(j[2], j[3]);
-  ctx.lineTo(j[4], j[5]);
+  ctx.quadraticCurveTo(j[2], j[3], j[4], j[5]);
   ctx.stroke();
 }
+
+function drawFist(ctx: CanvasRenderingContext2D, p: [number, number], color: string) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(p[0], p[1], 3.2, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawBoot(ctx: CanvasRenderingContext2D, p: [number, number], facing: 1 | -1, color: string) {
+  ctx.fillStyle = color;
+  // Boot is a small horizontal capsule pointing in facing direction
+  ctx.beginPath();
+  ctx.ellipse(p[0] + facing * 2, p[1] - 1, 5, 2.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawEmblem(
+  ctx: CanvasRenderingContext2D,
+  emblem: NonNullable<Skin["emblem"]>,
+  ey: number,
+  shoulderY: number,
+  hipY: number,
+) {
+  switch (emblem.shape) {
+    case "circle":
+      ctx.beginPath(); ctx.arc(0, ey, 4, 0, Math.PI * 2); ctx.fill(); break;
+    case "oval":
+      ctx.beginPath(); ctx.ellipse(0, ey, 6, 3, 0, 0, Math.PI * 2); ctx.fill(); break;
+    case "shield":
+      ctx.beginPath();
+      ctx.moveTo(-5, ey - 3); ctx.lineTo(5, ey - 3);
+      ctx.lineTo(0, ey + 5); ctx.closePath(); ctx.fill(); break;
+    case "stripe":
+      ctx.fillRect(-2, shoulderY + 2, 4, hipY - shoulderY - 4); break;
+    case "spider":
+      ctx.beginPath(); ctx.arc(0, ey, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-5, ey - 3); ctx.lineTo(5, ey + 3);
+      ctx.moveTo(5, ey - 3); ctx.lineTo(-5, ey + 3);
+      ctx.stroke();
+      break;
+    case "lightning":
+      ctx.beginPath();
+      ctx.moveTo(-3, ey - 5);
+      ctx.lineTo(2, ey - 1);
+      ctx.lineTo(-1, ey - 1);
+      ctx.lineTo(3, ey + 5);
+      ctx.lineTo(-2, ey + 1);
+      ctx.lineTo(1, ey + 1);
+      ctx.closePath();
+      ctx.fill();
+      break;
+  }
+}
+
