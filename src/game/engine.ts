@@ -1069,21 +1069,30 @@ export class GameEngine {
   }
 
   private applyMeleeHit(f: Fighter, target: Fighter, m: MoveSpec, fx: number, fy: number) {
+    // I-frames: ignore hit entirely
+    if (target.iframeT > 0) return;
+    // During downed/getup the target is on the floor — skip melee hits (mercy)
+    if (target.downedT > 0 || target.getUpT > 0) return;
     target.hp = Math.max(0, target.hp - m.damage);
     target.hitFlash = 0.35;
-    target.vx = f.facing * m.knockbackX;
-    target.vy = m.knockbackY;
+    // Anti-chain: reduced knockback if recently ragdolled
+    const kbScale = target.ragdollImmuneT > 0 ? 0.45 : 1;
+    target.vx = f.facing * m.knockbackX * kbScale;
+    target.vy = m.knockbackY * kbScale;
     target.onGround = false;
-    if (m.ragdollT > 0) {
+    // Only ragdoll if not in chain-immune window
+    if (m.ragdollT > 0 && target.ragdollImmuneT <= 0) {
       target.ragdollT = m.ragdollT;
       target.ragdollPhase = 0;
+      target.ragdollAng = 0;
+      target.ragdollAV = (Math.random() - 0.5) * 4 + f.facing * 3;
+      target.ragdollEnergy = 1;
     }
     this.shake = Math.max(this.shake, m.shake);
     this.hitstopT = Math.max(this.hitstopT, m.hitstop);
     if (m.slowmoT > 0) { this.slowmoT = Math.max(this.slowmoT, m.slowmoT); this.slowmoMode = "impact"; }
     this.impactFlash = 1;
     this.burst(fx, fy, f.skin.glow, 28);
-    // radial impact ring
     this.shockwaves.push({ x: fx, y: fy, r: 6, rMax: 80, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.05 80)" });
     Sfx.play(m.hitSfx, 1);
     if (target.hp <= 0 && this.phase === "fight") {
