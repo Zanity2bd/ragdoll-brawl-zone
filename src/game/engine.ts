@@ -2310,7 +2310,7 @@ export class GameEngine {
       // Air control: reduced accel & friction when airborne for natural arcs
       const airMul = f.onGround ? 1 : AIR_CONTROL;
       // Speedsters (Flash, A-Train) move noticeably faster than baseline
-      const speedsterMul = (f.skin.id === "flash" || f.skin.id === "atrain") ? 1.28 : 1;
+      const speedsterMul = (f.skin.id === "flash" || f.skin.id === "atrain") ? 1.85 : 1;
       if (move !== 0) {
         const target = move * MOVE_SPEED * moveMul * speedsterMul;
         const a = ACCEL * accelMul * airMul * ldt;
