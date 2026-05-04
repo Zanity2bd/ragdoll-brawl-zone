@@ -145,10 +145,12 @@ export function GameCanvas() {
       // Generous hitbox around the stickman (W=30, H=90).
       const hitW = 70, hitH = 120;
       if (Math.abs(sx - opp.x) < hitW / 2 && sy > opp.y - 15 && sy < opp.y + hitH) {
+        const p1Name = engine.getSkinIdFor("p1");
+        // Hulk: try Rage Frenzy first when in close range
+        if (p1Name === "hulk" && engine.pressFrenzy("p1")) return true;
         if (engine.canFly("p1") && engine.isFlying("p1")) {
           if (engine.pressSuperDash("p1")) return true;
         }
-        const p1Name = engine.getSkinIdFor("p1");
         if (p1Name === "heatwave") engine.pressFire("p1");
         else if (p1Name === "nightcrawler") engine.pressTeleport("p1");
         else engine.pressMelee("p1");
