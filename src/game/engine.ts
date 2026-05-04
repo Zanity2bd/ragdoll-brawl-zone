@@ -416,6 +416,8 @@ export class GameEngine {
     this.particles = [];
     this.shockwaves = [];
     this.beams = [];
+    this.lightnings = [];
+    this.timeFreezeT = 0; this.timeFreezer = null;
     this.teleTargeting = null;
     this.slowmoT = 0; this.slowmoMode = null;
     this.hitstopT = 0; this.impactFlash = 0;
