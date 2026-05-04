@@ -794,7 +794,6 @@ export class GameEngine {
     }
     return false;
   }
-  }
 
   /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
   pressSuperDash(attacker: PlayerId): boolean {
