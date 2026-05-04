@@ -168,6 +168,7 @@ export class GameEngine {
   private running = false;
   private elapsed = 0;
   private lowPower = false;
+  private slowFrames = 0;
   private snapAccum = 0;
 
   private mapId: MapId = "neon-city";
