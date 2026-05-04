@@ -54,6 +54,12 @@ export function GameCanvas() {
   }, []);
 
   useEffect(() => { Sfx.setMuted(muted); }, [muted]);
+  useEffect(() => { Sfx.setSfxVolume(sfxVol); }, [sfxVol]);
+  useEffect(() => { Sfx.setMusicVolume(musicVol); }, [musicVol]);
+  useEffect(() => {
+    if (screen === "fight") Sfx.startMusic();
+    else Sfx.stopMusic();
+  }, [screen]);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -149,13 +155,21 @@ export function GameCanvas() {
       {screen === "fight" && snap && (
         <HUD
           snap={snap}
-          muted={muted}
-          onToggleMute={() => setMuted(m => !m)}
           onRematch={() => engine?.reset()}
           onChange={() => setScreen("map")}
+          onOpenAudio={() => setAudioOpen(o => !o)}
+          muted={muted}
         />
       )}
-      {screen === "fight" && isTouch && engine && <TouchControls engine={engine} />}
+      <AudioPanel
+        open={audioOpen && screen === "fight"}
+        muted={muted}
+        onToggleMute={() => setMuted(m => !m)}
+        sfxVol={sfxVol} musicVol={musicVol}
+        onSfx={setSfxVol} onMusic={setMusicVol}
+        onClose={() => setAudioOpen(false)}
+      />
+      {screen === "fight" && isTouch && engine && snap && <TouchControls engine={engine} snap={snap} />}
 
       {screen === "splash" && (
         <Splash onPlay={() => { Sfx.unlock(); setScreen("map"); }} />
