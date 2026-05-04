@@ -1,44 +1,58 @@
 ## Goal
-Replace the math-driven grounded walk cycle in `src/game/animation.ts` with a keyframe table baked from the uploaded `Walking.fbx`, so the gait reads exactly like the reference motion while staying 2D, mobile-cheap, and dependency-free at runtime.
+Keep the imported 14-frame walk silhouette as the universal body/animation for every fighter, but render each character with their own colors AND character-specific face + costume details (mask, cowl, cape, chest emblem, eyes) drawn on top of the frames. No more generic gray stickman — Spider-Man looks like Spider-Man, Batman has the cowl + bat emblem, Homelander has the cape + H, etc.
 
-## Steps
+## What I'll build
 
-### 1. Bake the FBX offline (one-off, dev-time only)
-- `code--copy user-uploads://Walking.fbx /tmp/Walking.fbx`
-- Install a dev-only FBX parser temporarily in /tmp (e.g. `fbx-parser` or `@picode/three-fbx-loader` run under node) — NOT added to the project's `package.json`.
-- Write `/tmp/bake.mjs` that:
-  1. Loads the FBX skeleton + the first animation stack.
-  2. Locates Mixamo-style bones: `Hips`, `Spine`, `Head`, `LeftUpLeg`, `LeftLeg`, `LeftFoot`, `RightUpLeg`, `RightLeg`, `RightFoot`, `LeftArm`, `LeftForeArm`, `LeftHand`, `RightArm`, `RightForeArm`, `RightHand`. Falls back to fuzzy name matches if the rig isn't strict Mixamo.
-  3. Samples 24 evenly-spaced frames across one full walk loop (left-foot-strike → next left-foot-strike).
-  4. For each frame, computes each bone's world position, subtracts hip position (root-motion stripped), projects to the side-view 2D plane (X = forward axis, Y = up), and normalizes to unit hip-height.
-  5. Emits a TypeScript constant `WALK_CYCLE: ReadonlyArray<WalkFrame>` (24 frames × 11 normalized 2D points) printed to stdout.
+### 1. Bake per-frame anatomy anchors (one-off, dev-time)
+Run a script over the existing sheet (`src/assets/walk-sheet.png`, 14×144×200) to extract, per frame:
+- `head`: {x, y, r} — top cluster centroid + radius
+- `chest`: {x, y} — mid-torso point (~35% down the silhouette)
+- `hipY`, `footY` — vertical anchors
 
-If bone names don't match: script logs the actual bone list and aborts. Fallback = Option B (hand-tune sines from a video). I'll surface the bone list and ask before falling back.
+Result: a static `WALK_ANCHORS: WalkAnchor[]` table written to `src/game/walkAnchors.ts` (~14 × 6 floats). No runtime cost beyond a lookup.
 
-### 2. Wire the table into the renderer
-In `src/game/animation.ts`:
-- Add the generated `WALK_CYCLE` constant + a `WalkFrame` type at the top of the file.
-- Add a small `sampleWalkCycle(phase01)` helper that linearly interpolates between the two nearest frames (cyclic).
-- In the grounded branch of `computeWalkPose`, replace the current per-bone sine math (stride/lift/swingL/swingR/arm pump) with: sample the table at `phase / TAU`, scale every offset by the fighter's hip-height (so the chunky proportions still apply), mirror X by `facing`, multiply by `amp` so idle→walk still blends smoothly via the existing amp lerp.
-- Keep untouched: lean, hip sway side-to-side (re-derive from the table's actual hip X if present, otherwise keep current sway), wobble layer, head bob lag, foot-roll nudge.
+### 2. Extend the skin schema
+Add to `src/game/skins.ts`:
+- `face`: `"full-mask" | "cowl" | "open" | "goggles" | "visor"` 
+- `faceColor`, `eyeColor`, `eyeShape` (`"slit" | "round" | "spider-lens" | "domino"`)
+- `chestEmblem`: existing `emblem` extended with size + offset
+- `capeShape`: `"long" | "short" | "tattered" | null`
 
-### 3. Leave everything else alone
-- Airborne / flying-kick pose: untouched.
-- Attack overrides, jump, idle, hit reactions: untouched.
-- `engine.ts` chunky silhouette + skins: untouched.
-- No new runtime dependency. The FBX file is NOT shipped in the bundle — only the baked numeric table (≈24 × 11 × 2 = 528 floats, ~4 KB of source).
+Fill in plausible values for the 11 existing characters (Spider-Man → full-mask + spider-lens eyes + spider emblem; Batman → cowl with ears + oval bat emblem + cape; Homelander → open face + cape + H emblem; etc.).
 
-## Technical notes
-- Side-view projection: I'll auto-pick the FBX axis with the largest stride variance as "forward" and use Y-up. If the FBX is Z-up I rotate before projection.
-- Loop seam: I trim to a true cycle by finding the frame where left-foot Y returns to its minimum closest to the start frame.
-- Mobile budget: runtime cost drops vs. current code (table lookup + lerp instead of ~12 sin/cos per fighter per frame).
-- The bake script lives only in `/tmp` and is discarded — nothing dev-only ends up in the repo.
+### 3. Per-skin composited sheet (cache)
+Rewrite `getTintedSheet(skin)` in `src/game/walkSprite.ts` to take the full `Skin` object (not just a color string) and return a per-character cached canvas:
+1. Tint the silhouette using `skin.limb` (legs/arms).
+2. Re-tint the torso area (using anchors) with `skin.body` via a soft mask so legs and torso can differ (Superman blue body / red boots, Batman all-black, Iron Man red+gold).
+3. Tint the head region with `skin.head` / `skin.faceColor`.
+4. Draw character overlays per frame, pinned to the anchors:
+   - Cowl ears (Batman) — two small triangles above head
+   - Cape (Superman, Batman, Homelander) — soft shape behind/under, drawn as a separate trailing layer
+   - Chest emblem — shape from `skin.emblem` scaled to chest anchor
+   - Eyes — drawn at head anchor (white spider lenses, glowing red for Homelander/Hulk, yellow Batman slits)
+   - Beard (Butcher) — short dark patch under head anchor
+   - Speed streaks (Flash, A-Train) — drawn at runtime in the engine, not baked
+
+Cache key = `skin.id`. Caches are tiny (≈14 × 144 × 200 RGBA ≈ 1.6 MB per skin worst case; only currently-fighting skins are cached, max 2).
+
+### 4. Update the engine call site
+`src/game/engine.ts` already calls `drawWalkFrame(ctx, tint, frame, …)`. Change signature to `drawWalkFrame(ctx, skin, frame, …)` and pass `f.skin` instead of a color string. Speed streaks for Flash/A-Train stay as the existing runtime overlay (they're motion-dependent).
+
+### 5. Cleanup
+- Remove the universal-gray fallback path; the sprite is now skin-aware always.
+- Keep the procedural attack-arms overlay on top of the sprite legs unchanged.
+- Mobile budget: per-frame draw is still one `drawImage` from a cached canvas — no per-frame compositing on the hot path.
+
+## Files touched
+- `src/game/walkAnchors.ts` (new) — baked anchor table
+- `src/game/walkSprite.ts` — per-skin compositor + cache + overlays
+- `src/game/skins.ts` — extended face/cape/emblem fields for all 11 skins
+- `src/game/engine.ts` — pass skin object instead of tint string
 
 ## Risk / fallback
-- **Rig mismatch**: script aborts with the bone list; I report back and we either rename-map or switch to Option B.
-- **Looks worse than current**: each piece is additive — I can revert `computeWalkPose` to the current sine math in one edit while keeping the table for future use.
+If a character looks off, each overlay is independent — I can adjust head/chest anchor offsets or per-skin overlay params without touching the core sprite path. If anchor extraction misreads a frame (silhouette too thin), I fall back to the average across frames so overlays stay stable instead of jittering.
 
-## Acceptance check
-- Grounded walk visibly matches the FBX cadence and limb arcs.
-- Idle → walk → run → stop still blends smoothly (no snap), driven by the existing `amp` lerp.
-- No foot-sliding, no clipping, no new runtime deps in `package.json`, frame rate unchanged on the mobile preview.
+## Acceptance
+- Each of the 11 characters reads as themselves at a glance during walk, idle, and attack.
+- Frame rate unchanged on the mobile preview (still one `drawImage` per fighter per frame in the hot path).
+- No new runtime dependencies.
