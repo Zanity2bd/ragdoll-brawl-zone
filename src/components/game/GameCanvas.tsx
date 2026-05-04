@@ -172,6 +172,16 @@ export function GameCanvas() {
   );
 }
 
+function RotatePrompt() {
+  return (
+    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background text-foreground p-6 text-center gap-4">
+      <div className="text-5xl animate-pulse" style={{ transform: "rotate(90deg)" }}>📱</div>
+      <div className="font-mono text-sm uppercase tracking-widest text-foreground/80">Rotate your device</div>
+      <div className="font-mono text-xs text-foreground/50 max-w-xs">OgunArena is best played in landscape. Turn your phone sideways to enter the arena.</div>
+    </div>
+  );
+}
+
 function HUD({ snap, onRematch, onChange, muted, onToggleMute }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onToggleMute: () => void }) {
   return (
     <>
