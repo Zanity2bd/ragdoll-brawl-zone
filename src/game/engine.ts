@@ -1080,9 +1080,52 @@ export class GameEngine {
         a.iframeT = Math.max(a.iframeT, 0.2);
         return true;
       }
+      case "spiderman": {
+        // Web Swing — fire web upward to a high anchor and pendulum-swing.
+        // Anchoring rules:
+        //   - Picks an anchor in front of the player (in facing direction)
+        //   - Anchor sits well above current head height for satisfying arcs
+        //   - Cancels if already swinging (re-press releases)
+        if (a.swing) {
+          this.releaseSwing(a, true);
+          return true;
+        }
+        a.power2Cd = 0.5; // short tap CD; jump cancels & re-grapples freely
+        const dir = a.facing;
+        const anchorX = Math.max(80, Math.min(W - 80, a.x + dir * 220));
+        const anchorY = Math.max(60, Math.min(GROUND_Y - 220, a.y - 180));
+        const dx = a.x - anchorX, dy = (a.y + FIGHTER_H * 0.35) - anchorY;
+        const len = Math.hypot(dx, dy) || 1;
+        const angle = Math.atan2(dx, dy); // 0 = straight down
+        // Convert current linear velocity to tangential angular velocity
+        const tx = Math.cos(angle), ty = -Math.sin(angle); // tangent dir
+        const tangSpeed = a.vx * tx + a.vy * ty;
+        const angV = tangSpeed / len + dir * 1.6; // give a kick in facing dir
+        a.swing = { ax: anchorX, ay: anchorY, len, angle, angV, t: 0 };
+        a.onGround = false;
+        a.airJumps = 1;
+        Sfx.play("whoosh", 0.8);
+        // Web shoot burst at anchor
+        this.burst(anchorX, anchorY, "oklch(0.95 0.02 240)", 8);
+        return true;
+      }
     }
     return false;
   }
+
+  /** Release Spider-Man from his current web swing, converting angular → linear velocity. */
+  private releaseSwing(a: Fighter, boost: boolean) {
+    const sw = a.swing;
+    if (!sw) return;
+    // Tangent: derivative of (ax + sin(angle)*len, ay + cos(angle)*len)
+    const tx = Math.cos(sw.angle);
+    const ty = -Math.sin(sw.angle);
+    const v = sw.angV * sw.len;
+    a.vx = tx * v * (boost ? 1.18 : 1.0);
+    a.vy = ty * v * (boost ? 1.18 : 1.0) - (boost ? 60 : 0);
+    a.swing = null;
+    a.onGround = false;
+    Sfx.play("whoosh", 0.6);
 
   /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
   pressSuperDash(attacker: PlayerId): boolean {
