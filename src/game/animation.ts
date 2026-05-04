@@ -181,3 +181,171 @@ export function computeWalkPose(
     lean, shoulderRoll,
   };
 }
+
+// ----- Attack pose (signature melee) -----
+// progress: 0 wind-up start → 1 recover end. We split:
+//   0..wp: wind-up (arm cocks back), wp..wp+ap: active strike, rest: recover.
+export interface AttackTiming { wp: number; ap: number; }
+
+export function computeAttackPose(
+  walk: Pose,
+  kind: string,
+  progress: number,
+  timing: AttackTiming,
+  facing: 1 | -1,
+): Pose {
+  const p = Math.max(0, Math.min(1, progress));
+  const inWind = p < timing.wp;
+  const inActive = p >= timing.wp && p < timing.wp + timing.ap;
+  const wt = inWind ? p / timing.wp : 1;
+  const at = inActive ? (p - timing.wp) / timing.ap : (p < timing.wp ? 0 : 1);
+
+  const out: Pose = {
+    ...walk,
+    armL: [...walk.armL] as Pose["armL"],
+    armR: [...walk.armR] as Pose["armR"],
+    handL: [...walk.handL] as Pose["handL"],
+    handR: [...walk.handR] as Pose["handR"],
+  };
+
+  const sy = walk.shoulderY;
+  const sxF = facing > 0 ? 4 : -4;
+
+  const setStrike = (reach: number, height: number) => {
+    const handX = facing * reach;
+    const handY = sy + height;
+    const elbowX = facing * (reach * 0.45);
+    const elbowY = sy + height * 0.5 + 2;
+    if (facing > 0) {
+      out.armR = [sxF, sy, elbowX, elbowY, handX, handY];
+      out.handR = [handX, handY];
+    } else {
+      out.armL = [sxF, sy, elbowX, elbowY, handX, handY];
+      out.handL = [handX, handY];
+    }
+  };
+
+  const setCock = (back: number, height: number) => {
+    const handX = -facing * back;
+    const handY = sy + height;
+    const elbowX = -facing * (back * 0.5);
+    const elbowY = sy + height * 0.4 - 2;
+    if (facing > 0) {
+      out.armR = [sxF, sy, elbowX, elbowY, handX, handY];
+      out.handR = [handX, handY];
+    } else {
+      out.armL = [sxF, sy, elbowX, elbowY, handX, handY];
+      out.handL = [handX, handY];
+    }
+  };
+
+  switch (kind) {
+    case "heatPunch": {
+      if (inWind) setCock(18 + 8 * wt, -2 - 6 * wt);
+      else if (inActive) setStrike(28 + 12 * at, 2);
+      else setStrike(30, 4);
+      break;
+    }
+    case "crowbar": {
+      // Overhead swing
+      const a = inWind ? -1.2 + 0.4 * wt : (inActive ? -0.8 + 2.0 * at : 1.2);
+      const r = 28;
+      const handX = facing * Math.cos(a) * r;
+      const handY = sy + Math.sin(a) * r + 6;
+      if (facing > 0) {
+        out.armR = [sxF, sy, facing * 12, sy - 4, handX, handY];
+        out.handR = [handX, handY];
+      } else {
+        out.armL = [sxF, sy, facing * 12, sy - 4, handX, handY];
+        out.handL = [handX, handY];
+      }
+      break;
+    }
+    case "groundSmash": {
+      if (inWind) {
+        // both fists raised
+        out.armL = [-4, sy, -10, sy - 8 - 6 * wt, -14, sy - 18 - 8 * wt];
+        out.armR = [4, sy, 10, sy - 8 - 6 * wt, 14, sy - 18 - 8 * wt];
+        out.handL = [-14, sy - 18 - 8 * wt];
+        out.handR = [14, sy - 18 - 8 * wt];
+      } else {
+        out.armL = [-4, sy, -8, sy + 8, -10, sy + 22];
+        out.armR = [4, sy, 8, sy + 8, 10, sy + 22];
+        out.handL = [-10, sy + 22];
+        out.handR = [10, sy + 22];
+      }
+      break;
+    }
+    case "speedFlurry":
+    case "phaseStrike": {
+      // Rapid alternating jabs
+      const pulse = Math.sin(p * Math.PI * 12);
+      const reach = 22 + pulse * 6;
+      const handX = facing * reach;
+      const handY = sy + 4;
+      if (pulse > 0) {
+        out.armR = [sxF, sy, facing * 12, sy + 2, handX, handY];
+        out.handR = [handX, handY];
+      } else {
+        out.armL = [sxF, sy, facing * 12, sy + 2, handX, handY];
+        out.handL = [handX, handY];
+      }
+      break;
+    }
+    case "webYank": {
+      // arm extended forward palm-out
+      if (inWind) setCock(8 + 4 * wt, -4);
+      else setStrike(34, -2);
+      break;
+    }
+    case "repulsor": {
+      // palm forward
+      const reach = inActive ? 22 + 6 * at : 18;
+      setStrike(reach, 4);
+      break;
+    }
+    case "batCombo": {
+      // throw motion then kick
+      if (inWind) setCock(14, -8);
+      else if (inActive) setStrike(28 + 6 * at, 0);
+      else setStrike(28, 4);
+      break;
+    }
+    case "laserSweep": {
+      // heroic stance, hands at hips
+      out.armL = [-4, sy, -8, sy + 6, -10, sy + 16];
+      out.armR = [4, sy, 8, sy + 6, 10, sy + 16];
+      out.handL = [-10, sy + 16];
+      out.handR = [10, sy + 16];
+      out.headOffsetY -= 1;
+      break;
+    }
+  }
+  return out;
+}
+
+// Tumbling ragdoll pose used while a fighter is launched.
+export function computeRagdollPose(t: number, H: number): Pose {
+  const sy = 30;
+  const hipY = 56;
+  const spin = t * 14;
+  const cx = Math.cos(spin) * 8;
+  const sx = Math.sin(spin) * 8;
+  return {
+    headOffsetY: -2 + sx * 0.5,
+    shoulderY: sy,
+    hipY,
+    legL: [-3, hipY, -8 + cx, hipY + 12, -14 + cx * 1.4, hipY + 22],
+    legR: [3, hipY, 8 - cx, hipY + 12, 14 - cx * 1.4, hipY + 22],
+    armL: [-4, sy, -10 - sx, sy + 10, -16 - sx * 1.4, sy + 18],
+    armR: [4, sy, 10 + sx, sy + 10, 16 + sx * 1.4, sy + 18],
+    handL: [-16 - sx * 1.4, sy + 18],
+    handR: [16 + sx * 1.4, sy + 18],
+    footL: [-14 + cx * 1.4, hipY + 22],
+    footR: [14 - cx * 1.4, hipY + 22],
+    lean: spin * 0.3,
+    shoulderRoll: 0,
+  };
+}
+// keep H referenced
+void (typeof undefined);

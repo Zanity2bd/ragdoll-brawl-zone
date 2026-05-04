@@ -1,76 +1,56 @@
-# Rebrand to OgunArena + Blkdom credit + Premium Loading Screen
+## Premium Combat Specials — Per-Skin
 
-## 1. Rebrand: Stickman Neon Duel → OgunArena
+Each skin gets a signature melee special (in addition to the existing ranged "fire"). Specials trigger on a new MELEE input (J for P1, ; for P2; new on-screen "PUNCH" button on touch). They feature wind-up → impact frame (freeze + flash + radial shockwave) → ragdoll knockback for the victim, with skin-specific timing, range, damage, camera shake, and audio.
 
-- **Memory**: save `mem://brand.md` (OgunArena = Yoruba "Ogun"/war, produced by Blkdom, always credit with logo + blkdom.com link). Update `mem://index.md` core rules.
-- **Meta / titles** — replace "Stickman Neon Duel" everywhere:
-  - `src/routes/__root.tsx` — title, og:title, og:description, description.
-  - `src/routes/index.tsx` — head meta + landing hero ("OGUN" big / "ARENA" subtitle, with a small italic "ogun · war in Yoruba" caption).
-  - `src/routes/play.tsx` — title + the small top bar text becomes "◇ OgunArena ◇".
-  - `src/components/game/Lobby.tsx` — header "OGUN ARENA".
-  - `src/game/engine.ts` — top comment.
+### Per-skin specials
 
-## 2. Blkdom credit component
+| Skin | Move | Behaviour |
+|---|---|---|
+| Superman | Heat-Punch | Long wind-up. Massive impact, victim ragdolls across screen. Big shake + white flash impact frame. |
+| Homelander | Laser Sweep | Beam from eyes, sweeps as he turns. Continuous DPS, brief blind-flash on hit. |
+| Hulk | Ground Smash | Downward fist creates radial shockwave that knocks both grounded fighters up. |
+| A-Train | Speed Flurry | 6 rapid jabs in 0.6s. Self at full speed, victim slowed to 0.25x for the duration. Speed streaks. |
+| Flash | Phase Strike | Vanishes, blink-teleports behind opponent, single crit hit + multi-image afterimage trail. |
+| Spider-Man | Web Yank | Web line grabs opponent and pulls them in for a kick. |
+| Iron Man | Repulsor Burst | Short-range AoE blast cone from palm; light knockback, double-tap to chain. |
+| Batman | Batarang Combo | Throws batarang (homing arc) then dashes in for 2-hit kick combo on connect. |
+| Butcher | Crowbar Swing | Short range, heavy single hit, brutal hit-stun on victim (longer slow-mo on impact). |
 
-- **Asset**: copy uploaded logo to `src/assets/blkdom-logo.png` (already done).
-- New reusable `src/components/BlkdomBadge.tsx`:
-  ```tsx
-  <a href="https://blkdom.com" target="_blank" rel="noreferrer noopener"
-     className="inline-flex items-center gap-2 ...">
-    <img src={logo} alt="Blkdom" className="h-5 w-5 rounded" />
-    <span className="font-mono text-[10px] tracking-[0.3em] uppercase">
-      A Blkdom production
-    </span>
-  </a>
-  ```
-  - Two size variants: `sm` (footer/HUD) and `md` (splash).
-  - Always opens blkdom.com in a new tab.
-- Mount it in:
-  - Landing page footer (`/`)
-  - Lobby header (top-right corner of the lobby panel)
-  - New loading/splash screen (large variant, centered under the title)
+### Impact frame system (engine.ts)
 
-## 3. Premium animated loading / splash screen
+- New `hitstop` global timer: when set (e.g. 0.08s on light hit, 0.18s on heavy), `update()` returns early so positions freeze while render still runs (white vignette flash + radial line burst).
+- New `slowmo` extension: heavy moves invoke `slowmoT = 0.4` *without* entering teleport-targeting mode (current slowmo is bound to teleport — refactor into `slowmoMode: 'tele' | 'impact' | null`).
+- Ragdoll: on heavy hit, victim enters `ragdoll` state (timer ~0.7s) — `computeWalkPose` is bypassed; engine uses a tumbling pose (continuous spin angle + sprawled limbs) and physics keeps gravity + bounce on ground contact.
+- Camera: `shake` boost + brief `chromaticOffset` (cheap 2px R/B offset on render, skipped on lowPower).
 
-New `src/components/game/Splash.tsx` mounted **before** the Lobby on `/play`. User must tap **PLAY** to enter. Mobile-first, runs at full perf even on low-end phones.
+### Animation additions (animation.ts)
 
-### Layout (single full-screen canvas + overlaid HTML)
-- Black background with subtle vignette + drifting particles.
-- Top: tiny "◇ OFFLINE 1V1 ◇" eyebrow.
-- Center title: **OGUN** (huge, bold) with **ARENA** beneath, gradient + soft glow. Caption: "Ogun · war in Yoruba".
-- Bottom-center: glowing **PLAY** button (≥ 64px tap target, pulsing border).
-- Bottom: Blkdom badge (logo + link).
-- Behind everything: the animated scene (see below).
+- New `computeAttackPose(skinId, attackT, facing, h)` returning a full pose for the active special's wind-up + strike frames. Falls back to walk pose blended with arm overrides for skins without a custom rig.
+- Flash/A-Train get afterimage hook: engine calls back N times per frame to draw faded ghost copies along recent motion samples.
 
-### Animation (Canvas 2D, the flashy bit)
-A looping ~6-second cinematic cell:
+### Sound effects
 
-```text
-   [Homelander stickman running right →]   ← fires red laser eyes →   [Subway train approaching from right]
-                  trail of motion streaks                                    sparks + smoke where laser hits
-```
+- Add `src/game/sfx.ts` — no external assets; uses WebAudio `OscillatorNode` + `BiquadFilter` + noise buffer to synthesize: punch (low thump + click), heavy boom (sub + decay), laser (sawtooth sweep), shockwave (filtered noise), whoosh (high-pass noise), batarang (fm chirp), woodthump (Butcher).
+- Single `Sfx` singleton with `play(name)` mapped per move. Lazy-init `AudioContext` on first user gesture (existing Splash "PLAY" tap is the unlock). Master gain + per-sound limiter so spam (A-Train flurry) doesn't clip.
+- Mute toggle in HUD (small speaker icon).
 
-Loop:
-1. Homelander enters from left, runs across the lower third with the existing stickman walk-cycle (reuse skin draw from `Lobby` / `SkinSelect`).
-2. Mid-screen, head turns slightly back; **two red laser beams** project from his eyes diagonally toward the train.
-3. Train (silhouette of subway car with bright headlight, reusing the Subway map's train-light idea) rolls in from the right and gets hit — sparks, smoke puff, headlight flicker.
-4. Homelander keeps running off-screen left; train recedes; loop restarts seamlessly.
-5. Background: dark tunnel/road with parallax tiles + faint scanlines (no expensive shadowBlur loops).
+### Input wiring (GameCanvas.tsx)
 
-### Performance rules (per Core memory)
-- Single `requestAnimationFrame` loop, throttled to ~30fps on `lowPower` devices (touch / ≤4 cores / small screen — same heuristic as `GameCanvas`).
-- DPR capped at 1.5.
-- Only **2** elements use `shadowBlur` (laser beams + train headlight); everything else is solid fills / 1-2px strokes.
-- ≤ 24 particles total (motion streaks + sparks combined).
-- Pause loop on `visibilitychange` hidden.
-- No external assets beyond the already-imported Blkdom logo.
+- Add J (p1 melee) / `;` (p2 melee) to `KEY_MAP`.
+- Add a third "PUNCH" button to each `Pad` on touch.
+- Engine exposes `pressMelee(p)`; intent flushed each tick like fire/tele.
 
-### Wiring
-- `src/components/game/GameCanvas.tsx`:
-  - Add a `"splash"` screen state, default to it.
-  - On PLAY tap → `setScreen("map")` → existing Lobby flow.
-- The splash unmounts cleanly (cancelAnimationFrame, removes resize/visibility listeners).
+### Files
 
-## 4. Out of scope
-- No audio.
-- Pricing / paywall UI for upcoming locked skins (already noted on the Skins panel as "more coming soon").
+- src/game/sfx.ts (new)
+- src/game/combat.ts (new — per-skin move specs: damage, wind-up, range, hitstopMs, knockback, slowmoT, sfx, attackKind)
+- src/game/animation.ts (add `computeAttackPose`, `computeRagdollPose`)
+- src/game/engine.ts (hitstop, ragdoll state, melee resolution, afterimage trail buffer, refactor slowmo modes, chromatic offset)
+- src/components/game/GameCanvas.tsx (J/; keys, PUNCH touch button, mute toggle)
+
+### Mobile / perf notes
+
+- Hitstop is just a timer — zero extra cost.
+- Afterimages capped to 4 ghosts on lowPower; chromatic offset disabled on lowPower.
+- WebAudio nodes are created and disposed per-shot; `Sfx` reuses a noise buffer across calls.
+- All new draws skip `shadowBlur` on lowPower (consistent with existing engine).

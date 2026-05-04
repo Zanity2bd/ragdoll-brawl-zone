@@ -2,21 +2,24 @@ import { useEffect, useRef, useState } from "react";
 import { GameEngine, type GameSnapshot, type PlayerId } from "@/game/engine";
 import { type MapId } from "@/game/maps";
 import { type SkinId } from "@/game/skins";
+import { Sfx } from "@/game/sfx";
 import { Lobby } from "./Lobby";
 import { SkinSelect } from "./SkinSelect";
 import { Splash } from "./Splash";
 
-const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" }> = {
+const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" | "melee" }> = {
   KeyA: { p: "p1", action: "left" },
   KeyD: { p: "p1", action: "right" },
   KeyW: { p: "p1", action: "jump" },
   KeyF: { p: "p1", action: "fire" },
   KeyG: { p: "p1", action: "teleport" },
+  KeyJ: { p: "p1", action: "melee" },
   ArrowLeft: { p: "p2", action: "left" },
   ArrowRight: { p: "p2", action: "right" },
   ArrowUp: { p: "p2", action: "jump" },
   KeyK: { p: "p2", action: "fire" },
   KeyL: { p: "p2", action: "teleport" },
+  Semicolon: { p: "p2", action: "melee" },
 };
 
 type Screen = "splash" | "map" | "skin" | "fight";
@@ -30,10 +33,13 @@ export function GameCanvas() {
   const [mapId, setMapId] = useState<MapId>("neon-city");
   const [p1Skin, setP1Skin] = useState<SkinId>("spiderman");
   const [p2Skin, setP2Skin] = useState<SkinId>("homelander");
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     setIsTouch(window.matchMedia("(hover: none) and (pointer: coarse)").matches);
   }, []);
+
+  useEffect(() => { Sfx.setMuted(muted); }, [muted]);
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -123,6 +129,8 @@ export function GameCanvas() {
       {screen === "fight" && snap && (
         <HUD
           snap={snap}
+          muted={muted}
+          onToggleMute={() => setMuted(m => !m)}
           onRematch={() => engine?.reset()}
           onChange={() => setScreen("map")}
         />
@@ -130,7 +138,7 @@ export function GameCanvas() {
       {screen === "fight" && isTouch && engine && <TouchControls engine={engine} />}
 
       {screen === "splash" && (
-        <Splash onPlay={() => setScreen("map")} />
+        <Splash onPlay={() => { Sfx.unlock(); setScreen("map"); }} />
       )}
       {screen === "map" && (
         <Lobby onPickMap={(id) => { setMapId(id); setScreen("skin"); }} />
@@ -145,13 +153,20 @@ export function GameCanvas() {
   );
 }
 
-function HUD({ snap, onRematch, onChange }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void }) {
+function HUD({ snap, onRematch, onChange, muted, onToggleMute }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onToggleMute: () => void }) {
   return (
     <>
       <div className="pointer-events-none absolute top-0 left-0 right-0 p-2 sm:p-4 flex gap-2 sm:gap-4 items-start">
         <HpBar p={snap.p1} side="left" />
         <HpBar p={snap.p2} side="right" />
       </div>
+      <button
+        onClick={onToggleMute}
+        aria-label={muted ? "Unmute" : "Mute"}
+        className="absolute top-2 right-2 sm:top-3 sm:right-3 w-9 h-9 rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-20"
+      >
+        {muted ? "🔇" : "🔊"}
+      </button>
 
       {snap.phase === "intro" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -239,6 +254,7 @@ function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
       </div>
       <div className={`flex gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
         <CdPill label={isP1 ? "F · Fire" : "K · Fire"} cd={p.fireCd} max={p.fireCdMax} color={color} />
+        <CdPill label={`${isP1 ? "J" : ";"} · ${p.meleeName}`} cd={p.meleeCd} max={p.meleeCdMax} color={color} />
         <CdPill label={isP1 ? "G · Tele" : "L · Tele"} cd={p.teleCd} max={p.teleCdMax} color={color} />
       </div>
     </div>
@@ -278,6 +294,7 @@ function TouchControls({ engine }: { engine: GameEngine }) {
         onRight={(d) => hold("p1", "right", d)}
         onJump={() => engine.pressJump("p1")}
         onFire={() => engine.pressFire("p1")}
+        onPunch={() => engine.pressMelee("p1")}
         onTele={() => engine.pressTeleport("p1")}
         color="oklch(0.85 0.18 210)"
       />
@@ -286,6 +303,7 @@ function TouchControls({ engine }: { engine: GameEngine }) {
         onRight={(d) => hold("p2", "right", d)}
         onJump={() => engine.pressJump("p2")}
         onFire={() => engine.pressFire("p2")}
+        onPunch={() => engine.pressMelee("p2")}
         onTele={() => engine.pressTeleport("p2")}
         color="oklch(0.72 0.28 340)"
         mirror
@@ -295,17 +313,18 @@ function TouchControls({ engine }: { engine: GameEngine }) {
 }
 
 function Pad({
-  onLeft, onRight, onJump, onFire, onTele, color, mirror,
+  onLeft, onRight, onJump, onFire, onPunch, onTele, color, mirror,
 }: {
   onLeft: (d: boolean) => void;
   onRight: (d: boolean) => void;
   onJump: () => void;
   onFire: () => void;
+  onPunch: () => void;
   onTele: () => void;
   color: string;
   mirror?: boolean;
 }) {
-  const btn = "w-[60px] h-[60px] rounded-full border-2 font-mono text-[11px] flex items-center justify-center backdrop-blur-sm bg-background/40 active:bg-foreground/30 pointer-events-auto select-none touch-manipulation";
+  const btn = "w-[56px] h-[56px] rounded-full border-2 font-mono text-[10px] flex items-center justify-center backdrop-blur-sm bg-background/40 active:bg-foreground/30 pointer-events-auto select-none touch-manipulation";
   const style = { borderColor: color, color };
   return (
     <div className={`flex gap-3 ${mirror ? "flex-row-reverse" : ""}`}>
@@ -323,6 +342,9 @@ function Pad({
         >▲</button>
       </div>
       <div className="flex gap-2">
+        <button className={btn} style={style}
+          onTouchStart={(e) => { e.preventDefault(); onPunch(); }}
+        >PUNCH</button>
         <button className={btn} style={style}
           onTouchStart={(e) => { e.preventDefault(); onFire(); }}
         >FIRE</button>
