@@ -7,6 +7,8 @@ import { Sfx } from "@/game/sfx";
 import { Lobby } from "./Lobby";
 import { SkinSelect } from "./SkinSelect";
 import { Splash } from "./Splash";
+import { SettingsPanel } from "./Settings";
+import { useGamepad } from "@/hooks/useGamepad";
 
 const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" | "melee" }> = {
   KeyA: { p: "p1", action: "left" },
