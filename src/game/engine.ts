@@ -731,8 +731,20 @@ export class GameEngine {
     const sx = (Math.random() - 0.5) * this.shake;
     const sy = (Math.random() - 0.5) * this.shake;
 
+    // Uniform-fit (contain) the 1280x720 stage into the actual canvas so
+    // characters and arena keep correct proportions on every device.
+    const cw = this.canvas.width, ch = this.canvas.height;
+    const scale = Math.min(cw / W, ch / H);
+    const offX = (cw - W * scale) / 2 + sx;
+    const offY = (ch - H * scale) / 2 + sy;
+
     ctx.save();
-    ctx.setTransform(this.canvas.width / W, 0, 0, this.canvas.height / H, sx, sy);
+    // Letterbox bars
+    ctx.fillStyle = "oklch(0.08 0.02 250)";
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.setTransform(scale, 0, 0, scale, offX, offY);
+    // Clip to stage so background can't paint into letterbox bars
+    ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
 
     getMap(this.mapId).drawBackground(ctx, this.elapsed, W, H, GROUND_Y);
 
