@@ -536,6 +536,7 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
             onFire={() => engine.pressFire("p2")}
             onPunch={() => engine.pressMelee("p2")}
             onTele={() => engine.pressTeleport("p2")}
+            onPower1={() => engine.pressPower1("p2")}
             canFly={engine.canFly("p2")}
           />
         )}
