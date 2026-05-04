@@ -1470,7 +1470,12 @@ export class GameEngine {
             color: "oklch(0.78 0.28 28)", size: 1.5 + Math.random() * 1.8,
           });
         }
-        // Overload: pierce + shatter platforms
+        // Overload: pierce + shatter platforms AND props
+        if (overload) {
+          const exP = sx + Math.cos(desired) * beamLen;
+          const eyP = sy + Math.sin(desired) * beamLen;
+          this.overloadShatterProps(sx, sy, exP, eyP);
+        }
         if (overload) {
           const ex = sx + Math.cos(desired) * beamLen;
           const ey = sy + Math.sin(desired) * beamLen;
