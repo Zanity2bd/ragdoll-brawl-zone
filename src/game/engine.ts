@@ -215,7 +215,7 @@ const FIGHTER_H = 90;
 const FIGHTER_W = 30;
 
 const FIRE_CD = 0.8;
-const TELE_CD = 4.0;
+const TELE_CD = 8.0;
 const FIRE_DAMAGE = 12;
 const FIRE_KNOCKBACK = 320;
 
@@ -320,6 +320,12 @@ const BAMF_CLOUD_RADIUS = 130;
 const BAMF_CLOUD_DMG = 14;
 const SHADOW_STRIKE_CD = 5;
 const SHADOW_STRIKE_DMG = 18;
+// Bamf Combo — 3 scripted teleport-strikes
+const BAMF_COMBO_CD = 12;
+const BAMF_COMBO_STEP = 1.0;        // 1s between hits → ~3s total
+const BAMF_COMBO_DMG = [12, 14, 18];
+const BAMF_COMBO_HITSTOP = [0.08, 0.10, 0.18];
+const BAMF_COMBO_SHAKE = [12, 14, 22];
 
 interface Missile {
   owner: PlayerId; target: PlayerId;
