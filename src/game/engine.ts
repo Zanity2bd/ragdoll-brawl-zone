@@ -3522,6 +3522,7 @@ export class GameEngine {
     }
   }
 
+  private buildSnapshot(): GameSnapshot {
     return {
       p1: this.snapPlayer(this.p1),
       p2: this.snapPlayer(this.p2),
