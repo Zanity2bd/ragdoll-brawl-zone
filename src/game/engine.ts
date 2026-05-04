@@ -237,7 +237,7 @@ const FIGHTER_H = 90;
 const FIGHTER_W = 30;
 
 const FIRE_CD = 0.8;
-const TELE_CD = 8.0;
+const TELE_CD = 2.0;
 const FIRE_DAMAGE = 12;
 const FIRE_KNOCKBACK = 320;
 
@@ -1103,6 +1103,25 @@ export class GameEngine {
     this.teleTargeting = null;
     if (this.slowmoMode === "tele") { this.slowmoT = 0; this.slowmoMode = null; }
     this.emit();
+  }
+
+  /** Instantaneous tap-to-teleport for Nightcrawler. No aim, no slow-mo. */
+  tapTeleport(p: PlayerId, canvasX: number, canvasY: number): boolean {
+    const f = p === "p1" ? this.p1 : this.p2;
+    if (f.skin.id !== "nightcrawler") return false;
+    if (f.teleCd > 0 || f.teleporting) return false;
+    if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) return false;
+    const { sx, sy } = this.cssToStage(canvasX, canvasY);
+    f.teleCd = TELE_CD;
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
+    Sfx.play("bamf", 0.95);
+    f.x = Math.max(40, Math.min(W - 40, sx));
+    f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy - FIGHTER_H / 2));
+    f.facing = (p === "p1" ? this.p2.x : this.p1.x) >= f.x ? 1 : -1;
+    f.vx = 0; f.vy = 0; f.teleporting = false;
+    this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
+    this.emit();
+    return true;
   }
 
   isTeleTargeting() { return this.teleTargeting; }
@@ -2220,9 +2239,18 @@ export class GameEngine {
         const canTele = f.skin.id === "nightcrawler";
         if (canFire && intent.fire && f.fireCd <= 0 && !f.teleporting) this.fire(f);
         if (canTele && intent.teleport && f.teleCd <= 0 && !f.teleporting && this.teleTargeting === null) {
-          f.teleporting = true; f.teleCd = TELE_CD;
-          this.teleTargeting = f.id;
-          this.slowmoT = 5; this.slowmoMode = "tele";
+          // Keyboard teleport: blink toward the opponent instantly (no aim, no slow-mo).
+          const opp = f.id === "p1" ? this.p2 : this.p1;
+          const side = opp.x >= f.x ? -1 : 1;
+          const tx = Math.max(40, Math.min(W - 40, opp.x + side * 80));
+          const ty = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, opp.y));
+          f.teleCd = TELE_CD;
+          this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
+          Sfx.play("bamf", 0.95);
+          f.x = tx; f.y = ty;
+          f.facing = opp.x >= f.x ? 1 : -1;
+          f.vx = 0; f.vy = 0;
+          this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
         }
         if (intent.melee && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) this.startMelee(f);
       }
@@ -3775,6 +3803,47 @@ export class GameEngine {
         ctx.lineTo(sx - f.facing * 26, ey);
         ctx.stroke();
       }
+      ctx.restore();
+    }
+
+    // ---- Nightcrawler tail: long whippy curl behind the hip ----
+    if (skin.id === "nightcrawler" && !ghost) {
+      ctx.save();
+      const t = this.elapsed + (f.id === "p1" ? 0 : 1.3);
+      const back = -f.facing;
+      const moving = Math.min(1, Math.abs(f.vx) / 240);
+      const sway = Math.sin(t * 3.2) * (4 + moving * 6) + back * (8 + moving * 6);
+      const sway2 = Math.sin(t * 4.6 + 1.1) * (3 + moving * 4);
+      // Anchor at lower spine just above the hip.
+      const ax = back * 2;
+      const ay = pose.hipY - 2;
+      // Three control points for a snake-like curl.
+      const c1x = back * 14 + sway * 0.4;
+      const c1y = pose.hipY + 14;
+      const c2x = back * 26 + sway;
+      const c2y = pose.hipY + 26 + sway2 * 0.3;
+      const tipX = back * 36 + sway * 1.4;
+      const tipY = pose.hipY + 12 + sway2;     // tip curls back upward
+      // Outline pass
+      ctx.strokeStyle = "oklch(0.10 0.02 250)";
+      ctx.lineCap = "round";
+      ctx.lineWidth = 5.5;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY);
+      ctx.stroke();
+      // Main stroke
+      ctx.strokeStyle = skin.body;
+      ctx.lineWidth = 3.6;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY);
+      ctx.stroke();
+      // Spade tip
+      ctx.fillStyle = skin.body;
+      ctx.beginPath();
+      ctx.ellipse(tipX + back * 2, tipY, 4.5, 2.6, Math.atan2(tipY - c2y, tipX - c2x), 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
 

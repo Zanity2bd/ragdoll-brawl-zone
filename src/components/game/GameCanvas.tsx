@@ -169,7 +169,10 @@ export function GameCanvas() {
           if (engine.pressSuperDash("p1")) return true;
         }
         if (p1Name === "heatwave") engine.pressFire("p1");
-        else if (p1Name === "nightcrawler") engine.pressTeleport("p1");
+        else if (p1Name === "nightcrawler") {
+          const r = canvas.getBoundingClientRect();
+          engine.tapTeleport("p1", cx - r.left, cy - r.top);
+        }
         else engine.pressMelee("p1");
         return true;
       }
@@ -182,18 +185,27 @@ export function GameCanvas() {
         engine.handlePointer(e.clientX - r.left, e.clientY - r.top);
         return;
       }
-      tryTapOpponent(e.clientX, e.clientY);
+      if (tryTapOpponent(e.clientX, e.clientY)) return;
+      // Nightcrawler: instant tap-to-teleport anywhere on the screen.
+      if (cpuEnabledRef.current && engine.getSkinIdFor("p1") === "nightcrawler") {
+        engine.tapTeleport("p1", e.clientX - r.left, e.clientY - r.top);
+      }
     };
     const touch = (e: TouchEvent) => {
       const t = e.touches[0] || e.changedTouches[0];
       if (!t) return;
+      const r = canvas.getBoundingClientRect();
       if (engine.isTeleTargeting()) {
         e.preventDefault();
-        const r = canvas.getBoundingClientRect();
         engine.handlePointer(t.clientX - r.left, t.clientY - r.top);
         return;
       }
-      if (tryTapOpponent(t.clientX, t.clientY)) e.preventDefault();
+      if (tryTapOpponent(t.clientX, t.clientY)) { e.preventDefault(); return; }
+      if (cpuEnabledRef.current && engine.getSkinIdFor("p1") === "nightcrawler") {
+        if (engine.tapTeleport("p1", t.clientX - r.left, t.clientY - r.top)) {
+          e.preventDefault();
+        }
+      }
     };
     canvas.addEventListener("click", click);
     canvas.addEventListener("touchstart", touch, { passive: false });
