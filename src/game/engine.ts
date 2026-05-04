@@ -554,8 +554,10 @@ export class GameEngine {
     f.teleCd = TELE_CD;
     this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
     Sfx.play("bamf", 0.9);
-    f.x = Math.max(40, Math.min(W - 40, sx));
-    f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy));
+    // sy here is already a foot-anchored target — feed it through the resolver
+    // (which expects a midpoint-style sy) by offsetting then letting it clamp.
+    const dest = this.resolveTeleportTarget(sx, sy + FIGHTER_H / 2);
+    f.x = dest.x; f.y = dest.y;
     f.vx = 0; f.vy = 0; f.teleporting = false;
     this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
   }
@@ -1090,14 +1092,63 @@ export class GameEngine {
     return { sx: (px - this.viewOffX) / this.viewScale, sy: (py - this.viewOffY) / this.viewScale };
   }
 
+  /** Clamp a desired teleport target so the fighter never lands inside a
+   *  cover/platform block, off the stage, or below the ground. The fighter
+   *  occupies a FIGHTER_W x FIGHTER_H box anchored at (x, y) → (x±W/2, y..y+H).
+   *  Strategy: clamp to arena bounds first, then if the box overlaps any
+   *  non-destroyed cover, search outward (above first, then sides, then below)
+   *  for the nearest spot that's clear. If nothing fits, fall back to the
+   *  fighter's current position. */
+  private resolveTeleportTarget(sx: number, sy: number): { x: number; y: number } {
+    const hw = FIGHTER_W / 2;
+    const minX = 30 + hw;
+    const maxX = W - 30 - hw;
+    const minY = 20;                    // keep head on screen
+    const maxY = GROUND_Y - FIGHTER_H;  // feet rest on the ground line
+    const boxOverlaps = (x: number, y: number) => {
+      if (x < minX || x > maxX || y < minY || y > maxY) return true;
+      for (const pl of this.platforms) {
+        if (pl.destroyed) continue;
+        // Cover blocks are fully solid. One-way "platform" ledges only block
+        // the body if the fighter would spawn embedded inside the slab itself.
+        if (pl.kind === "cover") {
+          if (x + hw > pl.x && x - hw < pl.x + pl.w &&
+              y + FIGHTER_H > pl.y && y < pl.y + pl.h) return true;
+        } else {
+          if (x + hw > pl.x && x - hw < pl.x + pl.w &&
+              y + FIGHTER_H > pl.y + 2 && y + FIGHTER_H - 4 < pl.y + pl.h) return true;
+        }
+      }
+      return false;
+    };
+
+    let x = Math.max(minX, Math.min(maxX, sx));
+    let y = Math.max(minY, Math.min(maxY, sy - FIGHTER_H / 2));
+    if (!boxOverlaps(x, y)) return { x, y };
+
+    // Spiral search outward in steps for the nearest clear spot.
+    const step = 12;
+    for (let r = step; r <= 320; r += step) {
+      // Try directly above first (most natural — drop onto the obstacle's top).
+      for (const dy of [-r, -r + step / 2, r, 0]) {
+        for (const dx of [0, -r, r, -r / 2, r / 2]) {
+          const tx = Math.max(minX, Math.min(maxX, x + dx));
+          const ty = Math.max(minY, Math.min(maxY, y + dy));
+          if (!boxOverlaps(tx, ty)) return { x: tx, y: ty };
+        }
+      }
+    }
+    return { x, y };
+  }
+
   handlePointer(canvasX: number, canvasY: number) {
     if (!this.teleTargeting) return;
     const f = this.teleTargeting === "p1" ? this.p1 : this.p2;
     const { sx, sy } = this.cssToStage(canvasX, canvasY);
+    const dest = this.resolveTeleportTarget(sx, sy);
     this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
     Sfx.play("bamf", 0.9);
-    f.x = Math.max(40, Math.min(W - 40, sx));
-    f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy - FIGHTER_H / 2));
+    f.x = dest.x; f.y = dest.y;
     f.vx = 0; f.vy = 0; f.teleporting = false;
     this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
     this.teleTargeting = null;
@@ -1112,11 +1163,11 @@ export class GameEngine {
     if (f.teleCd > 0 || f.teleporting) return false;
     if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) return false;
     const { sx, sy } = this.cssToStage(canvasX, canvasY);
+    const dest = this.resolveTeleportTarget(sx, sy);
     f.teleCd = TELE_CD;
     this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
     Sfx.play("bamf", 0.95);
-    f.x = Math.max(40, Math.min(W - 40, sx));
-    f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy - FIGHTER_H / 2));
+    f.x = dest.x; f.y = dest.y;
     f.facing = (p === "p1" ? this.p2.x : this.p1.x) >= f.x ? 1 : -1;
     f.vx = 0; f.vy = 0; f.teleporting = false;
     this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
@@ -2260,12 +2311,11 @@ export class GameEngine {
           // Keyboard teleport: blink toward the opponent instantly (no aim, no slow-mo).
           const opp = f.id === "p1" ? this.p2 : this.p1;
           const side = opp.x >= f.x ? -1 : 1;
-          const tx = Math.max(40, Math.min(W - 40, opp.x + side * 80));
-          const ty = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, opp.y));
+          const dest = this.resolveTeleportTarget(opp.x + side * 80, opp.y + FIGHTER_H / 2);
           f.teleCd = TELE_CD;
           this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "depart");
           Sfx.play("bamf", 0.95);
-          f.x = tx; f.y = ty;
+          f.x = dest.x; f.y = dest.y;
           f.facing = opp.x >= f.x ? 1 : -1;
           f.vx = 0; f.vy = 0;
           this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
