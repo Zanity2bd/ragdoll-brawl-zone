@@ -120,7 +120,13 @@ interface Particle {
 interface Shockwave { x: number; y: number; r: number; rMax: number; life: number; maxLife: number; color: string; }
 interface Beam { owner: PlayerId; x: number; y: number; angle: number; length: number; life: number; }
 
-interface Platform { x: number; y: number; w: number; h: number; }
+interface Platform {
+  x: number; y: number; w: number; h: number;
+  // "platform" = thin one-way ledge (jump up through, land on top, drop-through with down).
+  // "cover"    = solid block: lands on top AND blocks horizontal movement & projectiles.
+  kind: "platform" | "cover";
+  accent?: string;
+}
 
 export interface Intents {
   left: boolean;
