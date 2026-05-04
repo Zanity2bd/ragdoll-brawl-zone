@@ -3178,7 +3178,6 @@ export class GameEngine {
             ctx.fillStyle = `oklch(${L1} 0.08 ${hue.toFixed(0)})`;
             ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
           }
-          }
         }
         // Core highlight (slight purple glow)
         ctx.globalCompositeOperation = "lighter";
