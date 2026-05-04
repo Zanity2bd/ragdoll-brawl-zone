@@ -295,9 +295,9 @@ const SOLAR_FLARE_CD = 12;
 const SOLAR_FLARE_RADIUS = 320;
 const SOLAR_FLARE_DMG = 18;
 const SOLAR_FLARE_STUN = 1.6;
-const HEAT_VISION_CD = 6;
-const HEAT_VISION_DUR = 0.75;
-const HEAT_VISION_DPS = 38;
+const HEAT_VISION_CD = 20;
+const HEAT_VISION_DUR = 10.0;
+const HEAT_VISION_DPS = 1; // mirrors Homelander laserSweep dps; overload triples
 // Iron Man
 const UNIBEAM_CD = 10;
 const UNIBEAM_CHARGE = 0.45;
