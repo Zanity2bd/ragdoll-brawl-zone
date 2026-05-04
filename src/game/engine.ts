@@ -1021,7 +1021,10 @@ export class GameEngine {
         });
         this.burst(sx, sy, "oklch(0.95 0.18 95)", 22);
         this.shockwaves.push({ x: sx, y: sy, r: 6, rMax: 80, life: 0.3, maxLife: 0.3, color: "oklch(0.95 0.18 95)" });
-        Sfx.play("blip", 0.7); Sfx.play("whoosh", 0.8);
+        // Cast feedback — quick crack + camera kick
+        this.shake = Math.max(this.shake, 10);
+        this.impactFlash = Math.max(this.impactFlash, 0.35);
+        Sfx.play("blip", 0.8); Sfx.play("whoosh", 0.9); Sfx.play("shock", 0.6);
         return true;
       }
       case "superman": {
@@ -1067,7 +1070,11 @@ export class GameEngine {
         // void unused
         void speed;
         this.burst(a.x + dir * 14, a.y + 28, "oklch(0.78 0.22 40)", 20);
-        Sfx.play("whoosh", 0.7);
+        this.burst(a.x + dir * 14, a.y + 28, "oklch(0.96 0.16 80)", 12);
+        this.shockwaves.push({ x: a.x + dir * 14, y: a.y + 28, r: 6, rMax: 70, life: 0.28, maxLife: 0.28, color: "oklch(0.92 0.20 60)" });
+        this.shake = Math.max(this.shake, 8);
+        this.impactFlash = Math.max(this.impactFlash, 0.3);
+        Sfx.play("whoosh", 0.9); Sfx.play("boom", 0.45); Sfx.play("heavy", 0.4);
         return true;
       }
       case "nightcrawler": {
@@ -1529,27 +1536,28 @@ export class GameEngine {
             tgt.ragdollEnergy = 1;
             tgt.ragdollAV = Math.sign(lo.vx || 1) * 5;
           }
-          this.shake = Math.max(this.shake, 22);
-          this.impactFlash = Math.max(this.impactFlash, 0.85);
-          this.hitstopT = Math.max(this.hitstopT, 0.07);
+          this.shake = Math.max(this.shake, 32);
+          this.impactFlash = Math.max(this.impactFlash, 1.0);
+          this.hitstopT = Math.max(this.hitstopT, 0.12);
           // Multi-ring electric explosion
-          this.shockwaves.push({ x: lo.x, y: lo.y, r: 6, rMax: 160, life: 0.45, maxLife: 0.45, color: "oklch(0.98 0.18 95)" });
-          this.shockwaves.push({ x: lo.x, y: lo.y, r: 14, rMax: 220, life: 0.6, maxLife: 0.6, color: "oklch(0.85 0.22 260)" });
-          this.burst(lo.x, lo.y, "oklch(0.98 0.18 95)", 36);
-          this.burst(lo.x, lo.y, "oklch(0.78 0.22 260)", 22);
+          this.shockwaves.push({ x: lo.x, y: lo.y, r: 6, rMax: 200, life: 0.5, maxLife: 0.5, color: "oklch(0.98 0.18 95)" });
+          this.shockwaves.push({ x: lo.x, y: lo.y, r: 14, rMax: 280, life: 0.65, maxLife: 0.65, color: "oklch(0.85 0.22 260)" });
+          this.shockwaves.push({ x: lo.x, y: lo.y, r: 22, rMax: 360, life: 0.8, maxLife: 0.8, color: "oklch(0.95 0.10 220)" });
+          this.burst(lo.x, lo.y, "oklch(0.98 0.18 95)", 48);
+          this.burst(lo.x, lo.y, "oklch(0.78 0.22 260)", 28);
           // Crackling arc particles outward
-          for (let i = 0; i < 18; i++) {
+          for (let i = 0; i < 26; i++) {
             const a = Math.random() * Math.PI * 2;
-            const sp = 220 + Math.random() * 240;
+            const sp = 260 + Math.random() * 320;
             this.particles.push({
               x: lo.x, y: lo.y,
               vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
-              life: 0.5, maxLife: 0.5,
+              life: 0.55, maxLife: 0.55,
               color: Math.random() < 0.5 ? "oklch(0.98 0.18 95)" : "oklch(0.85 0.22 260)",
               size: 2 + Math.random() * 2.5,
             });
           }
-          Sfx.play("boom", 0.7); Sfx.play("blip", 0.8);
+          Sfx.play("boom", 0.85); Sfx.play("shock", 1.0); Sfx.play("blip", 0.9); Sfx.play("heavy", 0.5);
           // Lightning consumed in the explosion
           lo.life = 0;
           if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
@@ -1931,12 +1939,25 @@ export class GameEngine {
           }
           this.shockwaves.push({ x: ex, y: ey, r: 10, rMax: MAGMA_BLAST_RADIUS, life: 0.5, maxLife: 0.5, color: "oklch(0.96 0.18 60)" });
           this.shockwaves.push({ x: ex, y: ey, r: 18, rMax: MAGMA_BLAST_RADIUS * 1.4, life: 0.7, maxLife: 0.7, color: "oklch(0.62 0.22 25)" });
-          this.burst(ex, ey, "oklch(0.96 0.18 80)", 28);
-          this.burst(ex, ey, "oklch(0.78 0.22 40)", 22);
-          this.shake = Math.max(this.shake, 22);
-          this.impactFlash = Math.max(this.impactFlash, 0.7);
-          this.hitstopT = Math.max(this.hitstopT, 0.08);
-          Sfx.play("boom", 0.9);
+          this.shockwaves.push({ x: ex, y: ey, r: 28, rMax: MAGMA_BLAST_RADIUS * 1.8, life: 0.9, maxLife: 0.9, color: "oklch(0.40 0.10 30)" });
+          this.burst(ex, ey, "oklch(0.96 0.18 80)", 40);
+          this.burst(ex, ey, "oklch(0.78 0.22 40)", 32);
+          this.burst(ex, ey, "oklch(0.30 0.04 40)", 18);
+          // Outward fire shrapnel
+          for (let i = 0; i < 22; i++) {
+            const aa = Math.random() * Math.PI * 2;
+            const sp = 220 + Math.random() * 320;
+            this.particles.push({
+              x: ex, y: ey, vx: Math.cos(aa) * sp, vy: Math.sin(aa) * sp - 80,
+              life: 0.6, maxLife: 0.6,
+              color: Math.random() < 0.5 ? "oklch(0.96 0.18 70)" : "oklch(0.65 0.22 30)",
+              size: 2 + Math.random() * 3,
+            });
+          }
+          this.shake = Math.max(this.shake, 32);
+          this.impactFlash = Math.max(this.impactFlash, 0.95);
+          this.hitstopT = Math.max(this.hitstopT, 0.14);
+          Sfx.play("boom", 1.0); Sfx.play("heavy", 0.85); Sfx.play("thud", 0.7); Sfx.play("shock", 0.4);
         }
       } else {
         mb.explosionT += dt;
