@@ -166,6 +166,8 @@ export function GameCanvas() {
           onConfirm={(p1, p2) => { setP1Skin(p1); setP2Skin(p2); startFight(mapId, p1, p2); }}
         />
       )}
+
+      {needsLandscape && <RotatePrompt />}
     </div>
   );
 }
