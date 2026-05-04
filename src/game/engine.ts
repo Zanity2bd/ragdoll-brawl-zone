@@ -4145,6 +4145,7 @@ export class GameEngine {
       winner: this.winner, phase: this.phase,
       slowmo: this.slowmoT > 0,
       teleTargeting: this.teleTargeting !== null,
+      koCinematicT: this.koCinematicT,
     };
   }
   private emit() {
