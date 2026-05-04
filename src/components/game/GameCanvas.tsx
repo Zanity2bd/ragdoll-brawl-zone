@@ -425,7 +425,11 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
             engine.setIntent("p1", { left: x < -0.25, right: x > 0.25 });
             engine.setAirSteering("p1", x, y);
           }}
-          onJump={() => engine.pressJump("p1")}
+          onJump={() => {
+            engine.setIntent("p1", { jump: true });
+            engine.pressJump("p1");
+            window.setTimeout(() => engine.setIntent("p1", { jump: false }), 180);
+          }}
           onFire={() => engine.pressFire("p1")}
           onPunch={() => engine.pressMelee("p1")}
           onTele={() => engine.pressTeleport("p1")}
