@@ -1863,19 +1863,49 @@ export class GameEngine {
       mb.phase += dt * 10;
       if (!mb.exploded) {
         mb.life -= dt;
-        mb.vy += GRAVITY * 0.7 * sdt;
-        mb.x += mb.vx * sdt; mb.y += mb.vy * sdt;
-        // Trail
-        if (!this.lowPower) {
-          this.particles.push({
-            x: mb.x, y: mb.y,
-            vx: (Math.random() - 0.5) * 50, vy: 40 + Math.random() * 50,
-            life: 0.45, maxLife: 0.45,
-            color: Math.random() < 0.5 ? "oklch(0.96 0.18 80)" : "oklch(0.78 0.22 40)",
-            size: 3 + Math.random() * 2,
-          });
-        }
         const tgt = mb.owner === "p1" ? this.p2 : this.p1;
+        // Homing steer toward target (chases through the air)
+        const tcx = tgt.x;
+        const tcy = tgt.y + 30;
+        const hdx = tcx - mb.x, hdy = tcy - mb.y;
+        const hd = Math.hypot(hdx, hdy) || 1;
+        const speed = Math.hypot(mb.vx, mb.vy) || 1;
+        const desiredSpeed = Math.max(540, speed);
+        const dvx = (hdx / hd) * desiredSpeed;
+        const dvy = (hdy / hd) * desiredSpeed;
+        const turn = Math.min(1, sdt * 3.2);
+        mb.vx += (dvx - mb.vx) * turn;
+        mb.vy += (dvy - mb.vy) * turn;
+        // Light gravity so it still arcs subtly
+        mb.vy += GRAVITY * 0.18 * sdt;
+        mb.x += mb.vx * sdt; mb.y += mb.vy * sdt;
+        // Flame trail — multi-layer (core white, mid yellow, outer orange smoke)
+        if (!this.lowPower) {
+          const ang = Math.atan2(mb.vy, mb.vx);
+          const back = ang + Math.PI;
+          for (let i = 0; i < 3; i++) {
+            const off = i * 6;
+            const px = mb.x + Math.cos(back) * off + (Math.random() - 0.5) * 4;
+            const py = mb.y + Math.sin(back) * off + (Math.random() - 0.5) * 4;
+            const pal = i === 0 ? "oklch(0.98 0.16 95)" : i === 1 ? "oklch(0.88 0.22 60)" : "oklch(0.62 0.20 35)";
+            this.particles.push({
+              x: px, y: py,
+              vx: -Math.cos(ang) * (40 + Math.random() * 60) + (Math.random() - 0.5) * 30,
+              vy: -Math.sin(ang) * (40 + Math.random() * 60) + (Math.random() - 0.5) * 30 - 20,
+              life: 0.4 + Math.random() * 0.25, maxLife: 0.6,
+              color: pal, size: 4 - i + Math.random() * 2.5,
+            });
+          }
+          // Dark smoke puff
+          if (Math.random() < 0.4) {
+            this.particles.push({
+              x: mb.x + (Math.random() - 0.5) * 8, y: mb.y + (Math.random() - 0.5) * 8,
+              vx: -Math.cos(ang) * 30, vy: -Math.sin(ang) * 30 - 30 - Math.random() * 30,
+              life: 0.6, maxLife: 0.6,
+              color: "oklch(0.30 0.04 40)", size: 5 + Math.random() * 3,
+            });
+          }
+        }
         const groundHit = mb.y >= GROUND_Y - 4;
         const directHit = Math.abs(mb.x - tgt.x) < FIGHTER_W && mb.y > tgt.y && mb.y < tgt.y + FIGHTER_H;
         if (groundHit || directHit || mb.life <= 0) {
