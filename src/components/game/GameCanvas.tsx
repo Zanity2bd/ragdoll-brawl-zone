@@ -233,6 +233,7 @@ export function GameCanvas() {
           onChange={() => setScreen("map")}
           onOpenAudio={() => setAudioOpen(o => !o)}
           muted={muted}
+          onFrenzyP1={() => engineRef.current?.pressFrenzy("p1")}
         />
       )}
       <AudioPanel
