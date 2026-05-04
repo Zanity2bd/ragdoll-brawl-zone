@@ -888,7 +888,7 @@ export class GameEngine {
           t.vx = dir * 320 * falloff;
           t.vy = -180 * falloff;
           t.onGround = false;
-          if (t.hp <= 0) { this.phase = "ko"; this.winner = a.id; }
+          if (t.hp <= 0) { this.triggerKo(a.id); }
         }
         // Triple shockwave + radial sparks
         this.shockwaves.push({ x: cx, y: cy, r: 16, rMax: SOLAR_FLARE_RADIUS, life: 0.65, maxLife: 0.65, color: "oklch(0.98 0.16 90)" });
@@ -1020,7 +1020,7 @@ export class GameEngine {
           t.stunT = Math.max(t.stunT, 0.7);
           const dir = Math.sign(dx) || a.facing;
           t.vx = dir * 240; t.vy = -160; t.onGround = false;
-          if (t.hp <= 0) { this.phase = "ko"; this.winner = a.id; }
+          if (t.hp <= 0) { this.triggerKo(a.id); }
         }
         for (let i = 0; i < 30; i++) {
           const ang = Math.random() * Math.PI * 2;
@@ -1501,7 +1501,7 @@ export class GameEngine {
         Sfx.play(pr.kind === "batarang" ? "punch" : (pr.kind === "web" ? "thud" : "punch"), 0.7);
         pr.life = 0;
         if (target.hp <= 0 && this.phase === "fight") {
-          this.phase = "ko"; this.winner = pr.owner;
+          this.triggerKo(pr.owner);
         }
       }
     }
@@ -1601,7 +1601,7 @@ export class GameEngine {
           Sfx.play("boom", 0.85); Sfx.play("shock", 1.0); Sfx.play("blip", 0.9); Sfx.play("heavy", 0.5);
           // Lightning consumed in the explosion
           lo.life = 0;
-          if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = lo.owner; }
+          if (tgt.hp <= 0 && this.phase === "fight") { this.triggerKo(lo.owner); }
         }
       }
     }
@@ -1705,7 +1705,7 @@ export class GameEngine {
             this.shake = Math.max(this.shake, 6);
             this.impactFlash = Math.max(this.impactFlash, 0.25);
           }
-          if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
+          if (tgt.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
         }
         if (f.heatVisionT <= 0) f.heatVisionT = 0;
       }
@@ -1753,7 +1753,7 @@ export class GameEngine {
             tgt.hp = Math.max(0, tgt.hp - UNIBEAM_DPS * dt);
             tgt.hitFlash = 0.25;
             tgt.vx = f.facing * 320;
-            if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
+            if (tgt.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
         // Impact sparks at end
@@ -1863,7 +1863,7 @@ export class GameEngine {
         this.burst(ms.x, ms.y, "oklch(0.92 0.18 60)", 10);
         Sfx.play("boom", 0.5);
         ms.life = 0;
-        if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = ms.owner; }
+        if (tgt.hp <= 0 && this.phase === "fight") { this.triggerKo(ms.owner); }
       }
     }
     this.missiles = this.missiles.filter(m => m.life > 0 && m.x > -100 && m.x < W + 100 && m.y > -100 && m.y < H + 100);
@@ -1899,7 +1899,7 @@ export class GameEngine {
             tgt.vy = Math.min(tgt.vy, -160);
             tgt.onGround = false;
             this.shake = Math.max(this.shake, 6);
-            if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = fw.owner; }
+            if (tgt.hp <= 0 && this.phase === "fight") { this.triggerKo(fw.owner); }
           }
         }
       }
@@ -1976,7 +1976,7 @@ export class GameEngine {
               tgt.ragdollEnergy = 1;
               tgt.ragdollAV = dir * 4;
             }
-            if (tgt.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = mb.owner; }
+            if (tgt.hp <= 0 && this.phase === "fight") { this.triggerKo(mb.owner); }
           }
           this.shockwaves.push({ x: ex, y: ey, r: 10, rMax: MAGMA_BLAST_RADIUS, life: 0.5, maxLife: 0.5, color: "oklch(0.96 0.18 60)" });
           this.shockwaves.push({ x: ex, y: ey, r: 18, rMax: MAGMA_BLAST_RADIUS * 1.4, life: 0.7, maxLife: 0.7, color: "oklch(0.62 0.22 25)" });
@@ -2074,7 +2074,7 @@ export class GameEngine {
         this.burst(target.x + (Math.random() - 0.5) * 30, target.y + 20, "oklch(0.98 0.12 60)", 6);
         Sfx.play("punch", 0.8);
         if (target.hp <= 0 && this.phase === "fight") {
-          this.phase = "ko"; this.winner = f.id;
+          this.triggerKo(f.id);
         }
       }
       if (fr.t >= fr.dur) {
@@ -2406,7 +2406,7 @@ export class GameEngine {
             this.hitstopT = Math.max(this.hitstopT, 0.08);
             this.impactFlash = Math.max(this.impactFlash, 0.3);
             Sfx.play("attackImpact", 0.9);
-            if (target.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
+            if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
       }
@@ -2444,7 +2444,7 @@ export class GameEngine {
             this.hitstopT = Math.max(this.hitstopT, 0.06);
             this.impactFlash = Math.max(this.impactFlash, 0.22);
             Sfx.play("punch", 0.8);
-            if (target.hp <= 0 && this.phase === "fight") { this.phase = "ko"; this.winner = f.id; }
+            if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
       }
@@ -3080,7 +3080,7 @@ export class GameEngine {
                   target.hp = Math.max(0, target.hp - airDmg);
                   target.hitFlash = 0.3;
                   if (target.hp <= 0 && this.phase === "fight") {
-                    this.phase = "ko"; this.winner = f.id;
+                    this.triggerKo(f.id);
                   }
                 }
                 this.burst(target.x, target.y + 30, "oklch(0.7 0.20 25)", 12);
@@ -3118,7 +3118,7 @@ export class GameEngine {
               this.hitstopT = Math.max(this.hitstopT, 0.04);
               this.burst(target.x, target.y + 40, f.skin.glow, 6);
               Sfx.play("jab", 0.5);
-              if (target.hp <= 0) { this.phase = "ko"; this.winner = f.id; }
+              if (target.hp <= 0) { this.triggerKo(f.id); }
             }
           }
           break;
@@ -3289,7 +3289,7 @@ export class GameEngine {
                 this.shake = Math.max(this.shake, 6);
                 this.impactFlash = Math.max(this.impactFlash, 0.25);
               }
-              if (target.hp <= 0) { this.phase = "ko"; this.winner = f.id; }
+              if (target.hp <= 0) { this.triggerKo(f.id); }
             }
           }
           break;
@@ -3451,7 +3451,7 @@ export class GameEngine {
         });
       }
       Sfx.play(step === 2 ? "heavy" : "punch", 1);
-      if (t.hp <= 0) { this.phase = "ko"; this.winner = a.id; a.bamfCombo = null; return; }
+      if (t.hp <= 0) { this.triggerKo(a.id); a.bamfCombo = null; return; }
     }
 
     combo.step = step + 1;
@@ -3495,7 +3495,7 @@ export class GameEngine {
     this.shockwaves.push({ x: fx, y: fy, r: 6, rMax: 80, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.05 80)" });
     Sfx.play(m.hitSfx, 1);
     if (target.hp <= 0 && this.phase === "fight") {
-      this.phase = "ko"; this.winner = f.id;
+      this.triggerKo(f.id);
     }
   }
 
@@ -3554,7 +3554,7 @@ export class GameEngine {
     Sfx.play("heavy", 0.95);
     Sfx.play("punch", 0.8);
     if (t.hp <= 0 && this.phase === "fight") {
-      this.phase = "ko"; this.winner = attacker.id;
+      this.triggerKo(attacker.id);
     }
   }
 
