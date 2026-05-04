@@ -1211,7 +1211,27 @@ export class GameEngine {
 
   // ---------------- POSE ----------------
   private poseFor(f: Fighter): Pose {
-    if (f.ragdollT > 0) return computeRagdollPose(f.ragdollPhase, FIGHTER_H);
+    if (f.ragdollT > 0) {
+      const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H);
+      // Override lean with physical body angle for stable visual
+      return { ...p, lean: f.ragdollAng };
+    }
+    if (f.downedT > 0) {
+      const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H);
+      // Lay flat — snap angle to ±90°, freeze tumble
+      const targetAng = f.ragdollAng >= 0 ? Math.PI / 2 : -Math.PI / 2;
+      return { ...p, lean: targetAng };
+    }
+    if (f.getUpT > 0) {
+      // Blend from laydown back to upright walk pose
+      const t = 1 - (f.getUpT / Math.max(0.001, f.getUpDur));
+      const ease = t * t * (3 - 2 * t);
+      const flat = computeRagdollPose(f.ragdollPhase, FIGHTER_H);
+      const stand = computeWalkPose(0, 0, true, 0, false, f.facing, FIGHTER_H);
+      const targetAng = f.ragdollAng >= 0 ? Math.PI / 2 : -Math.PI / 2;
+      const lean = targetAng * (1 - ease);
+      return blendPose(flat, stand, ease, lean);
+    }
     const base = f.flying
       ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, f.facing, FIGHTER_H)
       : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0, f.facing, FIGHTER_H);
