@@ -34,6 +34,9 @@ export function GameCanvas() {
   const [p1Skin, setP1Skin] = useState<SkinId>("spiderman");
   const [p2Skin, setP2Skin] = useState<SkinId>("homelander");
   const [muted, setMuted] = useState(false);
+  const [sfxVol, setSfxVol] = useState(0.8);
+  const [musicVol, setMusicVol] = useState(0.35);
+  const [audioOpen, setAudioOpen] = useState(false);
   const [needsLandscape, setNeedsLandscape] = useState(false);
 
   useEffect(() => {
