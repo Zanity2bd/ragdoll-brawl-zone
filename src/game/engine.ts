@@ -4889,7 +4889,7 @@ export class GameEngine {
     }
     ctx.translate(0, -FIGHTER_H);
 
-    const headR = 10;
+    const headR = 12;
     const headY = headR + 2 + pose.headOffsetY;
     const shoulderY = pose.shoulderY;
     const hipY = pose.hipY;
