@@ -3010,8 +3010,8 @@ export class GameEngine {
 
     // Hide attacker (and target) during frenzy — replaced by video clip below.
     const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
-    if (frenzyAttacker !== this.p1) this.drawFighter(this.p1);
-    if (frenzyAttacker !== this.p2) this.drawFighter(this.p2);
+    if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
+    if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
 
     // Frenzy overlay — prefer frame sequence for mobile reliability, fall back to video.
     if (frenzyAttacker) {
