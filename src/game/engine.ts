@@ -177,9 +177,9 @@ const FIRE_DAMAGE = 12;
 const FIRE_KNOCKBACK = 320;
 
 // Flight tuning
-const FLY_ACCEL = 1300;          // px/s^2 toward target velocity
-const FLY_MAX = 360;             // top airspeed (px/s)
-const FLY_DAMP = 2.6;            // velocity damping per second when no input
+const FLY_ACCEL = 1700;          // px/s^2 toward target velocity (snappier response)
+const FLY_MAX = 420;             // top airspeed (px/s)
+const FLY_DAMP = 3.2;            // velocity damping per second when no input
 const HOVER_AMP = 4.5;           // pixels of idle hover bob
 const HOVER_RATE = 1.6;          // hover frequency (Hz-ish)
 
