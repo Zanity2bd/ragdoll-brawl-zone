@@ -998,6 +998,10 @@ export class GameEngine {
       }
     }
 
+    // Soft-body wobble (secondary motion). Skipped during full ragdoll/downed/getup
+    // because those branches return early above and own the body completely.
+    stepWobble(f.wobble, dt, f.vx, f.vy, f.onGround, f.flying, this.lowPower);
+
     // Maintain afterimage trail for fast skins
     const fast = f.skin.id === "flash" || f.skin.id === "atrain";
     if (fast && (Math.abs(f.vx) > 200 || f.meleeKind)) {
