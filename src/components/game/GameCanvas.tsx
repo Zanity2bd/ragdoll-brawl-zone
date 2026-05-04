@@ -797,7 +797,7 @@ function KickButton({ engine, snap, cpu }: { engine: GameEngine; snap: GameSnaps
   const Btn = ({ side, p, color }: { side: "left" | "right"; p: PlayerId; color: string }) => (
     <button
       type="button"
-      aria-label="Kick"
+      aria-label="Punch"
       onPointerDown={(e) => { e.preventDefault(); fire(p); }}
       onClick={(e) => e.preventDefault()}
       className="pointer-events-auto absolute rounded-full font-black flex items-center justify-center select-none touch-none active:scale-95 transition-transform"
