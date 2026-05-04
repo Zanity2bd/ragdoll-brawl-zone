@@ -399,6 +399,8 @@ function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
         <FrenzyBar
           cd={p.frenzyCd} max={p.frenzyCdMax} active={p.frenzyActive}
           side={side}
+          onActivate={isP1 ? () => engineRef.current?.pressFrenzy("p1") : undefined}
+          hint={isP1 ? "B · Tap" : "N"}
         />
       )}
     </div>
