@@ -790,7 +790,7 @@ export class GameEngine {
       if (!f.meleeKind) {
         const canFire = f.skin.id === "heatwave";
         if (canFire && intent.fire && f.fireCd <= 0) this.fire(f);
-        if (intent.melee && f.meleeCd <= 0) this.startMelee(f);
+        if (intent.melee && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) this.startMelee(f);
       }
       f.walkPhase += ldt * 1.4;
       f.x += f.vx * ldt;
@@ -923,7 +923,7 @@ export class GameEngine {
           this.teleTargeting = f.id;
           this.slowmoT = 5; this.slowmoMode = "tele";
         }
-        if (intent.melee && f.meleeCd <= 0) this.startMelee(f);
+        if (intent.melee && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) this.startMelee(f);
       }
 
       if (f.onGround) {
