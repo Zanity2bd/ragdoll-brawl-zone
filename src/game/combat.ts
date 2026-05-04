@@ -43,7 +43,7 @@ export const MOVES: Record<SkinId, MoveSpec> = {
   },
   homelander: {
     kind: "laserSweep", name: "Laser Sweep",
-    windup: 0.3, active: 0.55, recover: 0.25, cooldown: 1.8,
+    windup: 0.3, active: 0.55, recover: 0.25, cooldown: 4.8,
     range: 520, damage: 4, knockbackX: 60, knockbackY: -40,
     hitstop: 0.0, slowmoT: 0, shake: 4, ragdollT: 0,
     windupSfx: "blip", hitSfx: "laser",
