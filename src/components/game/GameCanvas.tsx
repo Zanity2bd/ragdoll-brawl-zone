@@ -131,6 +131,9 @@ export function GameCanvas() {
       // Flash: V = Time Freeze (P1), C = Lightning Blast (P1)
       if (e.code === "KeyV") { e.preventDefault(); engine.pressPower1("p1"); return; }
       if (e.code === "KeyC") { e.preventDefault(); engine.pressPower2("p1"); return; }
+      // Universal basic kick: T = P1, P = P2 (when not CPU)
+      if (e.code === "KeyT") { e.preventDefault(); engine.pressKick("p1"); return; }
+      if (e.code === "KeyP" && !cpuEnabledRef.current) { e.preventDefault(); engine.pressKick("p2"); return; }
       const m = KEY_MAP[e.code];
       if (!m) return;
       if (m.p === "p2" && cpuEnabledRef.current) return;
@@ -277,6 +280,7 @@ export function GameCanvas() {
         onClose={() => setSettingsOpen(false)}
       />
       {screen === "fight" && isTouch && engine && snap && <TouchControls engine={engine} snap={snap} cpu={cpuEnabled} />}
+      {screen === "fight" && engine && snap && <KickButton engine={engine} snap={snap} cpu={cpuEnabled} />}
 
       {screen === "splash" && (
         <Splash onPlay={() => { Sfx.unlock(); setScreen("map"); }} />
@@ -785,4 +789,42 @@ function Joystick({
   );
 }
 
+function KickButton({ engine, snap, cpu }: { engine: GameEngine; snap: GameSnapshot; cpu: boolean }) {
+  const fire = (p: PlayerId) => {
+    engine.pressKick(p);
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(12);
+  };
+  const Btn = ({ side, p, color }: { side: "left" | "right"; p: PlayerId; color: string }) => (
+    <button
+      type="button"
+      aria-label="Kick"
+      onPointerDown={(e) => { e.preventDefault(); fire(p); }}
+      onClick={(e) => e.preventDefault()}
+      className="pointer-events-auto absolute rounded-full font-black flex items-center justify-center select-none touch-none active:scale-95 transition-transform"
+      style={{
+        ...(side === "right"
+          ? { right: "calc(env(safe-area-inset-right, 0px) + 12px)" }
+          : { left: "calc(env(safe-area-inset-left, 0px) + 12px)" }),
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + 150px)",
+        width: "clamp(46px, 11vw, 64px)",
+        height: "clamp(46px, 11vw, 64px)",
+        background: `radial-gradient(circle at 35% 30%, color-mix(in oklab, ${color} 95%, white) 0%, ${color} 60%, color-mix(in oklab, ${color} 50%, black) 100%)`,
+        border: `2px solid color-mix(in oklab, ${color} 80%, white)`,
+        boxShadow: `0 4px 14px color-mix(in oklab, ${color} 40%, transparent), inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.35)`,
+        color: "rgba(0,0,0,0.78)",
+        fontSize: "clamp(18px, 4.5vw, 26px)",
+        letterSpacing: "0.05em",
+      }}
+    >
+      T
+    </button>
+  );
+  void snap;
+  return (
+    <>
+      <Btn side="right" p="p1" color="oklch(0.85 0.18 210)" />
+      {!cpu && <Btn side="left" p="p2" color="oklch(0.72 0.28 340)" />}
+    </>
+  );
+}
 
