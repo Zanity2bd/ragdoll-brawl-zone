@@ -1939,12 +1939,25 @@ export class GameEngine {
           }
           this.shockwaves.push({ x: ex, y: ey, r: 10, rMax: MAGMA_BLAST_RADIUS, life: 0.5, maxLife: 0.5, color: "oklch(0.96 0.18 60)" });
           this.shockwaves.push({ x: ex, y: ey, r: 18, rMax: MAGMA_BLAST_RADIUS * 1.4, life: 0.7, maxLife: 0.7, color: "oklch(0.62 0.22 25)" });
-          this.burst(ex, ey, "oklch(0.96 0.18 80)", 28);
-          this.burst(ex, ey, "oklch(0.78 0.22 40)", 22);
-          this.shake = Math.max(this.shake, 22);
-          this.impactFlash = Math.max(this.impactFlash, 0.7);
-          this.hitstopT = Math.max(this.hitstopT, 0.08);
-          Sfx.play("boom", 0.9);
+          this.shockwaves.push({ x: ex, y: ey, r: 28, rMax: MAGMA_BLAST_RADIUS * 1.8, life: 0.9, maxLife: 0.9, color: "oklch(0.40 0.10 30)" });
+          this.burst(ex, ey, "oklch(0.96 0.18 80)", 40);
+          this.burst(ex, ey, "oklch(0.78 0.22 40)", 32);
+          this.burst(ex, ey, "oklch(0.30 0.04 40)", 18);
+          // Outward fire shrapnel
+          for (let i = 0; i < 22; i++) {
+            const aa = Math.random() * Math.PI * 2;
+            const sp = 220 + Math.random() * 320;
+            this.particles.push({
+              x: ex, y: ey, vx: Math.cos(aa) * sp, vy: Math.sin(aa) * sp - 80,
+              life: 0.6, maxLife: 0.6,
+              color: Math.random() < 0.5 ? "oklch(0.96 0.18 70)" : "oklch(0.65 0.22 30)",
+              size: 2 + Math.random() * 3,
+            });
+          }
+          this.shake = Math.max(this.shake, 32);
+          this.impactFlash = Math.max(this.impactFlash, 0.95);
+          this.hitstopT = Math.max(this.hitstopT, 0.14);
+          Sfx.play("boom", 1.0); Sfx.play("heavy", 0.85); Sfx.play("thud", 0.7); Sfx.play("shock", 0.4);
         }
       } else {
         mb.explosionT += dt;
