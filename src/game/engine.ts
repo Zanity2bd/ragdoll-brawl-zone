@@ -397,6 +397,8 @@ export class GameEngine {
   private smokeClouds: SmokeCloud[] = [];
   // One-shot VO flags — reset each match.
   private homelanderVoPlayed = false;
+  // Deferred SFX cues — fire at engine-time T (survives pause; cleared on reset).
+  private pendingSfx: Array<{ at: number; name: import("./sfx").SfxName; vol: number }> = [];
   // Global time-freeze (Flash power 1): freezes everything except the freezer.
   private timeFreezeT = 0;
   private timeFreezer: PlayerId | null = null;
