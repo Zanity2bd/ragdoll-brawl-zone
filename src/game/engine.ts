@@ -3140,6 +3140,21 @@ function getPowerSpec(id: SkinId): PowerSpec {
         power1: { name: "Time Freeze", cd: TIMEFREEZE_CD },
         power2: { name: "Lightning Blast", cd: LIGHTNING_CD },
       };
+    case "superman":
+      return {
+        power1: { name: "Solar Flare", cd: SOLAR_FLARE_CD },
+        power2: { name: "Heat Vision", cd: HEAT_VISION_CD },
+      };
+    case "ironman":
+      return {
+        power1: { name: "Unibeam", cd: UNIBEAM_CD },
+        power2: { name: "Micro-Missiles", cd: MICRO_MISSILE_CD },
+      };
+    case "heatwave":
+      return {
+        power1: { name: "Inferno Wall", cd: INFERNO_WALL_CD },
+        power2: { name: "Magma Blast", cd: MAGMA_BLAST_CD },
+      };
     default:
       return {};
   }
