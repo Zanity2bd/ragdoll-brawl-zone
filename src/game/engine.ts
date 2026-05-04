@@ -1046,27 +1046,56 @@ export class GameEngine {
   }
 
   // ---------------- RENDER ----------------
+  // Visible world rect for current frame (set by render, used by pointer mapping).
+  private viewScale = 1;
+  private viewOffX = 0;
+  private viewOffY = 0;
+
   private render() {
     const ctx = this.ctx;
-    const sx = (Math.random() - 0.5) * this.shake;
-    const sy = (Math.random() - 0.5) * this.shake;
+    const shx = (Math.random() - 0.5) * this.shake;
+    const shy = (Math.random() - 0.5) * this.shake;
 
-    // Uniform-fit (contain) the 1280x720 stage into the actual canvas so
-    // characters and arena keep correct proportions on every device.
     const cw = this.canvas.width, ch = this.canvas.height;
-    // Cover-fit: fill the screen so characters/arena read large on mobile.
-    // Overflow on the long axis is clipped (stage stays centered).
-    const scale = Math.max(cw / W, ch / H);
-    const offX = (cw - W * scale) / 2 + sx;
-    const offY = (ch - H * scale) / 2 + sy;
+
+    // ---- Camera: center between fighters, zoom in for closeup combat. ----
+    // Base scale = cover-fit so the screen is always edge-to-edge filled.
+    const baseScale = Math.max(cw / W, ch / H);
+    // Zoom factor: closer when fighters are near each other, pulls back when far.
+    const dx = Math.abs(this.p1.x - this.p2.x);
+    const dy = Math.abs((this.p1.y + FIGHTER_H * 0.5) - (this.p2.y + FIGHTER_H * 0.5));
+    const spread = Math.hypot(dx, dy);
+    // Map spread → desired zoom (close fight = 2.0x, far fight = 1.35x)
+    const targetZoom = Math.max(1.35, Math.min(2.0, 520 / Math.max(220, spread)));
+    this.camZoom += (targetZoom - this.camZoom) * 0.08;
+    const worldScale = baseScale * this.camZoom;
+
+    // Visible world half-extents (in world units)
+    const vw = cw / worldScale, vh = ch / worldScale;
+    // Target focus = midpoint of fighters (slightly above feet for headroom)
+    const tx = (this.p1.x + this.p2.x) / 2;
+    const ty = (this.p1.y + this.p2.y) / 2 + FIGHTER_H * 0.3 - 40;
+    // Clamp camera so visible window stays inside the stage (no black edges).
+    const minCx = vw / 2, maxCx = W - vw / 2;
+    const minCy = vh / 2, maxCy = H - vh / 2;
+    const clampedTx = vw >= W ? W / 2 : Math.max(minCx, Math.min(maxCx, tx));
+    const clampedTy = vh >= H ? H / 2 : Math.max(minCy, Math.min(maxCy, ty));
+    // Smooth follow
+    this.camX += (clampedTx - this.camX) * 0.12;
+    this.camY += (clampedTy - this.camY) * 0.12;
+
+    const offX = cw / 2 - this.camX * worldScale + shx;
+    const offY = ch / 2 - this.camY * worldScale + shy;
+
+    this.viewScale = worldScale;
+    this.viewOffX = offX;
+    this.viewOffY = offY;
 
     ctx.save();
-    // Letterbox bars
-    ctx.fillStyle = "oklch(0.08 0.02 250)";
+    // Background fill in case any map leaves gaps
+    ctx.fillStyle = "oklch(0.06 0.02 250)";
     ctx.fillRect(0, 0, cw, ch);
-    ctx.setTransform(scale, 0, 0, scale, offX, offY);
-    // Clip to stage so background can't paint into letterbox bars
-    ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+    ctx.setTransform(worldScale, 0, 0, worldScale, offX, offY);
 
     getMap(this.mapId).drawBackground(ctx, this.elapsed, W, H, GROUND_Y);
 
