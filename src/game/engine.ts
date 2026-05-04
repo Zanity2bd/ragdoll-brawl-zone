@@ -274,11 +274,25 @@ export class GameEngine {
   private cpuDifficulty: Difficulty = "hard";
   private cpu: CpuController | null = null;
 
+  // Hulk frenzy video — preloaded once, drawn into canvas during cinematic
+  private frenzyVideo: HTMLVideoElement | null = null;
+  private frenzyVideoReady = false;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("no ctx");
     this.ctx = ctx;
+    if (typeof document !== "undefined") {
+      const v = document.createElement("video");
+      v.src = "/fx/hulk-special.webm";
+      v.preload = "auto";
+      v.muted = true;
+      v.playsInline = true;
+      v.crossOrigin = "anonymous";
+      v.addEventListener("loadeddata", () => { this.frenzyVideoReady = true; });
+      this.frenzyVideo = v;
+    }
     this.reset();
   }
 
