@@ -146,7 +146,10 @@ interface Fighter {
   bamfCombo: null | { step: number; t: number; nextAt: number; targetId: PlayerId };
 }
 
-interface SmokeCloud { x: number; y: number; r: number; rMax: number; life: number; maxLife: number; }
+interface SmokeCloud {
+  x: number; y: number; r: number; rMax: number; life: number; maxLife: number;
+  vx?: number; vy?: number; hue?: number; seed?: number; dense?: boolean;
+}
 
 interface Projectile {
   owner: PlayerId;
