@@ -138,7 +138,13 @@ interface Fighter {
   // Iron Man Unibeam: charge → fire phases
   unibeamChargeT: number;
   unibeamFireT: number;
+  // Batch-2 status
+  invisT: number;        // Batman smoke bomb invisibility / iframes
+  webSnareT: number;     // Spider-Man web snare lock
+  speedBoostT: number;   // A-Train Sonic Sprint
 }
+
+interface SmokeCloud { x: number; y: number; r: number; rMax: number; life: number; maxLife: number; }
 
 interface Projectile {
   owner: PlayerId;
