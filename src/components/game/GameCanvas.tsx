@@ -453,16 +453,17 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
 }
 
 function PlayerControls({
-  side, color, p, onMove, onJump, onFire, onPunch, onTele,
+  side, color, p, onMove, onJump, onFire, onPunch, onTele, canFly,
 }: {
   side: "left" | "right";
   color: string;
   p: GameSnapshot["p1"];
-  onMove: (x: number) => void;
+  onMove: (x: number, y: number) => void;
   onJump: () => void;
   onFire: () => void;
   onPunch: () => void;
   onTele: () => void;
+  canFly?: boolean;
 }) {
   const isHeatwave = p.name === "Heatwave";
   const isNightcrawler = p.name === "Nightcrawler";
@@ -479,7 +480,8 @@ function PlayerControls({
         onSpecial={onSpecial}
         specialCd={cd}
         specialMax={max}
-        specialLabel={label}
+        specialLabel={canFly ? `${label} · Fly` : label}
+        verticalSteer={!!canFly}
       />
     </div>
   );
