@@ -2300,6 +2300,59 @@ export class GameEngine {
       ctx.restore();
     }
 
+    // ---- Hulk: angry expression (furrowed brows, scowl, bared teeth) ----
+    if (skin.id === "hulk" && !ghost) {
+      ctx.save();
+      // Furrowed thick brows angled inward over the eyes
+      ctx.strokeStyle = "oklch(0.10 0.05 25)";
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = "round";
+      // Left brow: outer-low to inner-high (angry V)
+      ctx.beginPath();
+      ctx.moveTo(-5.5, headY - 2.6);
+      ctx.lineTo(-1.2, headY - 1.4);
+      ctx.stroke();
+      // Right brow
+      ctx.beginPath();
+      ctx.moveTo(5.5, headY - 2.6);
+      ctx.lineTo(1.2, headY - 1.4);
+      ctx.stroke();
+      // Brow shadow / forehead crease
+      ctx.strokeStyle = "oklch(0.18 0.10 25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-3, headY - 4);
+      ctx.lineTo(0, headY - 3.4);
+      ctx.lineTo(3, headY - 4);
+      ctx.stroke();
+      // Snarling mouth — open, downturned, with bared teeth
+      const my = headY + 4.5;
+      // Dark mouth interior
+      ctx.fillStyle = "oklch(0.12 0.02 25)";
+      ctx.beginPath();
+      ctx.moveTo(-4.5, my);
+      ctx.quadraticCurveTo(-2, my + 2.4, 0, my + 1.8);
+      ctx.quadraticCurveTo(2, my + 2.4, 4.5, my);
+      ctx.quadraticCurveTo(2, my + 0.4, 0, my + 0.6);
+      ctx.quadraticCurveTo(-2, my + 0.4, -4.5, my);
+      ctx.closePath();
+      ctx.fill();
+      // Bared teeth
+      ctx.fillStyle = "oklch(0.95 0.02 80)";
+      ctx.fillRect(-3.2, my + 0.7, 1.2, 1.2);
+      ctx.fillRect(-1.6, my + 0.9, 1.2, 1.2);
+      ctx.fillRect(0.4, my + 0.9, 1.2, 1.2);
+      ctx.fillRect(2.0, my + 0.7, 1.2, 1.2);
+      // Strong jawline shadow
+      ctx.strokeStyle = "oklch(0.16 0.06 25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-headR + 1, headY + 2);
+      ctx.quadraticCurveTo(0, headY + headR - 1, headR - 1, headY + 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     if (skin.beard) {
       ctx.fillStyle = "oklch(0.14 0.02 60)";
       ctx.beginPath();
