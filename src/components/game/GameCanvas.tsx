@@ -67,11 +67,29 @@ export function GameCanvas() {
     engineRef.current = engine;
     engine.onSnapshot = setSnap;
 
-    // Detect low-power profile (mobile / few cores / small screen)
+    // Detect device tier: low-power gets simpler effects + lower DPR;
+    // high-end gets crisper rendering up to DPR 2.
     const isTouchDev = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
-    const fewCores = (navigator.hardwareConcurrency || 8) <= 4;
+    const cores = navigator.hardwareConcurrency || 8;
+    const mem = (navigator as any).deviceMemory || 8;
     const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 700;
-    engine.setLowPower(isTouchDev || fewCores || smallScreen);
+    const lowPower = (isTouchDev && (cores <= 4 || mem <= 3)) || smallScreen;
+    const highEnd = !lowPower && cores >= 8 && mem >= 6;
+    const dprCap = lowPower ? 1 : highEnd ? 2 : 1.5;
+
+    const resize = () => {
+      const r = canvas.getBoundingClientRect();
+      const dpr = Math.min(devicePixelRatio || 1, dprCap);
+      canvas.width = Math.floor(r.width * dpr);
+      canvas.height = Math.floor(r.height * dpr);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const engine = new GameEngine(canvas);
+    engineRef.current = engine;
+    engine.onSnapshot = setSnap;
+    engine.setLowPower(lowPower);
 
     engine.start();
 
