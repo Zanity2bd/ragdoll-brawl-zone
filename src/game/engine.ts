@@ -165,6 +165,10 @@ export class GameEngine {
 
   public onSnapshot: ((s: GameSnapshot) => void) | null = null;
 
+  private cpuEnabled = false;
+  private cpuDifficulty: import("./ai").Difficulty = "hard";
+  private cpu: import("./ai").CpuController | null = null;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const ctx = canvas.getContext("2d");
