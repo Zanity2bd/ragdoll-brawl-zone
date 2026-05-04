@@ -1,6 +1,40 @@
 // Procedural walk-cycle pose for stickman fighters.
-// Premium gait: smooth sinusoidal swing, planted stance, gentle vertical bob,
-// active arm counter-swing, subtle hand bob and shoulder/hip roll.
+// Grounded gait is driven by a baked Mixamo walk-cycle table (walkCycle.ts);
+// idle, jump, attack, and flying-kick branches stay procedural.
+
+import { WALK_CYCLE, WALK_HIP_SWAY } from "./walkCycle";
+
+// Lerp a single 2D bone between two adjacent baked frames.
+const N_WALK = WALK_CYCLE.length;
+function lerp2(a: readonly [number, number], b: readonly [number, number], k: number): [number, number] {
+  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+}
+// Sample the baked walk cycle at a normalized time t (0..1, wraps).
+// Returns the bones we actually use, in the same 2D normalized space (Y up,
+// X = forward in facing direction, |hip→foot| ≈ 1).
+function sampleWalk(t: number) {
+  const f = (((t % 1) + 1) % 1) * N_WALK;
+  const i = Math.floor(f) % N_WALK;
+  const j = (i + 1) % N_WALK;
+  const k = f - Math.floor(f);
+  const A = WALK_CYCLE[i], B = WALK_CYCLE[j];
+  return {
+    LU: lerp2(A.LeftUpLeg, B.LeftUpLeg, k),
+    LK: lerp2(A.LeftLeg, B.LeftLeg, k),
+    LF: lerp2(A.LeftFoot, B.LeftFoot, k),
+    RU: lerp2(A.RightUpLeg, B.RightUpLeg, k),
+    RK: lerp2(A.RightLeg, B.RightLeg, k),
+    RF: lerp2(A.RightFoot, B.RightFoot, k),
+    LA: lerp2(A.LeftArm, B.LeftArm, k),
+    LE: lerp2(A.LeftForeArm, B.LeftForeArm, k),
+    LH: lerp2(A.LeftHand, B.LeftHand, k),
+    RA: lerp2(A.RightArm, B.RightArm, k),
+    RE: lerp2(A.RightForeArm, B.RightForeArm, k),
+    RH: lerp2(A.RightHand, B.RightHand, k),
+    sway: WALK_HIP_SWAY[i] + (WALK_HIP_SWAY[j] - WALK_HIP_SWAY[i]) * k,
+  };
+}
+
 
 export interface Pose {
   headOffsetY: number;
