@@ -72,27 +72,45 @@ export function computeWalkPose(
   const lean = moving ? facing * Math.min(0.16, speed / 1700) : 0;
 
   if (!onGround) {
-    const tuck = vy < 0 ? 1 : 0.5;
-    const kneeX = 7 * tuck;
-    const kneeY = hipYBase + 14;
-    const footX = 5 * tuck;
-    const footY = hipYBase + 22 + (1 - tuck) * 14;
-    const handX = 14 + facing * 4;
-    const handY = 28;
+    // Three-phase jump: launch (vy<<0) → apex (|vy|≈0) → fall (vy>0).
+    // Knees tuck high during launch, splay outward at apex, extend on fall to "stick" landing.
+    const apex = 1 - Math.min(1, Math.abs(vy) / 320); // 1 at apex, 0 launching/falling fast
+    const launching = vy < 0;
+    const fallT = launching ? 0 : Math.min(1, vy / 320);
+    const tuck = launching ? Math.min(1, -vy / 380) : 0;
+
+    // Hip/knee/foot
+    const legSplay = 4 + apex * 4;
+    const kneeY = hipYBase + (10 + tuck * 12 - fallT * 4);
+    const kneeXIn = 5 + tuck * 4;
+    const footTuck = launching ? 14 + tuck * 6 : 22 + fallT * 10;
+    const footYL = hipYBase + footTuck;
+    const footYR = hipYBase + footTuck - apex * 3;
+
+    // Arms swing forward on launch, splay wide at apex, pull back on fall
+    const armForward = facing * (10 + tuck * 8);
+    const armApexOut = facing * (-2 - apex * 6);
+    const armFallBack = facing * (-12 - fallT * 4);
+    const handX = launching ? armForward : (apex > 0.5 ? armApexOut : armFallBack);
+    const handY = 22 + (launching ? -tuck * 6 : apex * 2 + fallT * 6);
+    const handXOpp = -handX * 0.7;
+
+    const lean = facing * (0.08 + tuck * 0.08 - fallT * 0.04);
+
     return {
-      headOffsetY: -2,
-      shoulderY: 28,
-      hipY: hipYBase,
-      legL: [-3, hipYBase, -3 - kneeX, kneeY, -2 - footX, footY],
-      legR: [3, hipYBase, 3 + kneeX, kneeY, 2 + footX, footY],
-      armL: [-4, 28, -10, 32, -handX, handY],
-      armR: [4, 28, 10, 32, handX, handY],
-      handL: [-handX, handY],
+      headOffsetY: -3 - tuck * 1.5,
+      shoulderY: 28 - tuck * 1.5,
+      hipY: hipYBase - tuck * 1,
+      legL: [-3, hipYBase, -3 - kneeXIn, kneeY, -2 - legSplay, footYL],
+      legR: [3, hipYBase, 3 + kneeXIn, kneeY, 2 + legSplay, footYR],
+      armL: [-4, 28, -10, 30 + apex * 2, handXOpp, handY + 2],
+      armR: [4, 28, 10, 30 + apex * 2, handX, handY],
+      handL: [handXOpp, handY + 2],
       handR: [handX, handY],
-      footL: [-2 - footX, footY],
-      footR: [2 + footX, footY],
-      lean: facing * 0.12,
-      shoulderRoll: 0,
+      footL: [-2 - legSplay, footYL],
+      footR: [2 + legSplay, footYR],
+      lean,
+      shoulderRoll: -facing * apex * 0.05,
     };
   }
 
