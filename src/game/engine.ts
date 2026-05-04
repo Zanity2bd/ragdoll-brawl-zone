@@ -416,6 +416,7 @@ export class GameEngine {
   private magmas: MagmaBlast[] = [];
   private smokeClouds: SmokeCloud[] = [];
   private debris: Debris[] = [];
+  private props: Prop[] = [];
   // One-shot VO flags — reset each match.
   private homelanderVoPlayed = false;
   // Beam edge-trigger tracking for start/end recoil + shake + audio.
