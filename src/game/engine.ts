@@ -377,16 +377,21 @@ export class GameEngine {
     return true;
   }
 
+  /** Map a CSS-pixel point to world/stage coords using the live camera. */
+  cssToStage(cx: number, cy: number) {
+    const rect = this.canvas.getBoundingClientRect();
+    // viewScale/Off are in canvas-bitmap units (DPR-scaled).
+    const dprX = this.canvas.width / Math.max(1, rect.width);
+    const dprY = this.canvas.height / Math.max(1, rect.height);
+    const px = (cx - rect.left) * dprX;
+    const py = (cy - rect.top) * dprY;
+    return { sx: (px - this.viewOffX) / this.viewScale, sy: (py - this.viewOffY) / this.viewScale };
+  }
+
   handlePointer(canvasX: number, canvasY: number) {
     if (!this.teleTargeting) return;
     const f = this.teleTargeting === "p1" ? this.p1 : this.p2;
-    const rect = this.canvas.getBoundingClientRect();
-    // Match the cover-fit used in render(): map CSS pixels -> stage coords.
-    const scale = Math.max(rect.width / W, rect.height / H);
-    const offX = (rect.width - W * scale) / 2;
-    const offY = (rect.height - H * scale) / 2;
-    const sx = (canvasX - offX) / scale;
-    const sy = (canvasY - offY) / scale;
+    const { sx, sy } = this.cssToStage(canvasX, canvasY);
     this.burst(f.x, f.y + FIGHTER_H / 2, f.skin.glow, 24);
     f.x = Math.max(40, Math.min(W - 40, sx));
     f.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, sy - FIGHTER_H / 2));
