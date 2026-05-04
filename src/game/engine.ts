@@ -204,6 +204,19 @@ interface Debris {
   life: number; maxLife: number; color: string;
 }
 
+// Foreground decorative props that can be shattered by laser overload.
+// Walk-through (no collision) — purely visual/destructible flavor for each map.
+type PropKind = "car" | "building" | "barrel" | "crate" | "lamppost" | "trashcan" | "vending" | "pillar";
+interface Prop {
+  x: number; y: number; w: number; h: number;
+  kind: PropKind;
+  destroyed?: boolean;
+  hue?: number;          // primary hue for body color
+  accent?: number;       // accent hue (glow / trim / door)
+  hasDoor?: boolean;     // glowing walkable door highlight
+  seed?: number;         // for deterministic detail (windows, panels)
+}
+
 export interface Intents {
   left: boolean;
   right: boolean;
