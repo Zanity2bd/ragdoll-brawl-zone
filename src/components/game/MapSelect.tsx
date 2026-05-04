@@ -3,10 +3,10 @@ import { useEffect, useRef } from "react";
 
 export function MapSelect({ onPick }: { onPick: (id: MapId) => void }) {
   return (
-    <div className="absolute inset-0 z-20 bg-background/95 backdrop-blur-md flex flex-col items-center justify-center p-6 overflow-auto">
-      <div className="font-mono text-xs tracking-[0.4em] text-foreground/60 uppercase mb-2">Select Arena</div>
-      <h2 className="text-3xl md:text-5xl font-black tracking-widest text-foreground mb-10">CHOOSE YOUR BATTLEGROUND</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-6xl">
+    <div className="absolute inset-0 z-20 bg-background/95 backdrop-blur-md flex flex-col items-center justify-start sm:justify-center p-4 sm:p-6 overflow-auto">
+      <div className="font-mono text-[10px] sm:text-xs tracking-[0.4em] text-foreground/60 uppercase mb-2 mt-4 sm:mt-0">Select Arena</div>
+      <h2 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-widest text-foreground mb-6 sm:mb-10 text-center">CHOOSE YOUR BATTLEGROUND</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 w-full max-w-6xl">
         {MAPS.map((m) => (
           <MapCard key={m.id} mapId={m.id} onPick={() => onPick(m.id)} />
         ))}
