@@ -80,6 +80,9 @@ interface Fighter {
   flying: boolean;
   hoverPhase: number;
   superCd: number;
+  // ledge / drop-through state
+  dropT: number;            // ignore one-way platforms while > 0
+  ledgeFlash: number;       // brief glow on auto-grab landing
   // super-dash
   dash: null | {
     t: number;
@@ -120,7 +123,13 @@ interface Particle {
 interface Shockwave { x: number; y: number; r: number; rMax: number; life: number; maxLife: number; color: string; }
 interface Beam { owner: PlayerId; x: number; y: number; angle: number; length: number; life: number; }
 
-interface Platform { x: number; y: number; w: number; h: number; }
+interface Platform {
+  x: number; y: number; w: number; h: number;
+  // "platform" = thin one-way ledge (jump up through, land on top, drop-through with down).
+  // "cover"    = solid block: lands on top AND blocks horizontal movement & projectiles.
+  kind: "platform" | "cover";
+  accent?: string;
+}
 
 export interface Intents {
   left: boolean;
@@ -190,9 +199,16 @@ export class GameEngine {
   private particles: Particle[] = [];
   private shockwaves: Shockwave[] = [];
   private beams: Beam[] = [];
+  // Multi-tier interactive level: low cover blocks, mid ledges, a high vantage.
   private platforms: Platform[] = [
-    { x: 280, y: 440, w: 220, h: 12 },
-    { x: 780, y: 440, w: 220, h: 12 },
+    // Low cover blocks (solid) — partial cover / tactical positioning
+    { x: 180, y: 540, w: 90, h: 60, kind: "cover", accent: "oklch(0.55 0.10 250)" },
+    { x: 1010, y: 540, w: 90, h: 60, kind: "cover", accent: "oklch(0.55 0.10 250)" },
+    // Mid ledges (one-way, jump-through, drop-through)
+    { x: 280, y: 460, w: 220, h: 12, kind: "platform" },
+    { x: 780, y: 460, w: 220, h: 12, kind: "platform" },
+    // High vantage center
+    { x: 540, y: 340, w: 200, h: 12, kind: "platform" },
   ];
 
   private intents: Record<PlayerId, Intents> = {
@@ -326,6 +342,7 @@ export class GameEngine {
       slowedT: 0,
       trail: [],
       canFly, flying: canFly, hoverPhase: 0, superCd: 0,
+      dropT: 0, ledgeFlash: 0,
       dash: null,
     };
   }
@@ -472,6 +489,18 @@ export class GameEngine {
         if (sp > cap) { pr.vx = pr.vx / sp * cap; pr.vy = pr.vy / sp * cap; }
       }
       pr.x += pr.vx * sdt; pr.y += pr.vy * sdt; pr.life -= dt;
+      // Cover blocks projectiles (web/batarang excluded — web is a tether, batarang homes)
+      if (pr.kind === "bolt") {
+        for (const pl of this.platforms) {
+          if (pl.kind !== "cover") continue;
+          if (pr.x > pl.x && pr.x < pl.x + pl.w && pr.y > pl.y && pr.y < pl.y + pl.h) {
+            this.burst(pr.x, pr.y, pr.glow, 14);
+            this.shake = Math.max(this.shake, 6);
+            pr.life = 0;
+            break;
+          }
+        }
+      }
       if (pr.kind === "bolt" && (!this.lowPower || Math.random() < 0.5)) {
         this.particles.push({
           x: pr.x, y: pr.y,
@@ -863,7 +892,19 @@ export class GameEngine {
         else if (f.vx < 0) f.vx = Math.min(0, f.vx + fr);
       }
 
-      if (!locked && intent.jump && f.onGround) { f.vy = -JUMP_V; f.onGround = false; }
+      // Jump (with drop-through if pressing down on a one-way platform)
+      const wantsDrop = !locked && intent.jump && intent.ay > 0.5 && f.onGround;
+      if (wantsDrop) {
+        // Allow falling through one-way ledges briefly
+        f.dropT = 0.18;
+        f.onGround = false;
+        f.y += 2;
+      } else if (!locked && intent.jump && f.onGround) {
+        f.vy = -JUMP_V; f.onGround = false;
+      }
+      if (f.dropT > 0) f.dropT -= ldt;
+      if (f.ledgeFlash > 0) f.ledgeFlash -= ldt;
+
       if (!f.meleeKind) {
         const canFire = f.skin.id === "heatwave";
         const canTele = f.skin.id === "nightcrawler";
@@ -882,6 +923,7 @@ export class GameEngine {
         f.walkPhase += ldt * 1.2;
       }
 
+      const prevY = f.y;
       f.vy += GRAVITY * ldt;
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
@@ -889,22 +931,64 @@ export class GameEngine {
       if (f.x < 30) { f.x = 30; f.vx = 0; }
       if (f.x > W - 30) { f.x = W - 30; f.vx = 0; }
 
+      // Cover blocks: solid horizontal collision (lateral) — push fighter out.
+      for (const pl of this.platforms) {
+        if (pl.kind !== "cover") continue;
+        const hw = FIGHTER_W / 2;
+        const overlapX = f.x + hw > pl.x && f.x - hw < pl.x + pl.w;
+        const overlapY = f.y + FIGHTER_H > pl.y + 2 && f.y < pl.y + pl.h;
+        if (overlapX && overlapY) {
+          // Resolve along the smaller penetration axis
+          const fromLeft = (f.x + hw) - pl.x;
+          const fromRight = (pl.x + pl.w) - (f.x - hw);
+          if (fromLeft < fromRight) { f.x = pl.x - hw; if (f.vx > 0) f.vx = 0; }
+          else { f.x = pl.x + pl.w + hw; if (f.vx < 0) f.vx = 0; }
+        }
+      }
+
+      let landedOn: Platform | null = null;
+
       if (f.y + FIGHTER_H >= GROUND_Y) {
         f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
       } else { f.onGround = false; }
 
       for (const pl of this.platforms) {
-        const prevY = f.y - f.vy * ldt;
         const feet = f.y + FIGHTER_H;
         const prevFeet = prevY + FIGHTER_H;
-        if (
-          f.vy >= 0 &&
-          prevFeet <= pl.y + 2 &&
-          feet >= pl.y &&
-          f.x + FIGHTER_W / 2 > pl.x &&
-          f.x - FIGHTER_W / 2 < pl.x + pl.w
-        ) {
+        const hw = FIGHTER_W / 2;
+        const overX = f.x + hw > pl.x && f.x - hw < pl.x + pl.w;
+        if (!overX) continue;
+
+        // Standard top-landing (works for both kinds)
+        if (f.vy >= 0 && prevFeet <= pl.y + 2 && feet >= pl.y && f.dropT <= 0) {
           f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
+          landedOn = pl; continue;
+        }
+
+        // Auto ledge-grab: forgiving catch when arc clips a one-way ledge edge.
+        if (pl.kind === "platform" && f.vy >= -40 && f.dropT <= 0 && !f.onGround) {
+          const margin = 16; // forgiveness in px above the ledge
+          if (feet >= pl.y - margin && feet <= pl.y + 18 && prevFeet <= pl.y + margin + 4) {
+            // Snap onto the ledge — feels like an auto-grab
+            f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
+            f.ledgeFlash = 0.3;
+            landedOn = pl;
+          }
+        }
+      }
+
+      // Landing dust (only on fresh landings: was airborne last frame)
+      if (landedOn && Math.abs(prevY - f.y) > 4 && !this.lowPower) {
+        for (let i = 0; i < 5; i++) {
+          this.particles.push({
+            x: f.x + (Math.random() - 0.5) * 22,
+            y: landedOn.y - 2,
+            vx: (Math.random() - 0.5) * 70,
+            vy: -10 - Math.random() * 25,
+            life: 0.35, maxLife: 0.35,
+            color: "oklch(0.78 0.04 230)",
+            size: 1.6 + Math.random() * 1.6,
+          });
         }
       }
     }
@@ -1321,18 +1405,54 @@ export class GameEngine {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
 
-    // Platforms — beveled neon slab with rim light
+    // Platforms — different look per kind
     for (const pl of this.platforms) {
-      if (!this.lowPower) { ctx.shadowBlur = 18; ctx.shadowColor = "oklch(0.75 0.22 215)"; }
-      const g = ctx.createLinearGradient(pl.x, pl.y, pl.x, pl.y + pl.h);
-      g.addColorStop(0, "oklch(0.55 0.18 230)");
-      g.addColorStop(1, "oklch(0.30 0.14 235)");
-      ctx.fillStyle = g;
-      ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
-      ctx.shadowBlur = 0;
-      // Top rim
-      ctx.fillStyle = "oklch(0.92 0.10 215 / 0.9)";
-      ctx.fillRect(pl.x, pl.y, pl.w, 1.2);
+      if (pl.kind === "cover") {
+        // Solid cover block — beveled stone with metallic rim
+        const g = ctx.createLinearGradient(pl.x, pl.y, pl.x, pl.y + pl.h);
+        g.addColorStop(0, "oklch(0.40 0.04 250)");
+        g.addColorStop(1, "oklch(0.18 0.03 250)");
+        ctx.fillStyle = g;
+        ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
+        // Rim highlights
+        ctx.fillStyle = "oklch(0.70 0.05 235 / 0.85)";
+        ctx.fillRect(pl.x, pl.y, pl.w, 2);
+        ctx.fillStyle = "oklch(0.10 0.02 250 / 0.6)";
+        ctx.fillRect(pl.x, pl.y + pl.h - 2, pl.w, 2);
+        // Side bevels
+        ctx.fillStyle = "oklch(0.50 0.05 240 / 0.5)";
+        ctx.fillRect(pl.x, pl.y + 2, 2, pl.h - 4);
+        ctx.fillStyle = "oklch(0.12 0.02 250 / 0.6)";
+        ctx.fillRect(pl.x + pl.w - 2, pl.y + 2, 2, pl.h - 4);
+      } else {
+        if (!this.lowPower) { ctx.shadowBlur = 18; ctx.shadowColor = "oklch(0.75 0.22 215)"; }
+        const g = ctx.createLinearGradient(pl.x, pl.y, pl.x, pl.y + pl.h);
+        g.addColorStop(0, "oklch(0.55 0.18 230)");
+        g.addColorStop(1, "oklch(0.30 0.14 235)");
+        ctx.fillStyle = g;
+        ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
+        ctx.shadowBlur = 0;
+        // Top rim
+        ctx.fillStyle = "oklch(0.92 0.10 215 / 0.9)";
+        ctx.fillRect(pl.x, pl.y, pl.w, 1.2);
+      }
+    }
+
+    // Ledge-grab flash on fighters
+    if (!this.lowPower) {
+      ctx.globalCompositeOperation = "lighter";
+      for (const f of [this.p1, this.p2]) {
+        if (f.ledgeFlash > 0) {
+          const a = Math.min(1, f.ledgeFlash / 0.3);
+          ctx.globalAlpha = a * 0.5;
+          ctx.fillStyle = f.skin.glow;
+          ctx.beginPath();
+          ctx.arc(f.x, f.y + FIGHTER_H, 22 + (1 - a) * 18, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
     }
 
     // Shockwaves
