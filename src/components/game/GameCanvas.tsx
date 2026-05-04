@@ -1,0 +1,284 @@
+import { useEffect, useRef, useState } from "react";
+import { GameEngine, type GameSnapshot, type PlayerId } from "@/game/engine";
+
+const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" }> = {
+  KeyA: { p: "p1", action: "left" },
+  KeyD: { p: "p1", action: "right" },
+  KeyW: { p: "p1", action: "jump" },
+  KeyF: { p: "p1", action: "fire" },
+  KeyG: { p: "p1", action: "teleport" },
+  ArrowLeft: { p: "p2", action: "left" },
+  ArrowRight: { p: "p2", action: "right" },
+  ArrowUp: { p: "p2", action: "jump" },
+  KeyK: { p: "p2", action: "fire" },
+  KeyL: { p: "p2", action: "teleport" },
+};
+
+export function GameCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const engineRef = useRef<GameEngine | null>(null);
+  const [snap, setSnap] = useState<GameSnapshot | null>(null);
+  const [isTouch, setIsTouch] = useState(false);
+
+  useEffect(() => {
+    setIsTouch(window.matchMedia("(hover: none) and (pointer: coarse)").matches);
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current!;
+    const resize = () => {
+      const r = canvas.getBoundingClientRect();
+      canvas.width = Math.floor(r.width * devicePixelRatio);
+      canvas.height = Math.floor(r.height * devicePixelRatio);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const engine = new GameEngine(canvas);
+    engineRef.current = engine;
+    engine.onSnapshot = setSnap;
+    engine.start();
+
+    const down = (e: KeyboardEvent) => {
+      const m = KEY_MAP[e.code];
+      if (!m) return;
+      e.preventDefault();
+      if (m.action === "fire" || m.action === "teleport" || m.action === "jump") {
+        engine.setIntent(m.p, { [m.action]: true });
+      } else {
+        engine.setIntent(m.p, { [m.action]: true });
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      const m = KEY_MAP[e.code];
+      if (!m) return;
+      if (m.action === "left" || m.action === "right") {
+        engine.setIntent(m.p, { [m.action]: false });
+      }
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+
+    const click = (e: MouseEvent) => {
+      const r = canvas.getBoundingClientRect();
+      engine.handlePointer(e.clientX - r.left, e.clientY - r.top);
+    };
+    const touch = (e: TouchEvent) => {
+      if (!engine.isTeleTargeting()) return;
+      const t = e.touches[0] || e.changedTouches[0];
+      if (!t) return;
+      e.preventDefault();
+      const r = canvas.getBoundingClientRect();
+      engine.handlePointer(t.clientX - r.left, t.clientY - r.top);
+    };
+    canvas.addEventListener("click", click);
+    canvas.addEventListener("touchstart", touch, { passive: false });
+
+    return () => {
+      engine.stop();
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      canvas.removeEventListener("click", click);
+      canvas.removeEventListener("touchstart", touch);
+    };
+  }, []);
+
+  const engine = engineRef.current;
+
+  return (
+    <div className="relative w-full h-full select-none">
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full"
+        style={{ touchAction: "none" }}
+      />
+      {snap && <HUD snap={snap} onRematch={() => engine?.reset()} />}
+      {isTouch && engine && <TouchControls engine={engine} />}
+    </div>
+  );
+}
+
+function HUD({ snap, onRematch }: { snap: GameSnapshot; onRematch: () => void }) {
+  return (
+    <>
+      <div className="pointer-events-none absolute top-0 left-0 right-0 p-4 flex gap-4 items-start">
+        <HpBar p={snap.p1} side="left" />
+        <div className="flex-1" />
+        <HpBar p={snap.p2} side="right" />
+      </div>
+
+      {snap.phase === "intro" && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div
+            className="text-7xl font-black tracking-widest"
+            style={{
+              color: "oklch(0.95 0.15 60)",
+              textShadow: "0 0 30px oklch(0.75 0.22 45)",
+              animation: "fade-in 0.4s ease-out",
+            }}
+          >
+            FIGHT!
+          </div>
+        </div>
+      )}
+
+      {snap.phase === "ko" && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/60 backdrop-blur-sm">
+          <div className="text-center">
+            <div
+              className="text-8xl font-black tracking-widest mb-4"
+              style={{
+                color: snap.winner === "p1" ? "oklch(0.85 0.18 210)" : "oklch(0.72 0.28 340)",
+                textShadow: `0 0 40px ${snap.winner === "p1" ? "oklch(0.75 0.22 215)" : "oklch(0.65 0.30 345)"}`,
+              }}
+            >
+              K.O.
+            </div>
+            <div className="text-2xl text-foreground/80 mb-6 font-mono">
+              {snap.winner === "p1" ? snap.p1.name : snap.p2.name} wins
+            </div>
+            <button
+              onClick={onRematch}
+              className="px-8 py-3 rounded-md font-mono uppercase tracking-widest text-sm border border-foreground/20 hover:bg-foreground/10 transition-colors"
+              style={{ color: "oklch(0.95 0.05 250)" }}
+            >
+              Rematch
+            </button>
+          </div>
+        </div>
+      )}
+
+      {snap.slowmo && (
+        <div className="pointer-events-none absolute inset-0 flex items-end justify-center pb-32">
+          <div className="font-mono text-sm tracking-widest text-foreground/70 animate-pulse">
+            ◇ SELECT TELEPORT TARGET ◇
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function HpBar({ p, side }: { p: GameSnapshot["p1"]; side: "left" | "right" }) {
+  const isP1 = p.id === "p1";
+  const color = isP1 ? "oklch(0.85 0.18 210)" : "oklch(0.72 0.28 340)";
+  const glow = isP1 ? "oklch(0.75 0.22 215)" : "oklch(0.65 0.30 345)";
+  const pct = (p.hp / p.maxHp) * 100;
+  return (
+    <div className={`flex-1 max-w-md ${side === "right" ? "items-end" : ""} flex flex-col gap-2`}>
+      <div className={`flex items-center gap-3 ${side === "right" ? "flex-row-reverse" : ""}`}>
+        <div className="font-mono text-xs tracking-widest uppercase" style={{ color }}>
+          {p.name}
+        </div>
+        <div className="font-mono text-xs text-foreground/60">{Math.ceil(p.hp)} HP</div>
+      </div>
+      <div className="h-3 bg-foreground/10 rounded-sm overflow-hidden border border-foreground/10">
+        <div
+          className="h-full transition-[width] duration-200"
+          style={{
+            width: `${pct}%`,
+            background: color,
+            boxShadow: `0 0 12px ${glow}`,
+            marginLeft: side === "right" ? "auto" : 0,
+          }}
+        />
+      </div>
+      <div className={`flex gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
+        <CdPill label={isP1 ? "F · Fire" : "K · Fire"} cd={p.fireCd} max={p.fireCdMax} color={color} />
+        <CdPill label={isP1 ? "G · Tele" : "L · Tele"} cd={p.teleCd} max={p.teleCdMax} color={color} />
+      </div>
+    </div>
+  );
+}
+
+function CdPill({ label, cd, max, color }: { label: string; cd: number; max: number; color: string }) {
+  const ready = cd <= 0;
+  const pct = ready ? 100 : (1 - cd / max) * 100;
+  return (
+    <div
+      className="relative px-3 py-1 rounded-sm border font-mono text-[10px] tracking-widest uppercase overflow-hidden"
+      style={{
+        borderColor: ready ? color : "oklch(0.4 0.05 250)",
+        color: ready ? color : "oklch(0.6 0.03 250)",
+      }}
+    >
+      <div
+        className="absolute inset-y-0 left-0 opacity-20"
+        style={{ width: `${pct}%`, background: color }}
+      />
+      <span className="relative">{label}</span>
+    </div>
+  );
+}
+
+function TouchControls({ engine }: { engine: GameEngine }) {
+  const hold = (p: PlayerId, action: "left" | "right", on: boolean) =>
+    engine.setIntent(p, { [action]: on });
+  return (
+    <div className="absolute inset-x-0 bottom-0 p-4 flex justify-between pointer-events-none">
+      <Pad
+        onLeft={(d) => hold("p1", "left", d)}
+        onRight={(d) => hold("p1", "right", d)}
+        onJump={() => engine.pressJump("p1")}
+        onFire={() => engine.pressFire("p1")}
+        onTele={() => engine.pressTeleport("p1")}
+        color="oklch(0.85 0.18 210)"
+      />
+      <Pad
+        onLeft={(d) => hold("p2", "left", d)}
+        onRight={(d) => hold("p2", "right", d)}
+        onJump={() => engine.pressJump("p2")}
+        onFire={() => engine.pressFire("p2")}
+        onTele={() => engine.pressTeleport("p2")}
+        color="oklch(0.72 0.28 340)"
+        mirror
+      />
+    </div>
+  );
+}
+
+function Pad({
+  onLeft, onRight, onJump, onFire, onTele, color, mirror,
+}: {
+  onLeft: (d: boolean) => void;
+  onRight: (d: boolean) => void;
+  onJump: () => void;
+  onFire: () => void;
+  onTele: () => void;
+  color: string;
+  mirror?: boolean;
+}) {
+  const btn = "w-14 h-14 rounded-full border-2 font-mono text-xs flex items-center justify-center backdrop-blur-sm bg-background/40 active:bg-foreground/20 pointer-events-auto select-none";
+  const style = { borderColor: color, color };
+  return (
+    <div className={`flex gap-3 ${mirror ? "flex-row-reverse" : ""}`}>
+      <div className="flex gap-2">
+        <button
+          className={btn} style={style}
+          onTouchStart={(e) => { e.preventDefault(); onLeft(true); }}
+          onTouchEnd={(e) => { e.preventDefault(); onLeft(false); }}
+        >◀</button>
+        <button
+          className={btn} style={style}
+          onTouchStart={(e) => { e.preventDefault(); onRight(true); }}
+          onTouchEnd={(e) => { e.preventDefault(); onRight(false); }}
+        >▶</button>
+        <button
+          className={btn} style={style}
+          onTouchStart={(e) => { e.preventDefault(); onJump(); }}
+        >▲</button>
+      </div>
+      <div className="flex gap-2">
+        <button
+          className={btn} style={style}
+          onTouchStart={(e) => { e.preventDefault(); onFire(); }}
+        >FIRE</button>
+        <button
+          className={btn} style={style}
+          onTouchStart={(e) => { e.preventDefault(); onTele(); }}
+        >TELE</button>
+      </div>
+    </div>
+  );
+}
