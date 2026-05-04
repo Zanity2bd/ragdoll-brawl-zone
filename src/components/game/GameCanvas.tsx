@@ -436,9 +436,13 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
   return (
     <div
       className="absolute inset-x-0 bottom-0 pointer-events-none"
-      style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
+      style={{
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+        paddingLeft: "env(safe-area-inset-left, 0px)",
+        paddingRight: "env(safe-area-inset-right, 0px)",
+      }}
     >
-      <div className={`flex ${cpu ? "justify-start" : "justify-between"} items-end px-4`}>
+      <div className={`flex ${cpu ? "justify-start" : "justify-between"} items-end px-3 sm:px-6`}>
         <PlayerControls
           side="left"
           color="oklch(0.85 0.18 210)"
