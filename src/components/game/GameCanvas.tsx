@@ -293,7 +293,7 @@ function RotatePrompt() {
   );
 }
 
-function HUD({ snap, onRematch, onChange, muted, onOpenAudio, onFrenzyP1 }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onOpenAudio: () => void; onFrenzyP1: () => void }) {
+function HUD({ snap, onRematch, onChange, onOpenSettings, onFrenzyP1 }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; onOpenSettings: () => void; onFrenzyP1: () => void }) {
   return (
     <>
       <div
@@ -306,18 +306,23 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio, onFrenzyP1 }: { sn
         </div>
       </div>
       <button
-        onClick={onOpenAudio}
-        aria-label="Audio settings"
-        className="absolute rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-30"
+        onClick={onOpenSettings}
+        aria-label="Settings"
+        className="absolute rounded-full flex items-center justify-center pointer-events-auto z-30 transition-transform hover:scale-105 active:scale-95"
         style={{
           top: "calc(env(safe-area-inset-top, 0px) + 8px)",
           right: "calc(env(safe-area-inset-right, 0px) + 8px)",
-          width: "min(10vw, 40px)",
-          height: "min(10vw, 40px)",
-          fontSize: "min(4vw, 16px)",
+          width: "min(11vw, 44px)",
+          height: "min(11vw, 44px)",
+          fontSize: "min(4.5vw, 18px)",
+          background: "linear-gradient(135deg, oklch(0.30 0.10 285 / 0.7), oklch(0.16 0.05 275 / 0.85))",
+          border: "1px solid oklch(0.55 0.18 285 / 0.5)",
+          color: "oklch(0.92 0.06 290)",
+          boxShadow: "0 4px 14px oklch(0.55 0.22 290 / 0.35), inset 0 1px 0 oklch(0.95 0.10 290 / 0.15)",
+          backdropFilter: "blur(8px)",
         }}
       >
-        {muted ? "🔇" : "🔊"}
+        ⚙
       </button>
 
       {snap.phase === "intro" && (
