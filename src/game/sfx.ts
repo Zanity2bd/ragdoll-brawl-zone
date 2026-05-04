@@ -39,7 +39,19 @@ class SfxEngine {
       const data = buf.getChannelData(0);
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
       this.noise = buf;
+      // Lazy-load sample assets
+      this.loadSample("bamf", bamfUrl);
     } catch { /* no audio */ }
+  }
+
+  private async loadSample(name: SfxName, url: string) {
+    if (!this.ctx) return;
+    try {
+      const res = await fetch(url);
+      const arr = await res.arrayBuffer();
+      const buf = await this.ctx.decodeAudioData(arr);
+      this.samples[name] = buf;
+    } catch { /* */ }
   }
 
   setMuted(m: boolean) {
