@@ -3734,9 +3734,9 @@ export class GameEngine {
       drawFist(ctx, pose.handR, skin.gloves);
     }
 
-    // Torso
+    // Torso (uses sized torsoW)
     ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = skin.thickBody ? 6.5 : 5;
+    ctx.lineWidth = torsoW;
     ctx.beginPath();
     ctx.moveTo(0, shoulderY);
     ctx.lineTo(0, hipY);
@@ -3750,12 +3750,11 @@ export class GameEngine {
       ctx.restore();
     }
 
-    // Joints
-    ctx.fillStyle = bodyColor;
-    const jr = skin.thickBody ? 3.2 : 2.8;
+    // Tiny shoulder caps (hidden under outline). Hip cap removed — overlap covers it.
+    ctx.fillStyle = limbColor;
+    const jr = baseW * 0.32;
     ctx.beginPath(); ctx.arc(-4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(0, hipY, jr, 0, Math.PI * 2); ctx.fill();
 
     if (skin.emblem) {
       const ey = (shoulderY + hipY) / 2;
@@ -3764,8 +3763,15 @@ export class GameEngine {
       drawEmblem(ctx, skin.emblem, ey, shoulderY, hipY);
     }
 
+    // Head: fill disc first, then proportional rim. Highlight follows below.
     ctx.fillStyle = headColor;
     ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
+    if (!ghost) {
+      const headRimOffset = outlineW * 0.5;
+      ctx.strokeStyle = outlineColor;
+      ctx.lineWidth = outlineW;
+      ctx.beginPath(); ctx.arc(0, headY, headR + headRimOffset, 0, Math.PI * 2); ctx.stroke();
+    }
     if (!ghost) {
       ctx.save();
       const hg = ctx.createRadialGradient(
