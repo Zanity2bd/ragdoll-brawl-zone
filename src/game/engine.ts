@@ -1260,7 +1260,8 @@ export class GameEngine {
     }
     for (const f of [this.p1, this.p2]) {
       if (freezeActive && f.id !== this.timeFreezer) continue;
-      f.facingT += (f.facing - f.facingT) * Math.min(1, dt * 8);
+      // Slower, smoother yaw lerp so the turn reads as a 3D pivot, not a snap-flip.
+      f.facingT += (f.facing - f.facingT) * Math.min(1, dt * 5.5);
     }
 
     for (const pr of this.projectiles) {
