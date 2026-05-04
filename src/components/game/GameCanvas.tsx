@@ -7,6 +7,8 @@ import { Sfx } from "@/game/sfx";
 import { Lobby } from "./Lobby";
 import { SkinSelect } from "./SkinSelect";
 import { Splash } from "./Splash";
+import { SettingsPanel } from "./Settings";
+import { useGamepad } from "@/hooks/useGamepad";
 
 const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" | "melee" }> = {
   KeyA: { p: "p1", action: "left" },
@@ -37,7 +39,7 @@ export function GameCanvas() {
   const [muted, setMuted] = useState(false);
   const [sfxVol, setSfxVol] = useState(0.8);
   const [musicVol, setMusicVol] = useState(0.35);
-  const [audioOpen, setAudioOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [needsLandscape, setNeedsLandscape] = useState(false);
   const [cpuEnabled, setCpuEnabled] = useState(true);
   const [difficulty, setDifficulty] = useState<Difficulty>("hard");
@@ -226,6 +228,9 @@ export function GameCanvas() {
 
   const engine = engineRef.current;
 
+  // Xbox / PS controller support — drives P1 while in a fight.
+  useGamepad(engine, "p1", { enabled: screen === "fight", onMenu: () => setSettingsOpen(o => !o) });
+
   const startFight = (m: MapId, p1: SkinId, p2: SkinId, opts: { cpu: boolean; difficulty: Difficulty }) => {
     setCpuEnabled(opts.cpu);
     setDifficulty(opts.difficulty);
@@ -249,18 +254,17 @@ export function GameCanvas() {
           snap={snap}
           onRematch={() => engine?.reset()}
           onChange={() => setScreen("map")}
-          onOpenAudio={() => setAudioOpen(o => !o)}
-          muted={muted}
+          onOpenSettings={() => setSettingsOpen(o => !o)}
           onFrenzyP1={() => engineRef.current?.pressFrenzy("p1")}
         />
       )}
-      <AudioPanel
-        open={audioOpen && screen === "fight"}
+      <SettingsPanel
+        open={settingsOpen}
         muted={muted}
         onToggleMute={() => setMuted(m => !m)}
         sfxVol={sfxVol} musicVol={musicVol}
         onSfx={setSfxVol} onMusic={setMusicVol}
-        onClose={() => setAudioOpen(false)}
+        onClose={() => setSettingsOpen(false)}
       />
       {screen === "fight" && isTouch && engine && snap && <TouchControls engine={engine} snap={snap} cpu={cpuEnabled} />}
 
@@ -292,7 +296,7 @@ function RotatePrompt() {
   );
 }
 
-function HUD({ snap, onRematch, onChange, muted, onOpenAudio, onFrenzyP1 }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; muted: boolean; onOpenAudio: () => void; onFrenzyP1: () => void }) {
+function HUD({ snap, onRematch, onChange, onOpenSettings, onFrenzyP1 }: { snap: GameSnapshot; onRematch: () => void; onChange: () => void; onOpenSettings: () => void; onFrenzyP1: () => void }) {
   return (
     <>
       <div
@@ -305,18 +309,23 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio, onFrenzyP1 }: { sn
         </div>
       </div>
       <button
-        onClick={onOpenAudio}
-        aria-label="Audio settings"
-        className="absolute rounded-full border border-foreground/20 bg-background/40 backdrop-blur-sm flex items-center justify-center text-foreground/70 hover:text-foreground hover:bg-foreground/10 z-30"
+        onClick={onOpenSettings}
+        aria-label="Settings"
+        className="absolute rounded-full flex items-center justify-center pointer-events-auto z-30 transition-transform hover:scale-105 active:scale-95"
         style={{
           top: "calc(env(safe-area-inset-top, 0px) + 8px)",
           right: "calc(env(safe-area-inset-right, 0px) + 8px)",
-          width: "min(10vw, 40px)",
-          height: "min(10vw, 40px)",
-          fontSize: "min(4vw, 16px)",
+          width: "min(11vw, 44px)",
+          height: "min(11vw, 44px)",
+          fontSize: "min(4.5vw, 18px)",
+          background: "linear-gradient(135deg, oklch(0.30 0.10 285 / 0.7), oklch(0.16 0.05 275 / 0.85))",
+          border: "1px solid oklch(0.55 0.18 285 / 0.5)",
+          color: "oklch(0.92 0.06 290)",
+          boxShadow: "0 4px 14px oklch(0.55 0.22 290 / 0.35), inset 0 1px 0 oklch(0.95 0.10 290 / 0.15)",
+          backdropFilter: "blur(8px)",
         }}
       >
-        {muted ? "🔇" : "🔊"}
+        ⚙
       </button>
 
       {snap.phase === "intro" && (
@@ -383,43 +392,56 @@ function HUD({ snap, onRematch, onChange, muted, onOpenAudio, onFrenzyP1 }: { sn
 
 function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "right"; onFrenzy?: () => void }) {
   const isP1 = p.id === "p1";
-  const color = isP1 ? "oklch(0.85 0.18 210)" : "oklch(0.72 0.28 340)";
-  const glow = isP1 ? "oklch(0.75 0.22 215)" : "oklch(0.65 0.30 345)";
+  // Dual-stop gradient per side for premium feel
+  const grad = isP1
+    ? "linear-gradient(90deg, oklch(0.65 0.22 235), oklch(0.78 0.20 195))"
+    : "linear-gradient(270deg, oklch(0.55 0.28 350), oklch(0.72 0.26 320))";
+  const accent = isP1 ? "oklch(0.78 0.20 215)" : "oklch(0.72 0.28 340)";
+  const glow = isP1 ? "oklch(0.65 0.22 215)" : "oklch(0.65 0.28 340)";
   const pct = (p.hp / p.maxHp) * 100;
   return (
-    <div className={`flex-1 max-w-md ${side === "right" ? "items-end" : ""} flex flex-col gap-2`}>
+    <div className={`flex-1 max-w-md ${side === "right" ? "items-end" : ""} flex flex-col gap-1.5`}>
       <div className={`flex items-center gap-3 ${side === "right" ? "flex-row-reverse" : ""}`}>
-        <div className="font-mono text-xs tracking-widest uppercase" style={{ color }}>
+        <div className="font-mono text-[11px] sm:text-xs tracking-[0.2em] uppercase font-bold"
+             style={{ color: accent, textShadow: `0 0 12px ${glow}` }}>
           {p.name}
         </div>
-        <div className="font-mono text-xs text-foreground/60">{Math.ceil(p.hp)} HP</div>
+        <div className="font-mono text-[10px] text-foreground/55">{Math.ceil(p.hp)} / {p.maxHp}</div>
       </div>
-      <div className="h-3 bg-foreground/10 rounded-sm overflow-hidden border border-foreground/10">
+      <div className="relative h-3 sm:h-3.5 rounded-full overflow-hidden"
+           style={{
+             background: "linear-gradient(180deg, oklch(0.10 0.03 275 / 0.85), oklch(0.06 0.02 275 / 0.95))",
+             border: "1px solid oklch(0.40 0.10 280 / 0.4)",
+             boxShadow: "inset 0 2px 4px rgba(0,0,0,0.5)",
+           }}>
         <div
-          className="h-full transition-[width] duration-200"
+          className="absolute inset-y-0 transition-[width] duration-200"
           style={{
             width: `${pct}%`,
-            background: color,
-            boxShadow: `0 0 12px ${glow}`,
-            marginLeft: side === "right" ? "auto" : 0,
+            background: grad,
+            boxShadow: `0 0 16px ${glow}, inset 0 1px 0 rgba(255,255,255,0.2)`,
+            [side === "right" ? "right" : "left"]: 0,
           }}
         />
+        {/* Glossy highlight */}
+        <div className="absolute inset-x-0 top-0 h-1/2 pointer-events-none"
+             style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.18), transparent)" }} />
       </div>
-      <div className={`flex flex-wrap gap-2 ${side === "right" ? "flex-row-reverse" : ""}`}>
+      <div className={`flex flex-wrap gap-1.5 ${side === "right" ? "flex-row-reverse" : ""}`}>
         {p.hasPower1 && (
-          <CdPill label={`HOLD · ${p.power1Name}`} cd={p.power1Cd} max={p.power1CdMax} color={color} />
+          <CdPill label={p.power1Name} cd={p.power1Cd} max={p.power1CdMax} color={accent} />
         )}
         {p.hasPower2 && (
-          <CdPill label={`TAP · ${p.power2Name}`} cd={p.power2Cd} max={p.power2CdMax} color={color} />
+          <CdPill label={p.power2Name} cd={p.power2Cd} max={p.power2CdMax} color={accent} />
         )}
         {p.name === "Heatwave" && !p.hasPower1 && (
-          <CdPill label={isP1 ? "F · Fire" : "K · Fire"} cd={p.fireCd} max={p.fireCdMax} color={color} />
+          <CdPill label="Fire" cd={p.fireCd} max={p.fireCdMax} color={accent} />
         )}
         {p.name === "Nightcrawler" && (
-          <CdPill label={isP1 ? "G · Tele" : "L · Tele"} cd={p.teleCd} max={p.teleCdMax} color={color} />
+          <CdPill label="Teleport" cd={p.teleCd} max={p.teleCdMax} color={accent} />
         )}
         {!p.hasPower2 && (
-          <CdPill label={`${isP1 ? "J" : ";"} · ${p.meleeName}`} cd={p.meleeCd} max={p.meleeCdMax} color={color} />
+          <CdPill label={p.meleeName} cd={p.meleeCd} max={p.meleeCdMax} color={accent} />
         )}
       </div>
       {p.hasFrenzy && (
@@ -427,14 +449,13 @@ function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "r
           cd={p.frenzyCd} max={p.frenzyCdMax} active={p.frenzyActive}
           side={side}
           onActivate={isP1 ? onFrenzy : undefined}
-          hint={isP1 ? "B · Tap" : "N"}
         />
       )}
     </div>
   );
 }
 
-function FrenzyBar({ cd, max, active, side, onActivate, hint }: { cd: number; max: number; active: boolean; side: "left" | "right"; onActivate?: () => void; hint?: string }) {
+function FrenzyBar({ cd, max, active, side, onActivate }: { cd: number; max: number; active: boolean; side: "left" | "right"; onActivate?: () => void }) {
   const ready = cd <= 0;
   const pct = ready ? 100 : (1 - cd / max) * 100;
   const fill = active ? "oklch(0.78 0.22 30)" : ready ? "oklch(0.72 0.22 145)" : "oklch(0.55 0.10 145)";
@@ -453,7 +474,7 @@ function FrenzyBar({ cd, max, active, side, onActivate, hint }: { cd: number; ma
           className="font-mono text-[10px] tracking-[0.2em] uppercase"
           style={{ color: ready ? glow : "oklch(0.65 0.04 145)" }}
         >
-          {active ? "RAGE FRENZY!" : ready ? `Rage Frenzy ▸ ${hint ?? "READY"}` : "Rage Frenzy"}
+          {active ? "RAGE FRENZY!" : ready ? "Rage Frenzy ▸ READY" : "Rage Frenzy"}
         </span>
         {!ready && !active && (
           <span className="font-mono text-[10px] text-foreground/50">{cd.toFixed(1)}s</span>
@@ -486,15 +507,17 @@ function CdPill({ label, cd, max, color }: { label: string; cd: number; max: num
   const pct = ready ? 100 : (1 - cd / max) * 100;
   return (
     <div
-      className="relative px-3 py-1 rounded-sm border font-mono text-[10px] tracking-widest uppercase overflow-hidden"
+      className="relative px-2.5 py-1 rounded-md font-mono text-[10px] tracking-widest uppercase overflow-hidden"
       style={{
-        borderColor: ready ? color : "oklch(0.4 0.05 250)",
-        color: ready ? color : "oklch(0.6 0.03 250)",
+        background: "linear-gradient(180deg, oklch(0.16 0.04 275 / 0.85), oklch(0.10 0.03 275 / 0.95))",
+        border: `1px solid ${ready ? color : "oklch(0.35 0.06 280 / 0.5)"}`,
+        color: ready ? color : "oklch(0.55 0.04 280)",
+        boxShadow: ready ? `0 0 10px ${color}, inset 0 1px 0 oklch(0.95 0.05 290 / 0.15)` : "inset 0 1px 0 oklch(0.95 0.05 290 / 0.06)",
       }}
     >
       <div
-        className="absolute inset-y-0 left-0 opacity-20"
-        style={{ width: `${pct}%`, background: color }}
+        className="absolute inset-y-0 left-0 transition-[width] duration-150"
+        style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in oklab, ${color} 35%, transparent), transparent)` }}
       />
       <span className="relative">{label}</span>
     </div>
@@ -752,32 +775,4 @@ function Joystick({
   );
 }
 
-function AudioPanel({
-  open, muted, onToggleMute, sfxVol, musicVol, onSfx, onMusic, onClose,
-}: {
-  open: boolean; muted: boolean; onToggleMute: () => void;
-  sfxVol: number; musicVol: number;
-  onSfx: (v: number) => void; onMusic: (v: number) => void;
-  onClose: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <div className="absolute top-14 right-2 sm:top-14 sm:right-3 z-30 w-60 rounded-lg border border-foreground/20 bg-background/85 backdrop-blur-md p-3 shadow-xl">
-      <div className="flex items-center justify-between mb-3">
-        <div className="font-mono text-xs uppercase tracking-widest text-foreground/80">Audio</div>
-        <button onClick={onClose} className="text-foreground/50 hover:text-foreground text-xs">✕</button>
-      </div>
-      <button
-        onClick={onToggleMute}
-        className="w-full mb-3 px-2 py-1.5 rounded border border-foreground/15 hover:bg-foreground/10 font-mono text-[10px] uppercase tracking-widest text-foreground/80"
-      >
-        {muted ? "🔇 Muted" : "🔊 Sound on"}
-      </button>
-      <label className="block font-mono text-[10px] uppercase tracking-widest text-foreground/60 mb-1">SFX · {Math.round(sfxVol * 100)}</label>
-      <input type="range" min={0} max={100} value={Math.round(sfxVol * 100)} onChange={(e) => onSfx(Number(e.target.value) / 100)} className="w-full mb-3 accent-foreground" />
-      <label className="block font-mono text-[10px] uppercase tracking-widest text-foreground/60 mb-1">Music · {Math.round(musicVol * 100)}</label>
-      <input type="range" min={0} max={100} value={Math.round(musicVol * 100)} onChange={(e) => onMusic(Number(e.target.value) / 100)} className="w-full accent-foreground" />
-    </div>
-  );
-}
 
