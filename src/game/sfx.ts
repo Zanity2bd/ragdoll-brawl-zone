@@ -221,8 +221,8 @@ class SfxEngine {
         setTimeout(() => { try { src.disconnect(); g.disconnect(); } catch { /* */ } }, (sample.duration + 0.1) * 1000);
         break;
       }
-      case "homelanderVO": {
-        const sample = this.samples["homelanderVO"];
+      case "homelanderLaser": {
+        const sample = this.samples["homelanderLaser"];
         if (!sample) break;
         const src = ctx.createBufferSource();
         src.buffer = sample;
