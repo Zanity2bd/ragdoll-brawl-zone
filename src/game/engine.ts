@@ -1,4 +1,4 @@
-// Stickman Neon Duel — Canvas 2D engine v2
+// OgunArena — Canvas 2D engine v2 (a Blkdom production)
 // Animated maps + hero skins + smooth walk cycle.
 
 import { computeWalkPose } from "./animation";
