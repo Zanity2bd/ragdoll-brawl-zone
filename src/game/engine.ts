@@ -517,9 +517,11 @@ export class GameEngine {
     f.fireCd = Math.max(0, f.fireCd - dt);
     f.teleCd = Math.max(0, f.teleCd - dt);
     f.meleeCd = Math.max(0, f.meleeCd - dt);
+    f.superCd = Math.max(0, f.superCd - dt);
     f.hitFlash = Math.max(0, f.hitFlash - dt);
     f.attackAnim = Math.max(0, f.attackAnim - dt);
     f.slowedT = Math.max(0, f.slowedT - dt);
+    f.hoverPhase += dt * HOVER_RATE * Math.PI * 2;
 
     // Per-fighter slow (a-train flurry victim)
     const localScale = f.slowedT > 0 ? 0.25 : 1;
