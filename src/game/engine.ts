@@ -619,6 +619,7 @@ export class GameEngine {
     this.fireWalls = [];
     this.magmas = [];
     this.smokeClouds = [];
+    this.homelanderVoPlayed = false;
     this.timeFreezeT = 0; this.timeFreezer = null;
     this.teleTargeting = null;
     this.slowmoT = 0; this.slowmoMode = null;
