@@ -389,20 +389,34 @@ export function computeFlightPose(
   const hipY = 56 + bob * 0.5;
   const headOffsetY = -3 + bob * 0.4;
 
+  // Legs trail BEHIND the body (opposite of facing direction).
   const trail = horiz;
-  const flutter = Math.sin(phase * 1.6) * (1 - horiz) * 1.4;
-  const legBackX = facing * (8 + trail * 22);
-  const legBackY = hipY + 22 + bob;
-  const kneeBackX = facing * (4 + trail * 12);
-  const kneeBackY = hipY + 12 + flutter;
-  const stagger = (1 - trail) * 6;
+  const flutter = Math.sin(phase * 1.8) * (0.4 + (1 - horiz) * 1.6);
+  // Behind = -facing direction
+  const back = -facing;
+  // When ascending, legs tuck more vertical (downward); cruising/descending, they stretch back.
+  const verticalLean = goingUp ? 0.35 : (goingDown ? -0.15 : 0);
+  const trailReach = 10 + trail * 26;
+  const kneeReach = 5 + trail * 14;
+  const droop = (1 - trail) * 14 * (goingUp ? 0.2 : 1); // legs hang when hovering, tuck when ascending
 
-  const footL: [number, number] = [legBackX - facing * 2, legBackY + flutter];
-  const footR: [number, number] = [legBackX + facing * 2, legBackY - flutter + stagger * 0.4];
+  const footBaseY = hipY + 22 + droop + bob;
+  const kneeBaseY = hipY + 12 + droop * 0.6;
+
+  const footLX = back * trailReach - 3 * facing;
+  const footRX = back * trailReach + 3 * facing;
+  const kneeLX = back * kneeReach - 2 * facing;
+  const kneeRX = back * kneeReach + 2 * facing;
+
+  // Vertical lean lifts feet up (ascending) or pushes them down (descending)
+  const vY = verticalLean * 18;
+
+  const footL: [number, number] = [footLX, footBaseY - vY + flutter];
+  const footR: [number, number] = [footRX, footBaseY - vY - flutter * 0.7];
   const legL: [number, number, number, number, number, number] =
-    [-3, hipY, kneeBackX - facing * 2, kneeBackY + flutter, footL[0], footL[1]];
+    [-3, hipY, kneeLX, kneeBaseY - vY * 0.5 + flutter * 0.5, footL[0], footL[1]];
   const legR: [number, number, number, number, number, number] =
-    [3, hipY, kneeBackX + facing * 2, kneeBackY - flutter + stagger * 0.3, footR[0], footR[1]];
+    [3, hipY, kneeRX, kneeBaseY - vY * 0.5 - flutter * 0.4, footR[0], footR[1]];
 
   const lead = horiz;
   let leadHandX: number, leadHandY: number, leadElbowX: number, leadElbowY: number;
