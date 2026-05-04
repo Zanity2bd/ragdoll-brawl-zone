@@ -2632,6 +2632,13 @@ export class GameEngine {
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
             if (dx > -10 && dx < m.range && Math.abs(target.y - f.y) < FIGHTER_H) {
+              // Cover absorbs the strike
+              if (this.meleeBlockedByProp(f, m.range, m.damage)) {
+                f.meleeHitMask.add(1);
+                this.shake = Math.max(this.shake, 5);
+                Sfx.play("thud", 0.5);
+                break;
+              }
               this.applyMeleeHit(f, target, m, target.x, target.y + 40);
               f.meleeHitMask.add(1);
               if (m.kind === "repulsor") {
