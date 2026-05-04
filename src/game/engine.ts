@@ -4817,7 +4817,7 @@ export class GameEngine {
     const skin = f.skin;
 
     // ---- Sprite-sheet walk override ----
-    // Replace the procedural body render with the imported 66-frame walk
+    // Replace the procedural body render with the imported walk sheet
     // animation when the fighter is in a normal grounded walk state. Falls
     // back to the procedural renderer for attacks, ragdoll, flight, KO, etc.
     // Sprite walk plays whenever the fighter is grounded (even during attacks
