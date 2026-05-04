@@ -1438,10 +1438,26 @@ export class GameEngine {
             const dx = target.x - sx; const dy = (target.y + 30) - sy;
             const angle = Math.atan2(dy, dx);
             const desired = f.facing > 0 ? Math.atan2(dy, Math.abs(dx) || 1) : Math.PI - Math.atan2(dy, Math.abs(dx) || 1);
-            this.beams.push({ owner: f.id, x: sx, y: sy, angle: desired, length: m.range, life: 0.05 });
-            // hit if within narrow cone toward target
+            // Raycast against blocking platforms (cover + solid platforms) so the beam is occluded.
+            const beamMaxLen = m.range;
+            const blockHit = this.raycastPlatforms(sx, sy, desired, beamMaxLen);
+            const beamLen = blockHit ? blockHit.dist : beamMaxLen;
+            this.beams.push({ owner: f.id, x: sx, y: sy, angle: desired, length: beamLen, life: 0.05 });
+            // Spark at the impact point if blocked
+            if (blockHit && Math.random() < 0.6) {
+              const ex = sx + Math.cos(desired) * beamLen;
+              const ey = sy + Math.sin(desired) * beamLen;
+              this.particles.push({
+                x: ex + (Math.random() - 0.5) * 8, y: ey + (Math.random() - 0.5) * 8,
+                vx: (Math.random() - 0.5) * 160, vy: -40 - Math.random() * 100,
+                life: 0.35, maxLife: 0.35,
+                color: "oklch(0.92 0.20 60)", size: 1.5 + Math.random() * 1.8,
+              });
+            }
+            // Hit only if target is within beam cone AND closer than the blocker
             const ang = Math.abs(((angle - desired + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-            if (ang < 0.18 && Math.hypot(dx, dy) < m.range) {
+            const targetDist = Math.hypot(dx, dy);
+            if (ang < 0.18 && targetDist < beamLen) {
               const dps = m.damage; // per active second
               if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
                 target.hp = Math.max(0, target.hp - dps * (1 / 60));
