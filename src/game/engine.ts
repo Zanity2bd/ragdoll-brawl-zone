@@ -1047,9 +1047,12 @@ export class GameEngine {
       }
 
       let landedOn: Platform | null = null;
+      const wasAirborne = !f.onGround;
+      const landingVy = f.vy;
 
       if (f.y + FIGHTER_H >= GROUND_Y) {
         f.y = GROUND_Y - FIGHTER_H; f.vy = 0; f.onGround = true;
+        if (wasAirborne) landedOn = { x: 0, y: GROUND_Y, w: W, h: 0, kind: "cover" };
       } else { f.onGround = false; }
 
       for (const pl of this.platforms) {
@@ -1067,9 +1070,8 @@ export class GameEngine {
 
         // Auto ledge-grab: forgiving catch when arc clips a one-way ledge edge.
         if (pl.kind === "platform" && f.vy >= -40 && f.dropT <= 0 && !f.onGround) {
-          const margin = 16; // forgiveness in px above the ledge
+          const margin = 16;
           if (feet >= pl.y - margin && feet <= pl.y + 18 && prevFeet <= pl.y + margin + 4) {
-            // Snap onto the ledge — feels like an auto-grab
             f.y = pl.y - FIGHTER_H; f.vy = 0; f.onGround = true;
             f.ledgeFlash = 0.3;
             landedOn = pl;
@@ -1077,19 +1079,27 @@ export class GameEngine {
         }
       }
 
-      // Landing dust (only on fresh landings: was airborne last frame)
-      if (landedOn && Math.abs(prevY - f.y) > 4 && !this.lowPower) {
-        for (let i = 0; i < 5; i++) {
-          this.particles.push({
-            x: f.x + (Math.random() - 0.5) * 22,
-            y: landedOn.y - 2,
-            vx: (Math.random() - 0.5) * 70,
-            vy: -10 - Math.random() * 25,
-            life: 0.35, maxLife: 0.35,
-            color: "oklch(0.78 0.04 230)",
-            size: 1.6 + Math.random() * 1.6,
-          });
+      // Landing impact: squash + dust scaled by impact velocity
+      if (landedOn && wasAirborne) {
+        const impact = Math.max(0, Math.min(1, landingVy / 800));
+        f.wobble.squashV -= 4 + impact * 7;     // squash on land
+        f.wobble.bvy += 80 * impact;             // body dips
+        if (impact > 0.25) this.shake = Math.max(this.shake, 4 + impact * 6);
+        if (!this.lowPower) {
+          const n = Math.round(4 + impact * 8);
+          for (let i = 0; i < n; i++) {
+            this.particles.push({
+              x: f.x + (Math.random() - 0.5) * (20 + impact * 14),
+              y: landedOn.y - 2,
+              vx: (Math.random() - 0.5) * (70 + impact * 80),
+              vy: -10 - Math.random() * (25 + impact * 25),
+              life: 0.35 + impact * 0.15, maxLife: 0.5,
+              color: "oklch(0.78 0.04 230)",
+              size: 1.4 + Math.random() * (1.6 + impact),
+            });
+          }
         }
+        Sfx.play("thud", 0.25 + impact * 0.45);
       }
     }
 
