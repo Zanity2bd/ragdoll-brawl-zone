@@ -1,5 +1,9 @@
 // Per-character CPU controller. Writes into the same intents the keyboard
 // uses, so the existing physics + melee path is unchanged.
+//
+// Goals: actively track the player, reposition aggressively (walk/jump/fly/
+// special mobility), and use every character's full kit (melee + power1 +
+// power2 + super dash) based on context.
 
 import type { GameEngine, GameSnapshot, PlayerId } from "./engine";
 import type { SkinId } from "./skins";
@@ -7,22 +11,23 @@ import type { SkinId } from "./skins";
 export type Difficulty = "easy" | "hard" | "extreme";
 
 interface DiffCfg {
-  reactMs: number;          // base think tick
-  reactJitter: number;      // ± randomness so reactions don't look robotic
-  specialChance: number;    // when in window, % chance to actually commit
-  kiteChance: number;       // back-off probability when too close
-  jumpProj: boolean;        // dodge incoming projectiles
-  predictAim: boolean;      // lead the target by velocity
-  punishWindow: number;     // seconds we'll keep punishing recovery
-  bait: boolean;            // do feints to draw out specials
-  block: boolean;           // back away from telegraphed heavy moves
-  mistakeChance: number;    // chance to make a small mistake (input drop)
+  reactMs: number;
+  reactJitter: number;
+  specialChance: number;     // chance to commit a special when window matches
+  powerChance: number;       // chance to commit a power1/power2 when window matches
+  kiteChance: number;
+  jumpProj: boolean;
+  predictAim: boolean;
+  punishWindow: number;
+  bait: boolean;
+  block: boolean;
+  mistakeChance: number;
 }
 
 const DIFF: Record<Difficulty, DiffCfg> = {
-  easy:    { reactMs: 320, reactJitter: 120, specialChance: 0.30, kiteChance: 0.30, jumpProj: false, predictAim: false, punishWindow: 0.25, bait: false, block: false, mistakeChance: 0.20 },
-  hard:    { reactMs: 150, reactJitter: 70,  specialChance: 0.70, kiteChance: 0.55, jumpProj: true,  predictAim: false, punishWindow: 0.55, bait: true,  block: true,  mistakeChance: 0.06 },
-  extreme: { reactMs:  70, reactJitter: 30,  specialChance: 0.95, kiteChance: 0.80, jumpProj: true,  predictAim: true,  punishWindow: 0.80, bait: true,  block: true,  mistakeChance: 0.0 },
+  easy:    { reactMs: 320, reactJitter: 120, specialChance: 0.30, powerChance: 0.25, kiteChance: 0.30, jumpProj: false, predictAim: false, punishWindow: 0.25, bait: false, block: false, mistakeChance: 0.20 },
+  hard:    { reactMs: 150, reactJitter: 70,  specialChance: 0.70, powerChance: 0.60, kiteChance: 0.55, jumpProj: true,  predictAim: false, punishWindow: 0.55, bait: true,  block: true,  mistakeChance: 0.06 },
+  extreme: { reactMs:  70, reactJitter: 30,  specialChance: 0.95, powerChance: 0.85, kiteChance: 0.80, jumpProj: true,  predictAim: true,  punishWindow: 0.80, bait: true,  block: true,  mistakeChance: 0.0 },
 };
 
 // Preferred engagement distance + special trigger window per skin.
@@ -32,21 +37,36 @@ interface SkillCfg {
   specialMax: number;
   needsGround?: boolean;
   selfGround?: boolean;
-  ranged?: boolean;       // prefers to keep distance
-  bruiser?: boolean;      // prefers to crash in
+  ranged?: boolean;
+  bruiser?: boolean;
+  // Power1/Power2 effective ranges (in px). null means "any range".
+  power1Range?: [number, number] | null;
+  power2Range?: [number, number] | null;
+  // power1 "self-buff" → cast freely when off cooldown
+  power1Self?: boolean;
 }
 
 const SKILLS: Record<SkinId, SkillCfg> = {
-  heatwave:     { preferred: 420, specialMin: 200, specialMax: 800, ranged: true },
-  nightcrawler: { preferred: 60,  specialMin: 350, specialMax: 1200 },
-  superman:     { preferred: 60,  specialMin: 0,   specialMax: 90,  needsGround: true, selfGround: true, bruiser: true },
-  homelander:   { preferred: 360, specialMin: 140, specialMax: 540, ranged: true },
-  hulk:         { preferred: 90,  specialMin: 0,   specialMax: 220, selfGround: true, bruiser: true },
-  atrain:       { preferred: 50,  specialMin: 0,   specialMax: 70,  bruiser: true },
-  flash:        { preferred: 80,  specialMin: 0,   specialMax: 250 },
-  spiderman:    { preferred: 280, specialMin: 200, specialMax: 380, ranged: true },
-  ironman:      { preferred: 110, specialMin: 0,   specialMax: 160 },
-  batman:       { preferred: 380, specialMin: 250, specialMax: 600, ranged: true },
+  heatwave:     { preferred: 420, specialMin: 200, specialMax: 800, ranged: true,
+                  power1Range: [180, 480], power2Range: [120, 700] },
+  nightcrawler: { preferred: 60,  specialMin: 350, specialMax: 1200,
+                  power1Range: [0, 130], power2Range: [60, 360] },
+  superman:     { preferred: 60,  specialMin: 0,   specialMax: 90,  needsGround: true, selfGround: true, bruiser: true,
+                  power1Range: [0, 220], power2Range: [80, 1200] },
+  homelander:   { preferred: 360, specialMin: 140, specialMax: 540, ranged: true,
+                  power1Range: [120, 600], power2Range: [80, 1200] },
+  hulk:         { preferred: 90,  specialMin: 0,   specialMax: 220, selfGround: true, bruiser: true,
+                  power1Range: [0, 110], power2Range: [0, 90] },
+  atrain:       { preferred: 50,  specialMin: 0,   specialMax: 70,  bruiser: true,
+                  power1Range: null, power2Range: [0, 220], power1Self: true },
+  flash:        { preferred: 80,  specialMin: 0,   specialMax: 250,
+                  power1Range: null, power2Range: [60, 720], power1Self: true },
+  spiderman:    { preferred: 280, specialMin: 200, specialMax: 380, ranged: true,
+                  power1Range: [120, 360], power2Range: [220, 900] },
+  ironman:      { preferred: 110, specialMin: 0,   specialMax: 160,
+                  power1Range: [40, 460], power2Range: [80, 900] },
+  batman:       { preferred: 380, specialMin: 250, specialMax: 600, ranged: true,
+                  power1Range: null, power2Range: [180, 700], power1Self: true },
   butcher:      { preferred: 50,  specialMin: 0,   specialMax: 70,  bruiser: true },
 };
 
@@ -62,13 +82,20 @@ export class CpuController {
   private moveDir: -1 | 0 | 1 = 0;
   private wantJump = false;
   private wantSpecial = false;
+  private wantPower1 = false;
+  private wantPower2 = false;
+  private wantSuperDash = false;
   private feintT = 0;
-  private commitT = 0;             // lock current movement choice for a few frames (prevents jitter)
+  private commitT = 0;
   private lastOppMelee: string | null = null;
   private lastOppMeleeT = 0;
-  private punishT = 0;              // > 0 means we are mid-punish, charge in
-  private retreatT = 0;             // > 0 means we are deliberately backing off
+  private punishT = 0;
+  private retreatT = 0;
   private dodgedAtX = 0;
+  // throttle so we don't spam powers every think tick
+  private nextPowerT = 0;
+  // anti-stand-still timer — forces a small movement / jump when idle too long
+  private idleT = 0;
 
   constructor(engine: GameEngine, id: PlayerId = "p2", diff: Difficulty = "hard") {
     this.engine = engine;
@@ -94,9 +121,10 @@ export class CpuController {
     this.commitT = Math.max(0, this.commitT - dt);
     this.punishT = Math.max(0, this.punishT - dt);
     this.retreatT = Math.max(0, this.retreatT - dt);
+    this.nextPowerT = Math.max(0, this.nextPowerT - dt);
     this.lastOppMeleeT += dt;
+    this.idleT = this.moveDir === 0 ? this.idleT + dt : 0;
 
-    // Track the *moment* the opponent starts a special — that's our cue to react.
     if (oppRect.meleeKind && oppRect.meleeKind !== this.lastOppMelee) {
       this.lastOppMelee = oppRect.meleeKind;
       this.lastOppMeleeT = 0;
@@ -105,7 +133,6 @@ export class CpuController {
       this.lastOppMelee = null;
     }
 
-    // If opponent just whiffed (recovered from a heavy move), open punish window.
     if (!oppRect.meleeKind && this.lastOppMeleeT < cfg.punishWindow && this.lastOppMeleeT > 0.05) {
       this.punishT = Math.max(this.punishT, cfg.punishWindow);
     }
@@ -116,30 +143,32 @@ export class CpuController {
       this.decide(snap, me, opp, meRect, oppRect, cfg);
     }
 
-    // Apply intents — but occasionally drop a frame to feel human.
+    // Anti-stand-still: if we've been still for >0.7s out of combat, perk up.
+    if (this.idleT > 0.7 && !meRect.meleeKind) {
+      const dx = oppRect.x - meRect.x;
+      this.moveDir = (Math.sign(dx) || 1) as -1 | 1;
+      if (meRect.onGround && Math.random() < 0.4) this.wantJump = true;
+      this.idleT = 0;
+      this.commitT = 0.18;
+    }
+
     const drop = cfg.mistakeChance > 0 && Math.random() < cfg.mistakeChance * dt * 4;
 
-    // ---- Flight steering: send analog ax/ay so flyers chase in 2D ----
-    // Without this the engine sees no axis input → exponential damping → flyer
-    // drifts to the ceiling and idles there.
+    // ---- Flight steering ----
     let ax = 0, ay = 0;
     if (meRect.canFly && meRect.flying) {
       const dx = oppRect.x - meRect.x;
       const adx = Math.abs(dx);
       const skill = SKILLS[this.engine.getSkinIdFor(this.id)] ?? SKILLS.homelander;
       const pref = skill.preferred;
-      // Horizontal: close to preferred range, kite if too close (for ranged).
       const dead = 28;
       if (adx > pref + dead) ax = Math.sign(dx);
       else if (adx < pref - dead && skill.ranged) ax = -Math.sign(dx);
       else ax = 0;
-      // Vertical: match opponent altitude with a small offset so we float just
-      // above and can dive in. Add gentle hover oscillation so we don't lock flat.
       const targetY = oppRect.y - (skill.ranged ? 60 : 20);
       const dy = targetY - meRect.y;
       const ady = Math.abs(dy);
       if (ady > 16) ay = Math.max(-1, Math.min(1, dy / 80));
-      // If opponent is on the ground and we're far above, dive down to engage.
       if (oppRect.onGround && meRect.y < oppRect.y - 140) ay = 1;
     }
 
@@ -150,25 +179,22 @@ export class CpuController {
       ay: drop ? 0 : ay,
     });
     if (this.wantJump) { this.engine.pressJump(this.id); this.wantJump = false; }
-    if (this.wantSpecial) {
-      this.wantSpecial = false;
-      this.fireSpecial(me.name);
-    }
+    if (this.wantSpecial) { this.wantSpecial = false; this.fireSpecial(me.name); }
+    if (this.wantPower1) { this.wantPower1 = false; this.engine.pressPower1(this.id); this.nextPowerT = 0.4; }
+    if (this.wantPower2) { this.wantPower2 = false; this.engine.pressPower2(this.id); this.nextPowerT = 0.4; }
+    if (this.wantSuperDash) { this.wantSuperDash = false; this.engine.pressSuperDash(this.id); this.nextPowerT = 0.6; }
   }
 
-  /** Called the frame an opponent's attack begins — choose dodge / block / counter. */
   private onOpponentStartedAttack(me: RectInfo, opp: RectInfo, cfg: DiffCfg) {
     if (!cfg.block) return;
     const dx = opp.x - me.x;
     const adx = Math.abs(dx);
     const dir = (Math.sign(dx) || 1) as -1 | 1;
 
-    // Heavy committed moves we should respect by getting OUT of range.
     const heavy = new Set(["heatPunch", "groundSmash", "crowbar", "phaseStrike", "repulsor", "webYank"]);
     const ranged = new Set(["laserSweep"]);
 
     if (ranged.has(opp.meleeKind!)) {
-      // Sidestep + jump: lasers don't track verticals well; also hide behind cover.
       this.moveDir = (dir === 1 ? -1 : 1);
       this.commitT = 0.35;
       if (me.onGround) this.wantJump = true;
@@ -176,7 +202,6 @@ export class CpuController {
       return;
     }
     if (heavy.has(opp.meleeKind!)) {
-      // If we're inside the danger zone, leap away. If we're far enough, hold ground to whiff-punish.
       const danger = opp.meleeKind === "groundSmash" ? 240 : opp.meleeKind === "webYank" ? 420 : 160;
       if (adx < danger) {
         this.moveDir = (dir === 1 ? -1 : 1);
@@ -192,7 +217,6 @@ export class CpuController {
     else if (name === "Nightcrawler") {
       const opp = this.engine.getFighterRect(this.id === "p1" ? "p2" : "p1");
       if (opp) {
-        // Drop on the opponent's blind side, slightly behind.
         const side = opp.facing === 1 ? -1 : 1;
         this.engine.aiTeleportTo(this.id, opp.x + side * 80, opp.y);
       }
@@ -206,6 +230,7 @@ export class CpuController {
     oppR: RectInfo,
     cfg: DiffCfg,
   ) {
+    void snap;
     const mySkin = this.engine.getSkinIdFor(this.id);
     const skill = SKILLS[mySkin];
 
@@ -214,33 +239,30 @@ export class CpuController {
     const adx = Math.abs(dx);
     const dir = (Math.sign(dx) || 1) as -1 | 1;
 
-    // === Hard rules first (safety / opportunity) ===
-
-    // 1) Opponent is helpless (downed / ragdoll / getting up) — close the gap & stage a hit.
+    // === Hard rules ===
     const oppHelpless = oppR.ragdollT > 0 || oppR.downedT > 0 || oppR.getUpT > 0;
     if (oppHelpless) {
       this.moveDir = dir;
       this.commitT = 0.2;
-      // Position just inside our melee range, then unload when they wake up.
-      if (adx <= skill.specialMax + 10 && this.canSpecial(me, skill, oppR, meR, adx)) {
+      if (adx <= skill.specialMax + 10 && this.canSpecial(me, skill, oppR, meR)) {
         if (Math.random() < cfg.specialChance) this.wantSpecial = true;
       }
+      this.maybeUsePower(me, skill, adx, oppR, meR, cfg, /*aggressive*/ true);
       return;
     }
 
-    // 2) We're getting up / ragdolled — stop committing inputs.
     if (meR.ragdollT > 0 || meR.downedT > 0 || meR.getUpT > 0) {
       this.moveDir = 0;
       return;
     }
 
-    // 3) Block-react if we're still in retreat from a telegraphed move.
     if (this.retreatT > 0) {
       this.moveDir = -dir as -1 | 1;
+      // Even while retreating, fire a long-range power if we have one ready
+      this.maybeUsePower(me, skill, adx, oppR, meR, cfg, false);
       return;
     }
 
-    // 4) Anti-projectile: time the jump.
     if (cfg.jumpProj) {
       const incoming = this.engine.nearestProjectileTowards(this.id);
       if (incoming != null && incoming < 200 && meR.onGround && Math.abs(this.dodgedAtX - meR.x) > 30) {
@@ -249,19 +271,17 @@ export class CpuController {
       }
     }
 
-    // 5) Punish window — opponent just whiffed; charge & commit a special.
     if (this.punishT > 0) {
       this.moveDir = dir;
       this.commitT = 0.15;
-      if (this.canSpecial(me, skill, oppR, meR, adx) && adx <= skill.specialMax + 20) {
+      if (this.canSpecial(me, skill, oppR, meR) && adx <= skill.specialMax + 20) {
         if (Math.random() < 0.85) this.wantSpecial = true;
       }
+      this.maybeUsePower(me, skill, adx, oppR, meR, cfg, true);
       return;
     }
 
-    // 6) Cover-aware: if a cover block is between us and we're a ranged kit, reposition.
     if (skill.ranged && this.engine.hasCoverBetween(this.id, this.id === "p1" ? "p2" : "p1")) {
-      // Sidestep around cover by jumping onto / over it.
       if (meR.onGround && Math.random() < 0.5) this.wantJump = true;
       this.moveDir = dir;
       this.commitT = 0.25;
@@ -272,19 +292,15 @@ export class CpuController {
     if (this.commitT <= 0) {
       const dead = 28;
       const pref = skill.preferred;
-
-      // Low HP defensive bias — back off + bait.
       const lowHp = me.hp < 35;
       const desired = lowHp ? pref + 60 : pref;
 
       if (adx > desired + dead) {
         this.moveDir = dir;
       } else if (adx < desired - dead) {
-        // Too close — kite or hold (bruisers hold more).
         const kite = skill.bruiser ? cfg.kiteChance * 0.4 : cfg.kiteChance;
         this.moveDir = (Math.random() < kite ? -dir : 0) as -1 | 0 | 1;
       } else {
-        // In sweet spot — feint to bait, then strike.
         if (this.feintT <= 0) {
           if (cfg.bait) {
             const r = Math.random();
@@ -300,30 +316,76 @@ export class CpuController {
     }
 
     // === Vertical play ===
-    // Opponent on a higher platform — jump up to chase.
     if (oppR.y < meR.y - 90 && adx < 220 && meR.onGround && Math.random() < 0.5) {
       this.wantJump = true;
     }
-    // Opponent flying above — fliers take off; non-fliers wait.
     if (meR.canFly && oppR.flying && !meR.flying && Math.random() < 0.04) {
-      this.wantJump = true; // engine treats jump as flight toggle for fliers in some paths
+      this.wantJump = true;
+    }
+    // Hop occasionally when closing distance to look alive & dodge low projectiles
+    if (meR.onGround && adx > skill.preferred + 60 && Math.random() < 0.04) {
+      this.wantJump = true;
     }
 
-    // === Special trigger logic ===
-    if (this.canSpecial(me, skill, oppR, meR, adx)) {
+    // === Special trigger ===
+    if (this.canSpecial(me, skill, oppR, meR)) {
       const inWindow = adx >= skill.specialMin && adx <= skill.specialMax;
       const lowHpTele = me.name === "Nightcrawler" && me.hp < 35;
-      // Don't fire ranged specials into cover.
       const blocked = skill.ranged && this.engine.hasCoverBetween(
-        this.id,
-        this.id === "p1" ? "p2" : "p1",
+        this.id, this.id === "p1" ? "p2" : "p1",
       );
-      // Avoid throwing a heavy when opponent is mid-attack with a faster move (trade unfavorably).
       const opponentFasterAttack = !!oppR.meleeKind && (oppR.meleeKind === "speedFlurry" || oppR.meleeKind === "phaseStrike");
       if (!blocked && !opponentFasterAttack && (inWindow || lowHpTele)) {
         if (Math.random() < cfg.specialChance) this.wantSpecial = true;
       }
     }
+
+    // === Power abilities ===
+    this.maybeUsePower(me, skill, adx, oppR, meR, cfg, false);
+
+    // === Cinematic super dash for fliers when far + ready ===
+    if (meR.canFly && meR.flying && adx > 280 && !meR.meleeKind && !oppHelpless && Math.random() < 0.25) {
+      this.wantSuperDash = true;
+    }
+  }
+
+  /** Try to fire power1 / power2 if cooldowns allow and the situation fits. */
+  private maybeUsePower(
+    me: GameSnapshot["p1"],
+    skill: SkillCfg,
+    adx: number,
+    oppR: RectInfo,
+    meR: RectInfo,
+    cfg: DiffCfg,
+    aggressive: boolean,
+  ) {
+    if (this.nextPowerT > 0) return;
+    if (meR.meleeKind || meR.ragdollT > 0 || meR.downedT > 0 || meR.getUpT > 0) return;
+
+    const chance = aggressive ? Math.min(1, cfg.powerChance + 0.2) : cfg.powerChance;
+
+    // power1
+    if (me.power1Cd <= 0 && skill.power1Range !== undefined) {
+      const fits = skill.power1Self || skill.power1Range === null
+        || (adx >= skill.power1Range[0] && adx <= skill.power1Range[1]);
+      if (fits && Math.random() < chance) {
+        this.wantPower1 = true;
+        return;
+      }
+    }
+    // power2
+    if (me.power2Cd <= 0 && skill.power2Range !== undefined) {
+      const range = skill.power2Range;
+      const fits = range === null || (adx >= range[0] && adx <= range[1]);
+      // Avoid wasting ranged power into cover
+      const blocked = skill.ranged && this.engine.hasCoverBetween(
+        this.id, this.id === "p1" ? "p2" : "p1",
+      );
+      if (fits && !blocked && Math.random() < chance) {
+        this.wantPower2 = true;
+      }
+    }
+    void oppR;
   }
 
   private canSpecial(
@@ -331,7 +393,6 @@ export class CpuController {
     skill: SkillCfg,
     oppR: RectInfo,
     meR: RectInfo,
-    _adx: number,
   ): boolean {
     const cdReady =
       me.name === "Heatwave" ? me.fireCd <= 0 :
