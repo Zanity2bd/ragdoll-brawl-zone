@@ -1636,6 +1636,9 @@ export class GameEngine {
       if (tmin >= 0 && tmin <= maxLen && (best === null || tmin < best)) best = tmin;
     }
     return best === null ? null : { dist: best };
+  }
+
+  private buildSnapshot(): GameSnapshot {
     return {
       p1: this.snapPlayer(this.p1),
       p2: this.snapPlayer(this.p2),
