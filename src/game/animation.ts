@@ -242,8 +242,12 @@ export function computeWalkPose(
   const swingL = Math.cos((cycR) * Math.PI * 2);
   const swingR = Math.cos((cycL) * Math.PI * 2);
 
-  const handLBob = moving ? Math.max(0, -swingL) * 2.5 : 0;
-  const handRBob = moving ? Math.max(0, -swingR) * 2.5 : 0;
+  // Front-pump (positive swing toward facing) lifts the fist near chin level.
+  // Back-pump drops & extends back. Mirrors the runner's piston arm cycle.
+  const frontL = Math.max(0, swingL * facing);
+  const frontR = Math.max(0, swingR * facing);
+  const handLBob = moving ? Math.max(0, -swingL) * 2.5 - frontL * 12 * amp : 0;
+  const handRBob = moving ? Math.max(0, -swingR) * 2.5 - frontR * 12 * amp : 0;
 
   const handLX = sxL + swingL * armSwingMax + idleSwayL;
   const handLY = shoulderY + 22 + handLBob;
