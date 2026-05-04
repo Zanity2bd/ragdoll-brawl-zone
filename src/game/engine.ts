@@ -4111,6 +4111,11 @@ export class GameEngine {
       const wp = 0.25, ap = 0.7;
       const prog = isCharge ? wp * 0.6 : wp + ap * 0.5;
       posed = computeAttackPose(base, "laserSweep", prog, { wp, ap }, renderFacing);
+    } else if (f.kickT > 0) {
+      const wp = KICK_WINDUP / KICK_DUR;
+      const ap = KICK_ACTIVE / KICK_DUR;
+      const prog = Math.min(1, f.kickT / KICK_DUR);
+      posed = computeAttackPose(base, "basicKick", prog, { wp, ap }, renderFacing);
     } else {
       posed = base;
     }
