@@ -84,6 +84,11 @@ interface Fighter {
   // ledge / drop-through state
   dropT: number;
   ledgeFlash: number;
+  // jump feel: coyote + buffer + variable height
+  coyoteT: number;
+  jumpBufferT: number;
+  jumpHeldT: number;       // remaining time variable-height boost is active
+  airJumps: number;        // remaining mid-air jumps
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
