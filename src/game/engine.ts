@@ -1011,6 +1011,7 @@ export class GameEngine {
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
             if (!f.meleeHitMask.has(tick) && dx > -10 && dx < m.range && Math.abs(target.y - f.y) < FIGHTER_H) {
+              if (target.iframeT > 0 || target.downedT > 0 || target.getUpT > 0) { f.meleeHitMask.add(tick); break; }
               f.meleeHitMask.add(tick);
               target.hp = Math.max(0, target.hp - m.damage);
               target.hitFlash = 0.18;
