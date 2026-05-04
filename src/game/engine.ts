@@ -3588,40 +3588,77 @@ export class GameEngine {
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    // ---- Outer glow pass (one-time, cheap) ----
-    // A single soft stroke beneath the main limbs gives a premium neon read.
-    const baseW = skin.thickBody ? 5 : 4;
+    // ---- Size-driven dimensions ----
+    const baseW = skin.thickBody ? 7.0 : 5.5;
+    const lowerW = baseW * 0.62;                                     // taper contrast
+    const torsoW = skin.thickBody ? 7 : 5.5;
+    const outlineW = Math.max(1.8, Math.min(3.4, baseW * 0.42));
+    const torsoOutlineW = Math.max(1.8, Math.min(3.0, torsoW * 0.38));
+    const overlap = baseW * 0.45;
+    const outlineColor = "oklch(0.10 0.02 250)";
+
+    // ---- Curvature: facing-anchored sign, velocity / state amplitude ----
+    const speedNorm = Math.min(1, Math.abs(f.vx) / 210);
+    const flexAmt = 0.35
+      + 0.45 * speedNorm
+      + (f.attackAnim > 0 ? 0.35 : 0)
+      + (f.flying ? 0.25 : 0);
+    const flexBase = baseW * 0.30 * flexAmt;
+    const fSign = f.facingT >= 0 ? 1 : -1;
+    // arms bow outward, legs bow inward — sign anchored to facing, never to limb vector
+    const dirArmL = -1 * fSign;
+    const dirArmR =  1 * fSign;
+    const dirLegL =  1 * fSign;
+    const dirLegR = -1 * fSign;
+
+    const drawAllLimbs = (uW: number, lW: number, withFlex: boolean) => {
+      const m = withFlex ? flexBase : 0;
+      drawLimb(ctx, pose.legL, uW, lW, dirLegL, m, overlap);
+      drawLimb(ctx, pose.legR, uW, lW, dirLegR, m, overlap);
+      drawLimb(ctx, pose.armL, uW, lW, dirArmL, m, overlap);
+      drawLimb(ctx, pose.armR, uW, lW, dirArmR, m, overlap);
+    };
+
+    // ---- 1. Dark outline pass (limbs + torso, NO head) ----
+    if (!ghost) {
+      ctx.save();
+      ctx.strokeStyle = outlineColor;
+      const outerLimbW = baseW + outlineW * 2;
+      const outerLowerW = lowerW + outlineW * 2;
+      drawAllLimbs(outerLimbW, outerLowerW, true);
+      // Torso outline
+      ctx.lineWidth = torsoW + torsoOutlineW * 2;
+      ctx.beginPath(); ctx.moveTo(0, shoulderY - overlap * 0.4); ctx.lineTo(0, hipY + overlap * 0.4); ctx.stroke();
+      ctx.restore();
+    }
+
+    // ---- 2. Outer glow pass ----
     if (!this.lowPower && !ghost) {
       ctx.save();
       ctx.shadowBlur = 12;
       ctx.shadowColor = skin.glow;
       ctx.strokeStyle = `color-mix(in oklab, ${skin.glow} 70%, transparent)`;
-      ctx.lineWidth = baseW + 2.5;
       ctx.globalAlpha = 0.55;
-      drawLimb(ctx, pose.legL); drawLimb(ctx, pose.legR);
-      drawLimb(ctx, pose.armL); drawLimb(ctx, pose.armR);
+      const gW = baseW + 2.5;
+      drawAllLimbs(gW, gW, true);
       ctx.beginPath(); ctx.moveTo(0, shoulderY); ctx.lineTo(0, hipY); ctx.stroke();
       ctx.shadowBlur = 0;
       ctx.globalAlpha = 1;
       ctx.restore();
     }
 
-    // ---- Main limb stroke ----
+    // ---- 3. Main limb stroke (tapered) ----
     ctx.strokeStyle = limbColor;
-    ctx.lineWidth = baseW;
-    drawLimb(ctx, pose.legL);
-    drawLimb(ctx, pose.legR);
-    drawLimb(ctx, pose.armL);
-    drawLimb(ctx, pose.armR);
+    drawAllLimbs(baseW, lowerW, true);
 
-    // ---- Inner highlight: slim brighter core gives volume ----
+    // ---- 4. Inner highlight (mirrors taper) ----
     if (!ghost) {
       ctx.save();
       ctx.strokeStyle = `color-mix(in oklab, ${limbColor} 40%, white)`;
-      ctx.lineWidth = Math.max(1, baseW - 2.4);
       ctx.globalAlpha = 0.38;
-      drawLimb(ctx, pose.legL); drawLimb(ctx, pose.legR);
-      drawLimb(ctx, pose.armL); drawLimb(ctx, pose.armR);
+      const hUp = Math.max(1, baseW - 2.4);
+      const hLo = Math.max(0.8, lowerW - 2.0);
+      drawAllLimbs(hUp, hLo, true);
       ctx.restore();
     }
 
