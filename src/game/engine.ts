@@ -386,8 +386,7 @@ export class GameEngine {
     const ay = fa.y + 20, by = fb.y + 20;
     const yMid = (ay + by) / 2;
     const x0 = Math.min(fa.x, fb.x), x1 = Math.max(fa.x, fb.x);
-    const map = getMap(this.mapId);
-    for (const p of map.platforms) {
+    for (const p of this.platforms) {
       if (p.kind !== "cover") continue;
       if (p.x + p.w < x0 || p.x > x1) continue;
       if (yMid >= p.y - 10 && yMid <= p.y + p.h + 10) return true;
