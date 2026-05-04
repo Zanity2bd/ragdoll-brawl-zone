@@ -3019,6 +3019,16 @@ export class GameEngine {
               }
               this.applyMeleeHit(f, target, m, target.x, target.y + 40);
               f.meleeHitMask.add(1);
+              // Sprite FX: slash arc trailing the strike + impact star at contact.
+              const ix = (f.x + target.x) / 2 + f.facing * 6;
+              const iy = target.y + 40;
+              spawnFx(this.attackFx, "slashArc", ix, iy, {
+                size: 46, life: 0.22, facing: f.facing as 1 | -1,
+                rot: m.kind === "crowbar" ? -0.2 : 0,
+              });
+              spawnFx(this.attackFx, "impactStar", target.x, iy, {
+                size: 30, life: 0.28, grow: 60, spin: 4,
+              });
               if (m.kind === "repulsor") {
                 this.shockwaves.push({
                   x: f.x + f.facing * 30, y: f.y + 40, r: 6, rMax: 70,
