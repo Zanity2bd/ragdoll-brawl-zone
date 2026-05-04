@@ -152,7 +152,7 @@ export class CpuController {
       // If we're inside the danger zone, leap away. If we're far enough, hold ground to whiff-punish.
       const danger = opp.meleeKind === "groundSmash" ? 240 : opp.meleeKind === "webYank" ? 420 : 160;
       if (adx < danger) {
-        this.moveDir = (-dir) as -1 | 1;
+        this.moveDir = (dir === 1 ? -1 : 1);
         this.commitT = 0.30;
         if (me.onGround && Math.random() < 0.7) this.wantJump = true;
         this.retreatT = 0.3;
