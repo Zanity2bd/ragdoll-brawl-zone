@@ -162,7 +162,7 @@ export function GameCanvas() {
         const p1Name = engine.getSkinIdFor("p1");
         if (p1Name === "hulk") return true;
         // Characters with a Power 2 payload → tap-opponent fires it.
-        if (p1Name === "flash" || p1Name === "superman" || p1Name === "ironman" || p1Name === "heatwave") {
+        if (p1Name === "flash" || p1Name === "superman" || p1Name === "ironman" || p1Name === "heatwave" || p1Name === "nightcrawler") {
           if (engine.pressPower2("p1")) return true;
         }
         if (engine.canFly("p1") && engine.isFlying("p1")) {

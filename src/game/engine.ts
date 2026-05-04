@@ -3425,6 +3425,11 @@ function getPowerSpec(id: SkinId): PowerSpec {
         power1: { name: "Inferno Wall", cd: INFERNO_WALL_CD },
         power2: { name: "Magma Blast", cd: MAGMA_BLAST_CD },
       };
+    case "nightcrawler":
+      return {
+        power1: { name: "Bamf Cloud", cd: BAMF_CLOUD_CD },
+        power2: { name: "Bamf Combo", cd: BAMF_COMBO_CD },
+      };
     default:
       return {};
   }
