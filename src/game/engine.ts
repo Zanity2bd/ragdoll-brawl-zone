@@ -630,64 +630,170 @@ export class GameEngine {
     return null;
   }
 
-  /** Power 1 (HOLD-joystick): currently Flash Time Freeze. Returns true if activated. */
+  /** Power 1 — HOLD-joystick activates the character's signature setup ability. */
   pressPower1(attacker: PlayerId): boolean {
     const a = attacker === "p1" ? this.p1 : this.p2;
     const t = attacker === "p1" ? this.p2 : this.p1;
-    if (a.skin.id === "flash") {
-      if (a.power1Cd > 0) return false;
-      if (a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
-      a.power1Cd = TIMEFREEZE_CD;
-      this.timeFreezeT = TIMEFREEZE_DUR;
-      this.timeFreezer = a.id;
-      t.freezeT = TIMEFREEZE_DUR;
-      // Cinematic flash + slight global hitstop
-      this.impactFlash = 1;
-      this.shake = Math.max(this.shake, 18);
-      this.hitstopT = Math.max(this.hitstopT, 0.08);
-      // Burst FX around target
-      this.burst(t.x, t.y + 40, "oklch(0.92 0.18 220)", 28);
-      this.burst(a.x, a.y + 40, "oklch(0.92 0.18 60)", 24);
-      this.shockwaves.push({
-        x: t.x, y: t.y + 40, r: 8, rMax: 260,
-        life: 0.6, maxLife: 0.6, color: "oklch(0.92 0.18 220)",
-      });
-      Sfx.play("blip", 0.9);
-      Sfx.play("whoosh", 0.7);
-      return true;
+    if (a.power1Cd > 0) return false;
+    if (a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0 || a.stunT > 0) return false;
+
+    switch (a.skin.id) {
+      case "flash": {
+        a.power1Cd = TIMEFREEZE_CD;
+        this.timeFreezeT = TIMEFREEZE_DUR;
+        this.timeFreezer = a.id;
+        t.freezeT = TIMEFREEZE_DUR;
+        this.impactFlash = 1;
+        this.shake = Math.max(this.shake, 18);
+        this.hitstopT = Math.max(this.hitstopT, 0.08);
+        this.burst(t.x, t.y + 40, "oklch(0.92 0.18 220)", 28);
+        this.burst(a.x, a.y + 40, "oklch(0.92 0.18 60)", 24);
+        this.shockwaves.push({ x: t.x, y: t.y + 40, r: 8, rMax: 260, life: 0.6, maxLife: 0.6, color: "oklch(0.92 0.18 220)" });
+        Sfx.play("blip", 0.9); Sfx.play("whoosh", 0.7);
+        return true;
+      }
+      case "superman": {
+        // Solar Flare — 360° radial burn + stun
+        a.power1Cd = SOLAR_FLARE_CD;
+        const cx = a.x, cy = a.y + 40;
+        const dx = t.x - cx, dy = (t.y + 40) - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist < SOLAR_FLARE_RADIUS && t.iframeT <= 0 && t.downedT <= 0 && t.getUpT <= 0) {
+          const falloff = 1 - Math.min(1, dist / SOLAR_FLARE_RADIUS);
+          const dmg = SOLAR_FLARE_DMG * (0.5 + falloff * 0.5);
+          t.hp = Math.max(0, t.hp - dmg);
+          t.hitFlash = 0.55;
+          t.stunT = Math.max(t.stunT, SOLAR_FLARE_STUN);
+          const dir = Math.sign(dx) || a.facing;
+          t.vx = dir * 320 * falloff;
+          t.vy = -180 * falloff;
+          t.onGround = false;
+          if (t.hp <= 0) { this.phase = "ko"; this.winner = a.id; }
+        }
+        // Triple shockwave + radial sparks
+        this.shockwaves.push({ x: cx, y: cy, r: 16, rMax: SOLAR_FLARE_RADIUS, life: 0.65, maxLife: 0.65, color: "oklch(0.98 0.16 90)" });
+        this.shockwaves.push({ x: cx, y: cy, r: 8,  rMax: SOLAR_FLARE_RADIUS * 0.7, life: 0.5,  maxLife: 0.5,  color: "oklch(0.99 0.05 80)" });
+        this.shockwaves.push({ x: cx, y: cy, r: 24, rMax: SOLAR_FLARE_RADIUS * 1.25, life: 0.85, maxLife: 0.85, color: "oklch(0.85 0.20 50)" });
+        for (let i = 0; i < 36; i++) {
+          const ang = (i / 36) * Math.PI * 2;
+          const sp = 260 + Math.random() * 200;
+          this.particles.push({
+            x: cx, y: cy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+            life: 0.55 + Math.random() * 0.3, maxLife: 0.85,
+            color: i % 3 === 0 ? "oklch(0.99 0.06 80)" : "oklch(0.92 0.18 70)",
+            size: 2 + Math.random() * 2.5,
+          });
+        }
+        this.impactFlash = 1;
+        this.shake = Math.max(this.shake, 26);
+        this.hitstopT = Math.max(this.hitstopT, 0.12);
+        this.slowmoT = Math.max(this.slowmoT, 0.25);
+        this.slowmoMode = "impact";
+        Sfx.play("boom", 0.9); Sfx.play("heavy", 0.7);
+        return true;
+      }
+      case "ironman": {
+        // Unibeam — start charge phase, then beam
+        a.power1Cd = UNIBEAM_CD;
+        a.unibeamChargeT = UNIBEAM_CHARGE;
+        a.unibeamFireT = 0;
+        Sfx.play("blip", 0.9);
+        return true;
+      }
+      case "heatwave": {
+        // Inferno Wall — drop a flame column at attacker's facing position
+        a.power1Cd = INFERNO_WALL_CD;
+        const wx = a.x + a.facing * 100;
+        this.fireWalls.push({
+          owner: a.id, x: Math.max(80, Math.min(W - 80, wx)),
+          yTop: GROUND_Y - 170, yBottom: GROUND_Y - 4,
+          width: 110, life: INFERNO_WALL_DUR, maxLife: INFERNO_WALL_DUR,
+          tickAcc: 0,
+        });
+        this.shockwaves.push({ x: wx, y: GROUND_Y - 6, r: 8, rMax: 130, life: 0.5, maxLife: 0.5, color: "oklch(0.78 0.22 40)" });
+        this.burst(wx, GROUND_Y - 30, "oklch(0.85 0.20 50)", 32);
+        this.impactFlash = Math.max(this.impactFlash, 0.6);
+        this.shake = Math.max(this.shake, 14);
+        Sfx.play("boom", 0.7); Sfx.play("whoosh", 0.6);
+        return true;
+      }
     }
     return false;
   }
 
-  /** Power 2 (TAP-opponent): currently Flash Lightning Blast. Returns true if activated. */
+  /** Power 2 — TAP-opponent activates the character's offensive payload. */
   pressPower2(attacker: PlayerId): boolean {
     const a = attacker === "p1" ? this.p1 : this.p2;
     const t = attacker === "p1" ? this.p2 : this.p1;
-    if (a.skin.id === "flash") {
-      if (a.power2Cd > 0) return false;
-      if (a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0) return false;
-      a.power2Cd = LIGHTNING_CD;
-      // Spawn a chasing lightning orb at attacker's hand
-      const sx = a.x + a.facing * 14;
-      const sy = a.y + 30;
-      const dxn = Math.sign(t.x - sx) || a.facing;
-      this.lightnings.push({
-        owner: a.id, target: t.id,
-        x: sx, y: sy,
-        vx: dxn * LIGHTNING_SPEED, vy: -40,
-        life: LIGHTNING_DUR, maxLife: LIGHTNING_DUR,
-        phase: 0, hit: false, tickAcc: 0,
-      });
-      this.burst(sx, sy, "oklch(0.95 0.18 95)", 22);
-      this.shockwaves.push({
-        x: sx, y: sy, r: 6, rMax: 80,
-        life: 0.3, maxLife: 0.3, color: "oklch(0.95 0.18 95)",
-      });
-      Sfx.play("blip", 0.7);
-      Sfx.play("whoosh", 0.8);
-      return true;
+    if (a.power2Cd > 0) return false;
+    if (a.ragdollT > 0 || a.downedT > 0 || a.getUpT > 0 || a.stunT > 0) return false;
+
+    switch (a.skin.id) {
+      case "flash": {
+        a.power2Cd = LIGHTNING_CD;
+        const sx = a.x + a.facing * 14;
+        const sy = a.y + 30;
+        const dxn = Math.sign(t.x - sx) || a.facing;
+        this.lightnings.push({
+          owner: a.id, target: t.id, x: sx, y: sy,
+          vx: dxn * LIGHTNING_SPEED, vy: -40,
+          life: LIGHTNING_DUR, maxLife: LIGHTNING_DUR,
+          phase: 0, hit: false, tickAcc: 0,
+        });
+        this.burst(sx, sy, "oklch(0.95 0.18 95)", 22);
+        this.shockwaves.push({ x: sx, y: sy, r: 6, rMax: 80, life: 0.3, maxLife: 0.3, color: "oklch(0.95 0.18 95)" });
+        Sfx.play("blip", 0.7); Sfx.play("whoosh", 0.8);
+        return true;
+      }
+      case "superman": {
+        // Heat Vision — sustained narrow beam
+        a.power2Cd = HEAT_VISION_CD;
+        a.heatVisionT = HEAT_VISION_DUR;
+        Sfx.play("laser", 0.8);
+        return true;
+      }
+      case "ironman": {
+        // Micro-Missile barrage
+        a.power2Cd = MICRO_MISSILE_CD;
+        for (let i = 0; i < MICRO_MISSILE_COUNT; i++) {
+          const angle = -Math.PI / 2 + (Math.random() - 0.5) * 0.6;
+          const speed = 240 + Math.random() * 60;
+          this.missiles.push({
+            owner: a.id, target: t.id,
+            x: a.x + a.facing * 12, y: a.y + 30,
+            vx: Math.cos(angle) * speed * a.facing * 0.4,
+            vy: Math.sin(angle) * speed,
+            life: 2.6, maxLife: 2.6,
+            delay: i * 0.08, phase: 0,
+          });
+        }
+        this.burst(a.x + a.facing * 14, a.y + 28, "oklch(0.85 0.14 60)", 14);
+        Sfx.play("blip", 0.6); Sfx.play("whoosh", 0.6);
+        return true;
+      }
+      case "heatwave": {
+        // Magma Blast — heavy arcing projectile that explodes on impact
+        a.power2Cd = MAGMA_BLAST_CD;
+        const dir = Math.sign(t.x - a.x) || a.facing;
+        const dx = t.x - a.x;
+        const speed = 520;
+        this.magmas.push({
+          owner: a.id,
+          x: a.x + dir * 16, y: a.y + 28,
+          vx: dir * Math.min(520, Math.abs(dx) * 1.4 + 200),
+          vy: -260,
+          life: 2.5, maxLife: 2.5, phase: 0,
+          exploded: false, explosionT: 0,
+        });
+        // void unused
+        void speed;
+        this.burst(a.x + dir * 14, a.y + 28, "oklch(0.78 0.22 40)", 20);
+        Sfx.play("whoosh", 0.7);
+        return true;
+      }
     }
     return false;
+  }
   }
 
   /** Trigger a cinematic super-dash from `attacker` to the opposing fighter. */
