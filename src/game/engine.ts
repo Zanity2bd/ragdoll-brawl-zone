@@ -15,6 +15,7 @@ import {
   DOWN_FRAME, GETUP_FRAME_A, GETUP_FRAME_B, HURT_FRAME,
   KICK_CHAMBER_FRAME, KICK_HIT_FRAME, KNEE_CHAMBER_FRAME, KNEE_HIT_FRAME,
 } from "./walkSprite";
+import { getStance } from "./stances";
 import { loadV2Sheet } from "./walkCycleV2";
 import { loadAttackFx, spawnFx, tickFx, drawFxPool, type ActiveFx } from "./attackFx";
 
@@ -2812,7 +2813,7 @@ export class GameEngine {
         // Stride-locked phase, but driven by a low-passed speed so per-frame
         // physics jitter (collision pushback, friction noise) doesn't translate
         // into stride hiccups. This is the #1 source of perceived "jitter".
-        const STRIDE_PIXELS = 56;
+        const STRIDE_PIXELS = 56 * getStance(f.skin.id).strideMul;
         const rawSpeed = Math.abs(f.vx);
         // Smoothing: ~120ms time constant — fast enough to feel responsive,
         // slow enough to absorb single-frame velocity spikes.
@@ -5100,19 +5101,25 @@ export class GameEngine {
       const moving = f.walkSpeedSmooth > 18;
       const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
       const speedNorm = Math.min(1, f.walkSpeedSmooth / 240);
-      const bobAmp = 0.8 + speedNorm * 1.2;                  // 0.8..2.0 px
+      const stance = getStance(f.skin.id);
+      const bobAmp = (0.8 + speedNorm * 1.2) * stance.bobMul;
       const bobRaw = moving
         ? -Math.cos(cycleF * Math.PI * 4) * bobAmp           // up at footfall
-        : Math.sin(this.elapsed * 1.6 + (f.id === "p1" ? 0 : 1.3)) * 0.4;
-      // Quantize bob to half-pixels — keeps motion visible but stable.
+        : Math.sin(this.elapsed * 1.6 + (f.id === "p1" ? 0 : 1.3)) * 0.4 * stance.idleMul;
+      // Per-character side-to-side shoulder sway (heavy fighters lumber).
+      const swayRaw = moving ? Math.sin(cycleF * Math.PI * 2) * stance.sway : 0;
+      // Quantize to half-pixels — keeps motion visible but stable.
       const bob = Math.round(bobRaw * 2) / 2;
+      const sway = Math.round(swayRaw * 2) / 2;
+      // Forward lean scales with speed and faces direction of travel.
+      const lean = stance.lean * speedNorm * renderFacing;
 
       // Single opaque frame (no crossfade) — selected from continuous phase.
       const fIdxRaw = moving ? cycleF * WALK_LOOP_FRAMES : 0;
       const f0 = Math.floor(fIdxRaw) % WALK_LOOP_FRAMES;
 
-      const drawX = x + f.bodyLagX;                  // sub-pixel — smooth slide
-      const drawY = Math.round(y + FIGHTER_H - bob); // integer — kill shimmer
+      const drawX = x + f.bodyLagX + sway + lean;    // sub-pixel — smooth slide
+      const drawY = Math.round(y + FIGHTER_H - bob + stance.crouch); // integer — kill shimmer
       const prevSmoothing = ctx.imageSmoothingEnabled;
       const prevQuality = ctx.imageSmoothingQuality;
       ctx.imageSmoothingEnabled = true;
