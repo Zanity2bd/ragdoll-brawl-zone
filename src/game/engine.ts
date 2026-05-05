@@ -15,6 +15,8 @@ import {
   DOWN_FRAME, GETUP_FRAME_A, GETUP_FRAME_B, HURT_FRAME,
   KICK_CHAMBER_FRAME, KICK_HIT_FRAME, KNEE_CHAMBER_FRAME, KNEE_HIT_FRAME,
 } from "./walkSprite";
+import { loadV2Sheet, drawV2Frame, isV2Ready } from "./walkCycleV2";
+import { getMergedSlot, MERGED_SLOTS } from "./walkMerge";
 import { loadAttackFx, spawnFx, tickFx, drawFxPool, type ActiveFx } from "./attackFx";
 
 export type PlayerId = "p1" | "p2";
