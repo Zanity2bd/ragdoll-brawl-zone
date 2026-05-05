@@ -2,6 +2,7 @@
 // Per-skin signature melees with impact frames, ragdoll, slow-mo, SFX.
 
 import { computeWalkPose, computeRagdollPose, blendPose, type Pose } from "./animation";
+import { drawPremiumBody, premiumShoulderHalf } from "./premiumRender";
 import { getMap, type MapId } from "./maps";
 import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
