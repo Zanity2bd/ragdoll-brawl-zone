@@ -205,44 +205,51 @@ export function computeWalkPose(
 
   if (!onGround) {
     // Three-phase jump: launch (vy<<0) → apex (|vy|≈0) → fall (vy>0).
-    // Knees tuck high during launch, splay outward at apex, extend on fall to "stick" landing.
-    const apex = 1 - Math.min(1, Math.abs(vy) / 320); // 1 at apex, 0 launching/falling fast
+    // Smoothed with cosine ease so transitions between phases never pop.
+    const apexLin = 1 - Math.min(1, Math.abs(vy) / 320);
+    const apex = 0.5 - 0.5 * Math.cos(apexLin * Math.PI); // ease in/out
     const launching = vy < 0;
-    const fallT = launching ? 0 : Math.min(1, vy / 320);
-    const tuck = launching ? Math.min(1, -vy / 380) : 0;
+    const fallLin = launching ? 0 : Math.min(1, vy / 320);
+    const fallT = fallLin * fallLin * (3 - 2 * fallLin);
+    const tuckLin = launching ? Math.min(1, -vy / 380) : 0;
+    const tuck = tuckLin * tuckLin * (3 - 2 * tuckLin);
 
-    // Hip/knee/foot
-    const legSplay = 4 + apex * 4;
-    const kneeY = hipYBase + (10 + tuck * 12 - fallT * 4);
-    const kneeXIn = 5 + tuck * 4;
-    const footTuck = launching ? 14 + tuck * 6 : 22 + fallT * 10;
+    // Air micro-rotation — body slowly tilts forward through the arc
+    const airSpin = Math.sin(phase * 0.6) * 0.02;
+
+    // Hip/knee/foot — knees tuck high on launch, splay at apex, extend on fall
+    const legSplay = 4 + apex * 5;
+    const kneeY = hipYBase + (10 + tuck * 14 - fallT * 5);
+    const kneeXIn = 5 + tuck * 5 - fallT * 2;
+    const footTuck = launching ? 14 + tuck * 8 : 22 + fallT * 12;
     const footYL = hipYBase + footTuck;
-    const footYR = hipYBase + footTuck - apex * 3;
+    const footYR = hipYBase + footTuck - apex * 4;
+    // Slight asymmetric leg offset for organic, non-symmetrical look
+    const legAsym = Math.sin(phase * 0.8) * 1.5 * apex;
 
-    // Arms swing forward on launch, splay wide at apex, pull back on fall
-    const armForward = facing * (10 + tuck * 8);
-    const armApexOut = facing * (-2 - apex * 6);
-    const armFallBack = facing * (-12 - fallT * 4);
-    const handX = launching ? armForward : (apex > 0.5 ? armApexOut : armFallBack);
-    const handY = 22 + (launching ? -tuck * 6 : apex * 2 + fallT * 6);
-    const handXOpp = -handX * 0.7;
+    // Arms — smoothly arc from forward swing → wide splay → trailing back
+    // Use cosine blends instead of hard branching so there is never a snap
+    const armSwingX = facing * (10 - tuck * 4 - apex * 18 - fallT * 6);
+    const armSwingY = 22 - tuck * 5 + apex * 4 + fallT * 8;
+    const armCounterX = -armSwingX * 0.7;
+    const elbowBend = 4 + apex * 3;
 
-    const lean = facing * (0.08 + tuck * 0.08 - fallT * 0.04);
+    const lean = facing * (0.08 + tuck * 0.08 - fallT * 0.04) + airSpin;
 
     return {
-      headOffsetY: -3 - tuck * 1.5,
-      shoulderY: 28 - tuck * 1.5,
-      hipY: hipYBase - tuck * 1,
-      legL: [-3, hipYBase, -3 - kneeXIn, kneeY, -2 - legSplay, footYL],
-      legR: [3, hipYBase, 3 + kneeXIn, kneeY, 2 + legSplay, footYR],
-      armL: [-4, 28, -10, 30 + apex * 2, handXOpp, handY + 2],
-      armR: [4, 28, 10, 30 + apex * 2, handX, handY],
-      handL: [handXOpp, handY + 2],
-      handR: [handX, handY],
-      footL: [-2 - legSplay, footYL],
-      footR: [2 + legSplay, footYR],
+      headOffsetY: -3 - tuck * 1.5 + fallT * 0.5,
+      shoulderY: 28 - tuck * 1.5 + fallT * 0.8,
+      hipY: hipYBase - tuck * 1 + fallT * 0.5,
+      legL: [-3, hipYBase, -3 - kneeXIn, kneeY + legAsym, -2 - legSplay, footYL + legAsym],
+      legR: [3, hipYBase, 3 + kneeXIn, kneeY - legAsym, 2 + legSplay, footYR - legAsym],
+      armL: [-4, 28, -10 + armCounterX * 0.3, 30 + apex * 2 + elbowBend, armCounterX, armSwingY + 2],
+      armR: [4, 28, 10 + armSwingX * 0.3, 30 + apex * 2 + elbowBend, armSwingX, armSwingY],
+      handL: [armCounterX, armSwingY + 2],
+      handR: [armSwingX, armSwingY],
+      footL: [-2 - legSplay, footYL + legAsym],
+      footR: [2 + legSplay, footYR - legAsym],
       lean,
-      shoulderRoll: -facing * apex * 0.05,
+      shoulderRoll: -facing * apex * 0.06 + airSpin * 0.5,
     };
   }
 
