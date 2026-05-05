@@ -5082,12 +5082,9 @@ export class GameEngine {
         ctx.restore();
       }
 
-      // If not in a special melee, sprite IS the whole body — done.
-      if (f.attackAnim <= 0 && f.meleeKind == null) {
-        return;
-      }
-      // Otherwise fall through so the procedural attack pose renders the
-      // arms / weapons on top of the sprite legs.
+      // Sprite is authoritative for the body; FX (slash arc, beams, etc.)
+      // and overlays (cape, emblem, eyes) layer on top elsewhere.
+      return;
     }
 
     // ---- Bamf strike depth FX (perspective scale + z-shadow) ----
