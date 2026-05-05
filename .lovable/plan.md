@@ -1,40 +1,27 @@
-# Walk: Combine 10-frame sheet + 6 hand-drawn keys
+# Fix: walk looks bad — revert merge, keep smoothness wins
 
-## Goal
-Keep the existing 10-frame walk loop. Add the 6 hand-drawn keyposes as a second source. At runtime, build a 16-slot merged cycle that pulls from whichever source has the closer-matching pose, with crossfade between adjacent slots and stride-locked timing for true production smoothness.
+## Diagnosis
+Looking at frames extracted from your recording, the merged cycle is alternating between **two visually inconsistent art styles** every slot — the original sheet sprite (with proper head circle, cape, emblem) and the v2 hand-drawn silhouette (different proportions, head sits higher, my auto-anchor mis-placed the face overlay so you see a floating head + ghost body). Each source looks fine alone; crossfading between them every 1/16 cycle is what produces the broken look.
 
-## Implementation
+The merge approach can't recover from this — the two sources have different foot lines, head positions, and limb thickness. No phase math fixes that.
 
-### 1. New asset folder (already copied)
-`src/assets/walk-frames-v2/walk-00.png` … `walk-05.png`
+## Fix (this turn)
+1. **Revert the walk render** to draw exclusively from `walk-sheet.png` (the 10-frame loop you said looked good).
+2. **Keep the smoothness wins** that *do* help and don't conflict:
+   - Stride-locked phase advance (`speed / STRIDE_PIXELS * 2π`) — kills foot sliding.
+   - Vertical bob (`sin(phase·4π) · 1.5px`) — adds life.
+   - Idle decay to neutral pose.
+3. **Remove** the merged 16-slot path, the v2 draw call, and the imports from `walkMerge` + `walkCycleV2` in `engine.ts`. Leave the v2 modules + asset files in place (no churn, future use).
 
-### 2. New module `src/game/walkCycleV2.ts`
-- Loads the 6 PNGs, luma-keys the gray background to alpha (bright pixels → opaque white silhouette; everything else → transparent), so they share the same tinting pipeline as `walk-sheet.png`.
-- Auto-fits each silhouette into the same 144×200 cell as `walk-sheet.png`, feet planted at `WALK_FOOT_Y` — guarantees scale + ground contact match the existing frames exactly.
-- Auto-extracts per-frame anchors (head xy/r, chest xy, hipY, footY) by alpha-scanning each cell, mirroring the approach used in `walkAnchors.ts`.
-- Per-skin caches a tinted + overlaid sheet (cape behind, head/eyes/emblem/cowl/beard on top) using the same overlay pipeline copied from `walkSprite.ts`. Hot path = one `drawImage` per fighter per frame.
-- Exports `loadV2Sheet()`, `isV2Ready()`, `drawV2Frame(ctx, skin, idx, cx, footY, facing, height, mirror?)`.
+## Path forward for your 6 hand-drawn frames
+Mixing two art styles at runtime won't work. Two real options when you want to revisit:
+- **Option A — Replace, don't merge**: bake your 6 frames into a *new* 12-frame walk sheet (mirror the 6 → 12) and switch the walk loop to use only that sheet. One consistent art style, no flicker. Requires re-doing per-frame anchors for cape/emblem.
+- **Option B — Use them as a separate skin**: ship the hand-drawn style as an unlockable "classic stickman" skin with its own dedicated sheet, instead of mixing into existing skins.
 
-### 3. New module `src/game/walkMerge.ts`
-- One-time at init, classifies each of the 16 source frames (10 from sheet + 6 from v2) by its stride phase ∈ [0,1) using leg-anchor X spread + lead-leg sign.
-- Builds `MERGED[16]` lookup: for each evenly-spaced target sub-pose, picks the two closest source frames (with `mirror` flag for re-using one stride-half as the other) and a crossfade weight.
-- Exposes `getMergedSlot(slot01: number)` returning `{ a, b, blend }` where `a`/`b` describe `{ source: "sheet"|"v2", frame, mirror }`.
-
-### 4. Engine wiring (`src/game/engine.ts`)
-- Replace lines ~5070–5083 (current 10-frame walk branch) with the merged 16-slot draw: pick `slot = floor(cycleF*16)`, draw primary, alpha-blend the next slot's primary by `slotFrac`. Each draw routes to `drawWalkFrame` (sheet) or `drawV2Frame` (v2) based on the source flag. If v2 isn't loaded yet, fall back to existing 10-frame logic untouched.
-- Replace line ~2809 walk-phase advance with stride-locked timing: `f.walkPhase += (|vx| / STRIDE_PIXELS) * 2π * ldt` (STRIDE_PIXELS ≈ 38) so feet match ground speed (kills foot-sliding).
-- Add inside the walk branch only: vertical bob `sin(phase·4π)·1.5px` subtracted from footY, and `sin(phase·2π)·0.025` added to lean. Idle (|vx|<18) decays phase to 0.
-- Call `loadV2Sheet()` from engine init alongside `loadWalkSheet()`.
-
-### 5. Untouched
-`walk-sheet.png`, `walkSprite.ts`, `walkAnchors.ts`, `animation.ts`, all jump/punch/ragdoll/getup/hurt/kick/knee/slash branches, all FX, AI, combat.
+I'd recommend Option A when you're ready — but only after we finish polishing jump/ragdoll/getup/basic-attack on the current sheet, so we have one stable visual baseline.
 
 ## Files
-- **Create**: `src/game/walkCycleV2.ts`, `src/game/walkMerge.ts`
-- **Edit**: `src/game/engine.ts` (walk branch ~5070, phase advance ~2809, init)
-- **Already copied**: `src/assets/walk-frames-v2/walk-0[0-5].png`
+- **Edit**: `src/game/engine.ts` — revert walk branch (~5083) to sheet-only with stride-lock + bob; drop unused imports.
+- **No-op**: leave `src/game/walkCycleV2.ts`, `src/game/walkMerge.ts`, and `src/assets/walk-frames-v2/*` in place for the future Option A path.
 
-## Risk
-Zero regression risk — until v2 sheet finishes loading the engine renders the original 10-frame loop. The merged path activates seamlessly once `isV2Ready()` flips true.
-
-After this lands, we move on to **jump** as agreed.
+After this lands, walk should look like before but with no foot-slide and a subtle bob. Then we move to **jump** as planned.
