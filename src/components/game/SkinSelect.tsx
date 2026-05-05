@@ -1,6 +1,15 @@
 import { SKINS, type SkinId, type Universe, getSkin, type Skin } from "@/game/skins";
 import type { Difficulty } from "@/game/ai";
 import { useEffect, useRef, useState } from "react";
+import spidermanHero from "@/assets/heroes/spiderman.png";
+import hulkHero from "@/assets/heroes/hulk.png";
+import flashHero from "@/assets/heroes/flash.png";
+
+const HERO_PORTRAITS: Partial<Record<SkinId, string>> = {
+  spiderman: spidermanHero,
+  hulk: hulkHero,
+  flash: flashHero,
+};
 
 const UNIVERSES: Universe[] = ["Marvel", "DC", "The Boys"];
 const DIFFS: { id: Difficulty; label: string }[] = [
