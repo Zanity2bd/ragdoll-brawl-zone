@@ -204,52 +204,72 @@ export function computeWalkPose(
   }
 
   if (!onGround) {
-    // Three-phase jump: launch (vy<<0) → apex (|vy|≈0) → fall (vy>0).
+    // Four-phase jump: launch (squat-extend) → rising → apex (tuck) → fall (reach for ground).
     // Smoothed with cosine ease so transitions between phases never pop.
     const apexLin = 1 - Math.min(1, Math.abs(vy) / 320);
-    const apex = 0.5 - 0.5 * Math.cos(apexLin * Math.PI); // ease in/out
+    const apex = 0.5 - 0.5 * Math.cos(apexLin * Math.PI); // ease in/out (peak at apex)
     const launching = vy < 0;
-    const fallLin = launching ? 0 : Math.min(1, vy / 320);
+    const fallLin = launching ? 0 : Math.min(1, vy / 380);
     const fallT = fallLin * fallLin * (3 - 2 * fallLin);
-    const tuckLin = launching ? Math.min(1, -vy / 380) : 0;
-    const tuck = tuckLin * tuckLin * (3 - 2 * tuckLin);
+    // Strong push-off at the very start of the jump (when vy is most negative)
+    const launchLin = launching ? Math.min(1, -vy / 420) : 0;
+    const launchPush = launchLin * launchLin * (3 - 2 * launchLin);
+    // Tuck during the second half of the rise / apex
+    const tuckLin = launching ? Math.max(0, 1 - (-vy) / 420) : Math.max(0, 1 - vy / 240);
+    const tuck = (1 - launchPush) * (tuckLin * tuckLin * (3 - 2 * tuckLin));
 
     // Air micro-rotation — body slowly tilts forward through the arc
     const airSpin = Math.sin(phase * 0.6) * 0.02;
 
-    // Hip/knee/foot — knees tuck high on launch, splay at apex, extend on fall
-    const legSplay = 4 + apex * 5;
-    const kneeY = hipYBase + (10 + tuck * 14 - fallT * 5);
-    const kneeXIn = 5 + tuck * 5 - fallT * 2;
-    const footTuck = launching ? 14 + tuck * 8 : 22 + fallT * 12;
-    const footYL = hipYBase + footTuck;
-    const footYR = hipYBase + footTuck - apex * 4;
-    // Slight asymmetric leg offset for organic, non-symmetrical look
-    const legAsym = Math.sin(phase * 0.8) * 1.5 * apex;
+    // Bicycle pump — alternating leg motion driven by vertical phase, peaks on launch.
+    // Adds the visible "kicking up off the ground" feeling.
+    const pumpPhase = phase * 1.6;
+    const pumpAmt = launchPush * 0.85 + apex * 0.25;
+    const legPumpL = Math.sin(pumpPhase) * pumpAmt;
+    const legPumpR = -legPumpL;
 
-    // Arms — smoothly arc from forward swing → wide splay → trailing back
-    // Use cosine blends instead of hard branching so there is never a snap
-    const armSwingX = facing * (10 - tuck * 4 - apex * 18 - fallT * 6);
-    const armSwingY = 22 - tuck * 5 + apex * 4 + fallT * 8;
-    const armCounterX = -armSwingX * 0.7;
-    const elbowBend = 4 + apex * 3;
+    // Lead leg drives forward & up on push-off (extended below hip → drives knee high)
+    // Trail leg extends down for the kick-off, then folds up
+    const kneeUpL = launchPush * (8 + legPumpL * 6) + tuck * 16 - fallT * 4;
+    const kneeUpR = launchPush * (8 + legPumpR * 6) + tuck * 16 - fallT * 4;
+    const kneeXIn = 4 + tuck * 6 - fallT * 2;
+    const kneeYL = hipYBase + (12 - kneeUpL);
+    const kneeYR = hipYBase + (12 - kneeUpR);
 
-    const lean = facing * (0.08 + tuck * 0.08 - fallT * 0.04) + airSpin;
+    // Feet: on launch one foot is still pushing down (extended), the other is rising.
+    // On apex both tuck up. On fall both extend down to "stick the landing".
+    const footExtendL = launchPush * (10 - legPumpL * 8) + fallT * 14 - tuck * 12;
+    const footExtendR = launchPush * (10 - legPumpR * 8) + fallT * 14 - tuck * 12;
+    const footYL = hipYBase + 22 + footExtendL;
+    const footYR = hipYBase + 22 + footExtendR;
+    const legSplayBase = 4 + apex * 4;
+    const footXL = -2 - legSplayBase - launchPush * 2;
+    const footXR = 2 + legSplayBase + launchPush * 2;
+
+    // Arms — windmill on launch (counter-balance), splay at apex, reach down on landing
+    const armSwingX = facing * (8 - launchPush * 14 - apex * 18 - fallT * 4);
+    const armSwingY = 24 - launchPush * 10 + apex * 4 + fallT * 10;
+    const armCounterX = facing * (-6 + launchPush * 18 + apex * 6);
+    const armCounterY = 24 - launchPush * 4 + apex * 2 + fallT * 8;
+    const elbowBend = 4 + apex * 3 + launchPush * 2;
+
+    const lean = facing * (0.06 + launchPush * 0.10 + tuck * 0.04 - fallT * 0.06) + airSpin;
+    const sqUp = launchPush * 2; // small stretch on push-off
 
     return {
-      headOffsetY: -3 - tuck * 1.5 + fallT * 0.5,
-      shoulderY: 28 - tuck * 1.5 + fallT * 0.8,
-      hipY: hipYBase - tuck * 1 + fallT * 0.5,
-      legL: [-3, hipYBase, -3 - kneeXIn, kneeY + legAsym, -2 - legSplay, footYL + legAsym],
-      legR: [3, hipYBase, 3 + kneeXIn, kneeY - legAsym, 2 + legSplay, footYR - legAsym],
-      armL: [-4, 28, -10 + armCounterX * 0.3, 30 + apex * 2 + elbowBend, armCounterX, armSwingY + 2],
-      armR: [4, 28, 10 + armSwingX * 0.3, 30 + apex * 2 + elbowBend, armSwingX, armSwingY],
-      handL: [armCounterX, armSwingY + 2],
+      headOffsetY: -3 - launchPush * 1 - tuck * 2 + fallT * 0.8,
+      shoulderY: 28 - sqUp - tuck * 2 + fallT * 1,
+      hipY: hipYBase - sqUp * 0.6 - tuck * 1 + fallT * 0.5,
+      legL: [-3, hipYBase, -3 - kneeXIn, kneeYL, footXL, footYL],
+      legR: [3, hipYBase, 3 + kneeXIn, kneeYR, footXR, footYR],
+      armL: [-4, 28, -10 + armCounterX * 0.3, 30 + elbowBend, armCounterX, armCounterY],
+      armR: [4, 28, 10 + armSwingX * 0.3, 30 + elbowBend, armSwingX, armSwingY],
+      handL: [armCounterX, armCounterY],
       handR: [armSwingX, armSwingY],
-      footL: [-2 - legSplay, footYL + legAsym],
-      footR: [2 + legSplay, footYR - legAsym],
+      footL: [footXL, footYL],
+      footR: [footXR, footYR],
       lean,
-      shoulderRoll: -facing * apex * 0.06 + airSpin * 0.5,
+      shoulderRoll: -facing * apex * 0.08 + airSpin * 0.5,
     };
   }
 
@@ -922,48 +942,68 @@ export function computeAttackPose(
 // Each limb is a damped pendulum with its own phase offset so the body
 // flails organically instead of snapping in lockstep — gives a fluid,
 // "rag-doll" silhouette at any framerate.
-export function computeRagdollPose(t: number, _H: number): Pose {
+export function computeRagdollPose(t: number, _H: number, bodyAng: number = 0): Pose {
   const sy = 30;
   const hipY = 56;
-  // Energy decays so the doll settles instead of flailing forever
-  const energy = Math.exp(-t * 0.6);
-  const spin = t * 11;
+  // Energy decays slower so the body keeps flailing for the full ragdoll window
+  const energy = Math.exp(-t * 0.45);
+  const spin = t * 13;
   // Per-limb phase offsets — golden-ratio spaced for natural asymmetry
-  const phLA = spin * 1.15 + 0.0;
-  const phRA = spin * 1.05 + 1.7;
-  const phLL = spin * 0.95 + 3.2;
-  const phRL = spin * 1.10 + 4.6;
+  const phLA = spin * 1.23 + 0.0;
+  const phRA = spin * 1.07 + 1.7;
+  const phLL = spin * 0.91 + 3.2;
+  const phRL = spin * 1.13 + 4.6;
   // Secondary high-frequency wobble (whip-like overshoot)
-  const wob = Math.sin(t * 24) * 1.6 * energy;
+  const wob = Math.sin(t * 28) * 2.2 * energy;
+  const wob2 = Math.cos(t * 19 + 0.7) * 1.8 * energy;
 
-  const armSwL = (Math.cos(phLA) * 6 + Math.sin(phLA * 1.7) * 3) * energy;
-  const armSwR = (Math.cos(phRA) * 6 + Math.sin(phRA * 1.7) * 3) * energy;
-  const armDpL = (Math.sin(phLA) * 5 + 2) * energy + 4;
-  const armDpR = (Math.sin(phRA) * 5 + 2) * energy + 4;
+  // World-down vector projected into the body's local space.
+  // The body is rotated by bodyAng at draw time, so to make limbs always
+  // dangle toward real gravity we add this constant pull.
+  const gx = Math.sin(-bodyAng);
+  const gy = Math.cos(-bodyAng);
+  // Gravity droop strength fades up as energy drops (limbs go limp as they tire)
+  const droop = (1 - energy * 0.7) * 14;
 
-  const legSwL = (Math.cos(phLL) * 7 + Math.sin(phLL * 1.4) * 3) * energy;
-  const legSwR = (Math.cos(phRL) * 7 + Math.sin(phRL * 1.4) * 3) * energy;
-  const legDpL = (Math.sin(phLL) * 4) * energy + 4;
-  const legDpR = (Math.sin(phRL) * 4) * energy + 4;
+  // Larger swing amplitudes so the limbs visibly flail
+  const armSwL = (Math.cos(phLA) * 11 + Math.sin(phLA * 1.7) * 5) * energy;
+  const armSwR = (Math.cos(phRA) * 11 + Math.sin(phRA * 1.7) * 5) * energy;
+  const armDpL = (Math.sin(phLA) * 9 + 3) * energy + 6;
+  const armDpR = (Math.sin(phRA) * 9 + 3) * energy + 6;
+
+  const legSwL = (Math.cos(phLL) * 10 + Math.sin(phLL * 1.4) * 5) * energy;
+  const legSwR = (Math.cos(phRL) * 10 + Math.sin(phRL * 1.4) * 5) * energy;
+  const legDpL = (Math.sin(phLL) * 7) * energy + 6;
+  const legDpR = (Math.sin(phRL) * 7) * energy + 6;
 
   // Shoulder + hip micro-shift from torso flop
-  const torsoX = Math.sin(spin * 0.7) * 2 * energy;
-  const torsoY = Math.cos(spin * 0.9) * 1.2 * energy;
+  const torsoX = Math.sin(spin * 0.7) * 3 * energy;
+  const torsoY = Math.cos(spin * 0.9) * 2 * energy;
+
+  // Hand & foot positions: base swing + gravity droop pulling toward world-down
+  const handLX = -16 + armSwL + gx * droop * 0.9;
+  const handLY = sy + 18 + armDpL * 0.7 + wob + gy * droop * 0.9;
+  const handRX = 16 + armSwR + gx * droop * 0.9;
+  const handRY = sy + 18 + armDpR * 0.7 - wob + gy * droop * 0.9;
+  const footLX = -13 + legSwL + gx * droop * 0.6;
+  const footLY = hipY + 22 + legDpL * 0.7 + gy * droop * 0.6;
+  const footRX = 13 + legSwR + gx * droop * 0.6;
+  const footRY = hipY + 22 + legDpR * 0.7 + gy * droop * 0.6;
 
   return {
-    headOffsetY: -2 + Math.sin(spin) * 1.4 * energy + wob * 0.3,
+    headOffsetY: -2 + Math.sin(spin) * 2.4 * energy + wob * 0.4 + gy * droop * 0.15,
     shoulderY: sy + torsoY,
     hipY: hipY + torsoY * 0.5,
-    legL: [-3 + torsoX, hipY, -7 + legSwL * 0.6, hipY + 12 + legDpL, -13 + legSwL, hipY + 22 + legDpL * 0.7],
-    legR: [3 + torsoX, hipY, 7 + legSwR * 0.6, hipY + 12 + legDpR, 13 + legSwR, hipY + 22 + legDpR * 0.7],
-    armL: [-4 + torsoX, sy, -10 + armSwL * 0.6, sy + 10 + armDpL, -16 + armSwL, sy + 18 + armDpL * 0.7 + wob],
-    armR: [4 + torsoX, sy, 10 + armSwR * 0.6, sy + 10 + armDpR, 16 + armSwR, sy + 18 + armDpR * 0.7 - wob],
-    handL: [-16 + armSwL, sy + 18 + armDpL * 0.7 + wob],
-    handR: [16 + armSwR, sy + 18 + armDpR * 0.7 - wob],
-    footL: [-13 + legSwL, hipY + 22 + legDpL * 0.7],
-    footR: [13 + legSwR, hipY + 22 + legDpR * 0.7],
+    legL: [-3 + torsoX, hipY, -7 + legSwL * 0.5 + gx * droop * 0.3, hipY + 12 + legDpL + gy * droop * 0.3, footLX, footLY],
+    legR: [3 + torsoX, hipY, 7 + legSwR * 0.5 + gx * droop * 0.3, hipY + 12 + legDpR + gy * droop * 0.3, footRX, footRY],
+    armL: [-4 + torsoX, sy, -10 + armSwL * 0.5 + gx * droop * 0.5, sy + 10 + armDpL + gy * droop * 0.5, handLX, handLY],
+    armR: [4 + torsoX, sy, 10 + armSwR * 0.5 + gx * droop * 0.5, sy + 10 + armDpR + gy * droop * 0.5, handRX, handRY],
+    handL: [handLX, handLY],
+    handR: [handRX, handRY],
+    footL: [footLX, footLY],
+    footR: [footRX, footRY],
     lean: spin * 0.3,
-    shoulderRoll: Math.sin(spin * 0.8) * 0.1 * energy,
+    shoulderRoll: Math.sin(spin * 0.8) * 0.18 * energy + wob2 * 0.02,
   };
 }
 

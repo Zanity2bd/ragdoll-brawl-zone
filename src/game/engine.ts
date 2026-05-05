@@ -2276,7 +2276,7 @@ export class GameEngine {
       f.vy = 0;
       f.onGround = true;
       if (f.downedT <= 0) {
-        f.getUpDur = 0.45;
+        f.getUpDur = 0.85;
         f.getUpT = f.getUpDur;
       }
       return;
@@ -4203,25 +4203,64 @@ export class GameEngine {
   // ---------------- POSE ----------------
   private poseFor(f: Fighter): Pose {
     if (f.ragdollT > 0) {
-      const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H);
+      const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H, f.ragdollAng);
       // Override lean with physical body angle for stable visual
       return { ...p, lean: f.ragdollAng };
     }
     if (f.downedT > 0) {
-      const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H);
-      // Lay flat — snap angle to ±90°, freeze tumble
       const targetAng = f.ragdollAng >= 0 ? Math.PI / 2 : -Math.PI / 2;
-      return { ...p, lean: targetAng };
+      const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H, targetAng);
+      // Lay flat — snap angle to ±90°, freeze tumble. Add tiny breathing rise.
+      const breath = Math.sin(f.ragdollPhase * 2.4) * 0.6;
+      return { ...p, hipY: p.hipY + breath, shoulderY: p.shoulderY + breath * 0.6, lean: targetAng };
     }
     if (f.getUpT > 0) {
-      // Blend from laydown back to upright walk pose
-      const t = 1 - (f.getUpT / Math.max(0.001, f.getUpDur));
-      const ease = t * t * (3 - 2 * t);
-      const flat = computeRagdollPose(f.ragdollPhase, FIGHTER_H);
-      const stand = computeWalkPose(0, 0, true, 0, false, f.facing, FIGHTER_H);
+      // Three-stage get-up: laydown → push-up/kneel → upright.
+      // Easing: slow start (push off ground), accelerate to standing.
+      const tLin = 1 - (f.getUpT / Math.max(0.001, f.getUpDur));
       const targetAng = f.ragdollAng >= 0 ? Math.PI / 2 : -Math.PI / 2;
-      const lean = targetAng * (1 - ease);
-      return blendPose(flat, stand, ease, lean);
+      const flat = computeRagdollPose(f.ragdollPhase, FIGHTER_H, targetAng);
+      const stand = computeWalkPose(0, 0, true, 0, false, f.facing, FIGHTER_H);
+      if (tLin < 0.5) {
+        // Stage 1: push off ground onto hands & knees (kneel pose)
+        const u = tLin / 0.5;
+        const ease = u * u * (3 - 2 * u);
+        // Kneel target: hips lifted, head still low, hands planted forward
+        const kneel: Pose = {
+          headOffsetY: 18,
+          shoulderY: 38,
+          hipY: 60,
+          legL: [-4, 60, -8, 70, -10, 80],
+          legR: [4, 60, 8, 70, 10, 80],
+          armL: [-5, 38, -10, 52, -14, 70],
+          armR: [5, 38, 10, 52, 14, 70],
+          handL: [-14, 70], handR: [14, 70],
+          footL: [-10, 80], footR: [10, 80],
+          lean: targetAng * 0.35,
+          shoulderRoll: 0,
+        };
+        const lean = targetAng * (1 - ease * 0.7);
+        return blendPose(flat, kneel, ease, lean);
+      } else {
+        // Stage 2: rise from kneel to standing
+        const u = (tLin - 0.5) / 0.5;
+        const ease = u * u * (3 - 2 * u);
+        const kneel: Pose = {
+          headOffsetY: 18,
+          shoulderY: 38,
+          hipY: 60,
+          legL: [-4, 60, -8, 70, -10, 80],
+          legR: [4, 60, 8, 70, 10, 80],
+          armL: [-5, 38, -10, 52, -14, 70],
+          armR: [5, 38, 10, 52, 14, 70],
+          handL: [-14, 70], handR: [14, 70],
+          footL: [-10, 80], footR: [10, 80],
+          lean: targetAng * 0.35,
+          shoulderRoll: 0,
+        };
+        const lean = targetAng * 0.35 * (1 - ease);
+        return blendPose(kneel, stand, ease, lean);
+      }
     }
     // Use the rendered facing (sign of facingT) so pose direction stays in sync
     // with the yaw scale we apply at draw time. Both flip at the same instant
