@@ -5214,6 +5214,18 @@ export class GameEngine {
     const shoulderY = pose.shoulderY;
     const hipY = pose.hipY;
 
+    // Premium skins: snap upper-arm roots to the trapezoid corners so the
+    // shoulder caps, torso edge and arm origin all coincide (matches the
+    // SkinSelect card silhouette). Mutate a copy so trails/AI don't see it.
+    if (skin.premiumRender) {
+      const sh = premiumShoulderHalf(skin, hipY - shoulderY);
+      pose = {
+        ...pose,
+        armL: [-sh, shoulderY, pose.armL[2], pose.armL[3], pose.armL[4], pose.armL[5]],
+        armR: [ sh, shoulderY, pose.armR[2], pose.armR[3], pose.armR[4], pose.armR[5]],
+      };
+    }
+
     const bodyColor = f.hitFlash > 0 && !ghost ? "oklch(0.95 0.20 30)" : skin.body;
     const limbColor = skin.limb ?? bodyColor;
     const headColor = skin.head ?? bodyColor;
