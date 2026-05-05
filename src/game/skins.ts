@@ -105,6 +105,7 @@ export const SKINS: Skin[] = [
     gloves: "oklch(0.40 0.16 260)", boots: "oklch(0.40 0.16 260)",
     cape: "oklch(0.45 0.20 25)", capeAccent: "oklch(0.92 0.04 250)",
     glowingEyes: "oklch(0.82 0.18 60)",
+    thickBody: true,
     glow: "oklch(0.55 0.18 30)" },
 
   { id: "butcher", name: "Butcher", universe: "The Boys",
@@ -120,6 +121,7 @@ export const SKINS: Skin[] = [
     gloves: "oklch(0.92 0.02 250)", boots: "oklch(0.92 0.02 250)",
     streaks: "oklch(0.92 0.02 250)",
     emblem: { shape: "stripe", color: "oklch(0.92 0.02 250)" },
+    thickBody: true,
     glow: "oklch(0.55 0.18 25)" },
 ];
 
