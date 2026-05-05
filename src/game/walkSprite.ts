@@ -95,6 +95,33 @@ function drawOverlays(
   const cy = a.cy;
   const r = a.hr;
 
+  // ---- Body thickening pass (baked) ----
+  // Adds visible torso + limb mass so thickBody skins look premium, not skinny.
+  if (skin.thickBody) {
+    ctx.save();
+    ctx.fillStyle = skin.body;
+    // Torso slab: shoulders → hips
+    const torsoTop = cy - r * 0.55;
+    const torsoBot = a.hipY + 4;
+    const torsoH = torsoBot - torsoTop;
+    const torsoW = r * 1.55;
+    ctx.beginPath();
+    // Rounded torso (capsule-ish)
+    ctx.moveTo(cx - torsoW * 0.5, torsoTop + r * 0.25);
+    ctx.quadraticCurveTo(cx - torsoW * 0.5, torsoTop, cx, torsoTop);
+    ctx.quadraticCurveTo(cx + torsoW * 0.5, torsoTop, cx + torsoW * 0.5, torsoTop + r * 0.25);
+    ctx.lineTo(cx + torsoW * 0.42, torsoBot);
+    ctx.quadraticCurveTo(cx, torsoBot + r * 0.18, cx - torsoW * 0.42, torsoBot);
+    ctx.closePath();
+    ctx.fill();
+    // Neck patch so head connects cleanly to torso
+    ctx.fillStyle = skin.head ?? skin.body;
+    ctx.fillRect(hx - r * 0.45, hy + r * 0.6, r * 0.9, (torsoTop - (hy + r * 0.6)) + 2);
+    ctx.restore();
+    // unused-var guard
+    void torsoH;
+  }
+
   // ---- Cape (drawn behind torso via destination-over) ----
   if (skin.cape) {
     ctx.save();
@@ -122,16 +149,12 @@ function drawOverlays(
   }
 
   // ---- Head fill (mask color) ----
-  // Slightly taller ellipse with a dome cap above so the crown is rounded,
-  // never flat-topped from silhouette clipping.
+  // Draw a tall rounded head that sits ABOVE the silhouette top so the crown
+  // is fully domed (no flat clip). Center is shifted up; ellipse is taller than wide.
   ctx.save();
   ctx.fillStyle = skin.head ?? skin.body;
   ctx.beginPath();
-  ctx.ellipse(hx, hy + 1, r * 1.05, r * 1.18, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Extra dome cap to cover any flat silhouette pixels at the very top
-  ctx.beginPath();
-  ctx.ellipse(hx, hy - r * 0.25, r * 0.95, r * 0.55, 0, Math.PI, Math.PI * 2);
+  ctx.ellipse(hx, hy - r * 0.15, r * 1.1, r * 1.35, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Skin-tone face for open faces (Superman, Homelander, Butcher, Heatwave)
