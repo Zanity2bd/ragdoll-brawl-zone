@@ -4,34 +4,54 @@
 
 import { WALK_CYCLE, WALK_HIP_SWAY } from "./walkCycle";
 
-// Lerp a single 2D bone between two adjacent baked frames.
+// Catmull–Rom cubic interpolation between baked frames.
+// Synthesizes smooth in-between frames so the cycle reads at any framerate
+// without visible "stepping" between the 24 baked keys.
 const N_WALK = WALK_CYCLE.length;
-function lerp2(a: readonly [number, number], b: readonly [number, number], k: number): [number, number] {
-  return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+function cr2(p0: readonly [number, number], p1: readonly [number, number], p2: readonly [number, number], p3: readonly [number, number], k: number): [number, number] {
+  const k2 = k * k, k3 = k2 * k;
+  // Standard Catmull–Rom basis (tension 0.5)
+  const c0 = -0.5 * k3 + k2 - 0.5 * k;
+  const c1 =  1.5 * k3 - 2.5 * k2 + 1;
+  const c2 = -1.5 * k3 + 2 * k2 + 0.5 * k;
+  const c3 =  0.5 * k3 - 0.5 * k2;
+  return [
+    p0[0] * c0 + p1[0] * c1 + p2[0] * c2 + p3[0] * c3,
+    p0[1] * c0 + p1[1] * c1 + p2[1] * c2 + p3[1] * c3,
+  ];
+}
+function cr1(a: number, b: number, c: number, d: number, k: number): number {
+  const k2 = k * k, k3 = k2 * k;
+  return (-0.5 * k3 + k2 - 0.5 * k) * a
+       + ( 1.5 * k3 - 2.5 * k2 + 1) * b
+       + (-1.5 * k3 + 2 * k2 + 0.5 * k) * c
+       + ( 0.5 * k3 - 0.5 * k2) * d;
 }
 // Sample the baked walk cycle at a normalized time t (0..1, wraps).
 // Returns the bones we actually use, in the same 2D normalized space (Y up,
 // X = forward in facing direction, |hip→foot| ≈ 1).
 function sampleWalk(t: number) {
   const f = (((t % 1) + 1) % 1) * N_WALK;
-  const i = Math.floor(f) % N_WALK;
-  const j = (i + 1) % N_WALK;
+  const i1 = Math.floor(f) % N_WALK;
+  const i0 = (i1 - 1 + N_WALK) % N_WALK;
+  const i2 = (i1 + 1) % N_WALK;
+  const i3 = (i1 + 2) % N_WALK;
   const k = f - Math.floor(f);
-  const A = WALK_CYCLE[i], B = WALK_CYCLE[j];
+  const A = WALK_CYCLE[i0], B = WALK_CYCLE[i1], C = WALK_CYCLE[i2], D = WALK_CYCLE[i3];
   return {
-    LU: lerp2(A.LeftUpLeg, B.LeftUpLeg, k),
-    LK: lerp2(A.LeftLeg, B.LeftLeg, k),
-    LF: lerp2(A.LeftFoot, B.LeftFoot, k),
-    RU: lerp2(A.RightUpLeg, B.RightUpLeg, k),
-    RK: lerp2(A.RightLeg, B.RightLeg, k),
-    RF: lerp2(A.RightFoot, B.RightFoot, k),
-    LA: lerp2(A.LeftArm, B.LeftArm, k),
-    LE: lerp2(A.LeftForeArm, B.LeftForeArm, k),
-    LH: lerp2(A.LeftHand, B.LeftHand, k),
-    RA: lerp2(A.RightArm, B.RightArm, k),
-    RE: lerp2(A.RightForeArm, B.RightForeArm, k),
-    RH: lerp2(A.RightHand, B.RightHand, k),
-    sway: WALK_HIP_SWAY[i] + (WALK_HIP_SWAY[j] - WALK_HIP_SWAY[i]) * k,
+    LU: cr2(A.LeftUpLeg, B.LeftUpLeg, C.LeftUpLeg, D.LeftUpLeg, k),
+    LK: cr2(A.LeftLeg, B.LeftLeg, C.LeftLeg, D.LeftLeg, k),
+    LF: cr2(A.LeftFoot, B.LeftFoot, C.LeftFoot, D.LeftFoot, k),
+    RU: cr2(A.RightUpLeg, B.RightUpLeg, C.RightUpLeg, D.RightUpLeg, k),
+    RK: cr2(A.RightLeg, B.RightLeg, C.RightLeg, D.RightLeg, k),
+    RF: cr2(A.RightFoot, B.RightFoot, C.RightFoot, D.RightFoot, k),
+    LA: cr2(A.LeftArm, B.LeftArm, C.LeftArm, D.LeftArm, k),
+    LE: cr2(A.LeftForeArm, B.LeftForeArm, C.LeftForeArm, D.LeftForeArm, k),
+    LH: cr2(A.LeftHand, B.LeftHand, C.LeftHand, D.LeftHand, k),
+    RA: cr2(A.RightArm, B.RightArm, C.RightArm, D.RightArm, k),
+    RE: cr2(A.RightForeArm, B.RightForeArm, C.RightForeArm, D.RightForeArm, k),
+    RH: cr2(A.RightHand, B.RightHand, C.RightHand, D.RightHand, k),
+    sway: cr1(WALK_HIP_SWAY[i0], WALK_HIP_SWAY[i1], WALK_HIP_SWAY[i2], WALK_HIP_SWAY[i3], k),
   };
 }
 
