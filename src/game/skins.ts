@@ -60,6 +60,7 @@ export const SKINS: Skin[] = [
     head: "oklch(0.32 0.12 260)",
     gloves: "oklch(0.50 0.16 25)", boots: "oklch(0.50 0.16 25)",
     glowingEyes: "oklch(0.85 0.18 60)",
+    thickBody: true,
     glow: "oklch(0.55 0.20 280)" },
 
   // DC
