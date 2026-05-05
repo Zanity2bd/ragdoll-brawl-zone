@@ -125,7 +125,7 @@ function SkinPicker({
       </div>
 
       <div className="flex items-center justify-center gap-3 py-2 sm:py-4">
-        <SkinPreview skin={skin} />
+        <HeroOrPreview skin={skin} />
       </div>
 
       <div className="grid grid-cols-3 gap-2">
