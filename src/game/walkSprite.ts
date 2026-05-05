@@ -149,12 +149,19 @@ function drawOverlays(
   }
 
   // ---- Head fill (mask color) ----
-  // Draw a tall rounded head that sits ABOVE the silhouette top so the crown
-  // is fully domed (no flat clip). Center is shifted up; ellipse is taller than wide.
+  // Perfect domed head. Center is shifted DOWN by ~r*0.15 so an enlarged
+  // radius still fits inside the frame top (hy≈14) — prevents flat-top clip.
   ctx.save();
   ctx.fillStyle = skin.head ?? skin.body;
+  const headCx = hx;
+  const headCy = hy + r * 0.18;
+  const headR = r * 1.18;
   ctx.beginPath();
-  ctx.ellipse(hx, hy - r * 0.15, r * 1.1, r * 1.35, 0, 0, Math.PI * 2);
+  ctx.arc(headCx, headCy, headR, 0, Math.PI * 2);
+  ctx.fill();
+  // Subtle jaw taper so head reads as a head, not a ball
+  ctx.beginPath();
+  ctx.ellipse(headCx, headCy + headR * 0.45, headR * 0.78, headR * 0.55, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // Skin-tone face for open faces (Superman, Homelander, Butcher, Heatwave)
