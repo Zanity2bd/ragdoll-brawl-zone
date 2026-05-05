@@ -79,6 +79,7 @@ export const SKINS: Skin[] = [
     gloves: "oklch(0.40 0.18 260)", boots: "oklch(0.50 0.20 25)",
     cape: "oklch(0.45 0.20 25)", capeAccent: "oklch(0.55 0.22 20)",
     emblem: { shape: "shield", color: "oklch(0.78 0.16 85)" },
+    thickBody: true,
     glow: "oklch(0.55 0.18 255)" },
 
   { id: "flash", name: "The Flash", universe: "DC",
@@ -87,6 +88,7 @@ export const SKINS: Skin[] = [
     gloves: "oklch(0.78 0.16 85)", boots: "oklch(0.78 0.16 85)",
     streaks: "oklch(0.85 0.16 85)",
     emblem: { shape: "lightning", color: "oklch(0.85 0.16 85)" },
+    thickBody: true,
     glow: "oklch(0.78 0.16 85)" },
 
   { id: "heatwave", name: "Heatwave", universe: "DC",
