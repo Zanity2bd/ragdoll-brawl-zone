@@ -310,7 +310,7 @@ function SkinThumb({ skin }: { skin: Skin }) {
 
         // torso
         ctx.strokeStyle = skin.body;
-        ctx.lineWidth = skin.thickBody ? 6 : 4.5;
+        ctx.lineWidth = skin.thickBody ? 9 : 7;
         ctx.beginPath(); ctx.moveTo(cx, shoulderY); ctx.lineTo(cx, hipY); ctx.stroke();
         // shoulder caps
         ctx.fillStyle = skin.body;
