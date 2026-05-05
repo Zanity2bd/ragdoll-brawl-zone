@@ -5003,7 +5003,7 @@ export class GameEngine {
     // Sprite renderer covers walk, punch, jump, ragdoll, down/get-up, and hurt.
     // Procedural rig still owns: flight and special melee arms.
     const spriteReady = !ghost && isWalkSheetReady();
-    const useSpriteWalk = spriteReady;
+    const useSpriteWalk = spriteReady && !skin.premiumRender;
 
     if (useSpriteWalk) {
       // Soft accent pool — only when grounded
@@ -5445,27 +5445,56 @@ export class GameEngine {
       drawFist(ctx, pose.handR, skin.gloves);
     }
 
-    // Torso (uses sized torsoW)
-    ctx.strokeStyle = bodyColor;
-    ctx.lineWidth = torsoW;
-    ctx.beginPath();
-    ctx.moveTo(0, shoulderY);
-    ctx.lineTo(0, hipY);
-    ctx.stroke();
-    if (!ghost) {
-      ctx.save();
-      ctx.strokeStyle = `color-mix(in oklab, ${bodyColor} 40%, white)`;
-      ctx.lineWidth = skin.thickBody ? 2.5 : 1.8;
-      ctx.globalAlpha = 0.42;
-      ctx.beginPath(); ctx.moveTo(0, shoulderY + 2); ctx.lineTo(0, hipY - 2); ctx.stroke();
-      ctx.restore();
+    // Torso — premium fighters get a filled trapezoid (matches SkinSelect card);
+    // legacy fighters keep the simple thick stroke.
+    if (skin.premiumRender) {
+      const shoulderHalf = skin.thickBody ? 11 : 8.5;
+      const hipHalf = skin.thickBody ? 8 : 6;
+      ctx.fillStyle = bodyColor;
+      ctx.beginPath();
+      ctx.moveTo(-shoulderHalf, shoulderY);
+      ctx.lineTo(shoulderHalf, shoulderY);
+      ctx.lineTo(hipHalf + 0.5, hipY);
+      ctx.lineTo(-hipHalf - 0.5, hipY);
+      ctx.closePath();
+      ctx.fill();
+      // Neck patch — connects head to torso cleanly
+      ctx.fillRect(-2.5, headY + headR - 2, 5, shoulderY - (headY + headR) + 3);
+      // Shoulder caps
+      const capR = skin.thickBody ? 4 : 3.2;
+      ctx.fillStyle = limbColor;
+      ctx.beginPath(); ctx.arc(-shoulderHalf, shoulderY, capR, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(shoulderHalf, shoulderY, capR, 0, Math.PI * 2); ctx.fill();
+      // Subtle highlight band down the center
+      if (!ghost) {
+        ctx.save();
+        ctx.strokeStyle = `color-mix(in oklab, ${bodyColor} 40%, white)`;
+        ctx.lineWidth = 1.6;
+        ctx.globalAlpha = 0.32;
+        ctx.beginPath(); ctx.moveTo(0, shoulderY + 3); ctx.lineTo(0, hipY - 3); ctx.stroke();
+        ctx.restore();
+      }
+    } else {
+      ctx.strokeStyle = bodyColor;
+      ctx.lineWidth = torsoW;
+      ctx.beginPath();
+      ctx.moveTo(0, shoulderY);
+      ctx.lineTo(0, hipY);
+      ctx.stroke();
+      if (!ghost) {
+        ctx.save();
+        ctx.strokeStyle = `color-mix(in oklab, ${bodyColor} 40%, white)`;
+        ctx.lineWidth = skin.thickBody ? 2.5 : 1.8;
+        ctx.globalAlpha = 0.42;
+        ctx.beginPath(); ctx.moveTo(0, shoulderY + 2); ctx.lineTo(0, hipY - 2); ctx.stroke();
+        ctx.restore();
+      }
+      // Tiny shoulder caps
+      ctx.fillStyle = limbColor;
+      const jr = baseW * 0.32;
+      ctx.beginPath(); ctx.arc(-4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
     }
-
-    // Tiny shoulder caps (hidden under outline). Hip cap removed — overlap covers it.
-    ctx.fillStyle = limbColor;
-    const jr = baseW * 0.32;
-    ctx.beginPath(); ctx.arc(-4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
 
     if (skin.emblem) {
       const ey = (shoulderY + hipY) / 2;
