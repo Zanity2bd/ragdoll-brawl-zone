@@ -7,7 +7,7 @@
 //
 // Result: MERGED[16] = { a, b, blend } for crossfaded sub-pose draw.
 
-import { WALK_ANCHORS, WALK_FRAME_W as ANCHOR_FRAME_W } from "./walkAnchors";
+import { WALK_ANCHORS } from "./walkAnchors";
 import { WALK_LOOP_FRAMES } from "./walkSprite";
 import { getV2Anchors, V2_FRAME_COUNT, isV2Ready } from "./walkCycleV2";
 
