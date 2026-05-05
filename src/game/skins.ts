@@ -70,6 +70,7 @@ export const SKINS: Skin[] = [
     gloves: "oklch(0.18 0.02 280)", boots: "oklch(0.18 0.02 280)",
     cape: "oklch(0.16 0.02 280)", cowlEars: true,
     emblem: { shape: "oval", color: "oklch(0.78 0.16 90)" },
+    thickBody: true,
     glow: "oklch(0.40 0.04 280)" },
 
   { id: "superman", name: "Superman", universe: "DC",
