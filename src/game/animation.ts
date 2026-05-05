@@ -919,26 +919,51 @@ export function computeAttackPose(
 }
 
 // Tumbling ragdoll pose used while a fighter is launched.
-export function computeRagdollPose(t: number, H: number): Pose {
+// Each limb is a damped pendulum with its own phase offset so the body
+// flails organically instead of snapping in lockstep — gives a fluid,
+// "rag-doll" silhouette at any framerate.
+export function computeRagdollPose(t: number, _H: number): Pose {
   const sy = 30;
   const hipY = 56;
-  const spin = t * 14;
-  const cx = Math.cos(spin) * 8;
-  const sx = Math.sin(spin) * 8;
+  // Energy decays so the doll settles instead of flailing forever
+  const energy = Math.exp(-t * 0.6);
+  const spin = t * 11;
+  // Per-limb phase offsets — golden-ratio spaced for natural asymmetry
+  const phLA = spin * 1.15 + 0.0;
+  const phRA = spin * 1.05 + 1.7;
+  const phLL = spin * 0.95 + 3.2;
+  const phRL = spin * 1.10 + 4.6;
+  // Secondary high-frequency wobble (whip-like overshoot)
+  const wob = Math.sin(t * 24) * 1.6 * energy;
+
+  const armSwL = (Math.cos(phLA) * 6 + Math.sin(phLA * 1.7) * 3) * energy;
+  const armSwR = (Math.cos(phRA) * 6 + Math.sin(phRA * 1.7) * 3) * energy;
+  const armDpL = (Math.sin(phLA) * 5 + 2) * energy + 4;
+  const armDpR = (Math.sin(phRA) * 5 + 2) * energy + 4;
+
+  const legSwL = (Math.cos(phLL) * 7 + Math.sin(phLL * 1.4) * 3) * energy;
+  const legSwR = (Math.cos(phRL) * 7 + Math.sin(phRL * 1.4) * 3) * energy;
+  const legDpL = (Math.sin(phLL) * 4) * energy + 4;
+  const legDpR = (Math.sin(phRL) * 4) * energy + 4;
+
+  // Shoulder + hip micro-shift from torso flop
+  const torsoX = Math.sin(spin * 0.7) * 2 * energy;
+  const torsoY = Math.cos(spin * 0.9) * 1.2 * energy;
+
   return {
-    headOffsetY: -2 + sx * 0.5,
-    shoulderY: sy,
-    hipY,
-    legL: [-3, hipY, -8 + cx, hipY + 12, -14 + cx * 1.4, hipY + 22],
-    legR: [3, hipY, 8 - cx, hipY + 12, 14 - cx * 1.4, hipY + 22],
-    armL: [-4, sy, -10 - sx, sy + 10, -16 - sx * 1.4, sy + 18],
-    armR: [4, sy, 10 + sx, sy + 10, 16 + sx * 1.4, sy + 18],
-    handL: [-16 - sx * 1.4, sy + 18],
-    handR: [16 + sx * 1.4, sy + 18],
-    footL: [-14 + cx * 1.4, hipY + 22],
-    footR: [14 - cx * 1.4, hipY + 22],
+    headOffsetY: -2 + Math.sin(spin) * 1.4 * energy + wob * 0.3,
+    shoulderY: sy + torsoY,
+    hipY: hipY + torsoY * 0.5,
+    legL: [-3 + torsoX, hipY, -7 + legSwL * 0.6, hipY + 12 + legDpL, -13 + legSwL, hipY + 22 + legDpL * 0.7],
+    legR: [3 + torsoX, hipY, 7 + legSwR * 0.6, hipY + 12 + legDpR, 13 + legSwR, hipY + 22 + legDpR * 0.7],
+    armL: [-4 + torsoX, sy, -10 + armSwL * 0.6, sy + 10 + armDpL, -16 + armSwL, sy + 18 + armDpL * 0.7 + wob],
+    armR: [4 + torsoX, sy, 10 + armSwR * 0.6, sy + 10 + armDpR, 16 + armSwR, sy + 18 + armDpR * 0.7 - wob],
+    handL: [-16 + armSwL, sy + 18 + armDpL * 0.7 + wob],
+    handR: [16 + armSwR, sy + 18 + armDpR * 0.7 - wob],
+    footL: [-13 + legSwL, hipY + 22 + legDpL * 0.7],
+    footR: [13 + legSwR, hipY + 22 + legDpR * 0.7],
     lean: spin * 0.3,
-    shoulderRoll: 0,
+    shoulderRoll: Math.sin(spin * 0.8) * 0.1 * energy,
   };
 }
 
