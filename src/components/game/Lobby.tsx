@@ -277,7 +277,7 @@ function SkinThumb({ skin }: { skin: Skin }) {
         // limbs (curved with quad)
         const armSwing = Math.sin(t * 2) * 5;
         ctx.strokeStyle = skin.limb ?? skin.body;
-        ctx.lineWidth = skin.thickBody ? 4.5 : 3.5;
+        ctx.lineWidth = skin.thickBody ? 7 : 5.5;
         // arms
         const handLX = cx - 18 + armSwing;
         const handRX = cx + 18 - armSwing;
