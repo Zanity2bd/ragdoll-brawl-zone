@@ -1,66 +1,43 @@
-## Plan: Replace procedural special attacks with sprite-driven sequences
+## Problem
 
-The combo system (Punch → High Kick → Knee) already runs on baked sprite frames (23–29). All the **character-specific specials** (Heat Punch, Ground Smash, Web Yank, Repulsor, Crowbar Swing, Laser Eyes, etc.) still use the old procedural stick-figure math in `computeAttackPose`. This plan replaces them with the same sprite-sequence pipeline so every move feels consistent and fluid.
+The character circled in red is the **old procedural stick-figure body** (`computeAttackPose` in `src/game/animation.ts`). Whenever a fighter uses a special move (Crowbar Swing, Heat Punch, Web Yank, Repulsor, Laser Sweep, Bamf, Superman/Homelander Punch, Ground Smash, etc.) or while flying, the engine renders this old procedural rig **on top of / instead of** the new sprite-sheet character. That's why Butcher's old stickman silhouette appears mid-crowbar swing while Spider-Man's new sprite character is visible elsewhere.
 
-### Steps
+The new sprite-driven character (frames 0–29 in `walk-sheet.png`) already covers walk, punch, jump, hurt, ragdoll/down, get-up, kick combo, and knee combo — that work stays untouched.
 
-1. **Expand sprite sheet (`src/assets/walk-sheet.png`)**
-   - Bake ~45 new frames (currently 30 → ~75) mined from the uploaded `stick.zip`, `taijutsu.zip`, `npc1.zip`, `npc2.zip`:
-     - Sword arc (5 frames)
-     - Spear stab (4 frames)
-     - Heavy uppercut (5 frames)
-     - Ground smash windup + slam + recovery (6 frames)
-     - Grapple/yank pull (5 frames)
-     - Charged-beam stance (4 frames)
-     - Crowbar/club swing (5 frames)
-     - Aerial dive kick (4 frames)
-     - Knockdown / get-up (7 frames)
+## What to remove (and archive)
 
-2. **Sequence registry (`src/game/attackSequences.ts`)**
-   - New file mapping each special to a frame playlist:
-     ```ts
-     heatPunch: { frames: [40,41,42,43], durations: [60,80,140,100], hitWindow: [2], dmg: 8, range: 70 }
-     groundSmash: { frames: [50,51,52,53,54,55], hitWindow: [3], dmg: 12, range: 90, shockwave: true }
-     webYank: { frames: [56,57,58,59,60], hitWindow: [2], pull: 120 }
-     repulsor: { frames: [65,66,67,68], hitWindow: [3], projectile: 'beam' }
-     crowbar: { frames: [70,71,72,73,74], hitWindow: [2,3], dmg: 7 }
-     ```
-   - Each entry declares damage, range, knockback, optional projectile spawn, and which frame(s) trigger hit detection.
+Move legacy procedural code to `src/game/_legacy/proceduralAttackPose.ts` (kept in-repo for reference, never imported by the runtime):
 
-3. **Sequence player (`src/game/engine.ts`)**
-   - Add `playAttackSequence(f, kind)` to set `f.seqKind`, `f.seqFrameIdx`, `f.seqT`.
-   - Tick advances frame by accumulated duration.
-   - Renderer priority: `seqKind` > `comboKind` > walk/punch > idle.
-   - 2-frame cross-fade (alpha blend) on transitions to kill stutter.
-   - Hit detection runs only on declared `hitWindow` frames.
+1. `computeAttackPose(...)` from `src/game/animation.ts` — entire function including all attack `case` blocks: `basicKick`, `heatPunch`, `crowbar`, `groundSmash`, `speedFlurry`, `phaseStrike`, `webYank`, `repulsor`, `batCombo`, `laserSweep`, `bamfPunch`, `bamfKick`, `supermanPunch`, `homelanderPunch`.
+2. `computeFlightPose(...)` from `src/game/animation.ts` — the procedural hover stickman (only used during flight, which falls back to procedural rig).
+3. The Butcher crowbar prop draw block in `src/game/engine.ts` lines ~5610-5623 (procedural overlay tied to `f.meleeKind === "crowbar"`).
 
-4. **AI-generated FX overlays (4 sprites)**
-   - `impact-star.png` — flashes on hit-window frame
-   - `charge-ring.png` — overlay during windup frames
-   - `slash-arc.png` — additive blend along weapon path
-   - `shockwave-ring.png` — expands from feet on Ground Smash
-   - All routed through existing FX layer; no new render pipeline.
+## What to change in the live engine
 
-5. **Anchor table extension (`src/game/walkAnchors.ts`)**
-   - Auto-detect bbox of head/chest/hip pixels for the ~45 new frames; emit coordinates so skin masks (Marvel/DC/Boys emblems) stay pinned during the new specials.
+`src/game/engine.ts`:
 
-6. **Wire 3 specials first, then the rest**
-   - Phase A (this approval): Heat Punch, Ground Smash, Crowbar — proves the pipeline end-to-end.
-   - Phase B (after you confirm it feels right): Web Yank, Repulsor, Laser Eyes, Dive Kick, Sword Arc, Spear Stab, Uppercut.
+- Remove imports of `computeAttackPose` and `computeFlightPose` from `./animation`.
+- In `poseFor(...)` (around lines 4268–4298), strip the `if (f.dash)` / `else if (f.meleeKind)` / `else if (f.heatVisionT > 0 || ...)` branches that call `computeAttackPose`. Keep only the walk pose path. Also drop the `computeFlightPose` branch — flight will use the standard walk pose (sprite renderer already handles airborne frames).
+- In `render(...)` around lines 5113-5118, change the comment + early-return so the sprite renderer is **always authoritative** for grounded fighters. Remove the "fall through so the procedural attack pose renders the arms / weapons on top of the sprite legs" path.
+- Around line 5013, remove `&& !f.flying` from `useSpriteWalk` so the sprite character is also used while flying (cape + glow already layer on top).
+- Remove the Butcher crowbar prop block (5610-5623). Specials still trigger via `f.meleeKind` for damage/SFX/FX overlays — only the procedural body draw is gone. The new sprite frames (PUNCH/KICK/KNEE/SLASH 27-29) continue to play for combo moves.
 
-### Notes
+## What stays (new animations, unchanged)
 
-- Old procedural `computeAttackPose` stays as fallback for any special not yet migrated — zero regression risk.
-- All new frames respect mobile-first: same 96px fighter height, no extra GPU cost (single sprite sheet, single draw call per fighter).
-- Audio: reuse `attackImpact` with per-special pitch/volume tweaks; add `whoosh` for windup frames.
+- All sprite-sheet rendering paths in `render()` lines 5015–5111 (walk loop, punch frames 10-13, jump rise/apex/land, hurt, ragdoll DOWN_FRAME with `ragdollAng`, downed, get-up A/B, combo kick/knee).
+- `computeWalkPose`, `computeRagdollPose`, `blendPose` in `animation.ts`.
+- Cape physics, Nightcrawler tail, Hulk muscles, emblem/eyes/cowl — all layered overlays on top of the sprite.
+- Move definitions in `combat.ts` (damage/range/SFX) — only the visual procedural body is removed.
 
-### Files
+## Risk / regressions
 
-- edit `src/assets/walk-sheet.png` (30 → ~75 frames)
-- create `src/game/attackSequences.ts`
-- create `src/assets/fx/impact-star.png`, `charge-ring.png`, `slash-arc.png`, `shockwave-ring.png`
-- edit `src/game/engine.ts` (sequence player + hit windows + renderer priority)
-- edit `src/game/walkAnchors.ts` (anchors for new frames)
-- edit `src/game/sfx.ts` (whoosh + per-special impact variants)
+- Specials will no longer have a unique full-body procedural pose; they'll show the sprite walk/idle frame plus existing FX (slash arc, charge ring, shockwave, beams, projectiles). For specials that have a matching sprite (slash 27-29, kick 23-24, knee 25-26), we can map them in a tiny switch — but per your request we are removing first; mapping each special to a sprite frame is a follow-up if needed.
+- Flight pose becomes the standard sprite (jump apex frame). This removes the "menacing hover stance" but keeps Iron Man / Homelander recognizable via cape + emblem + glow.
 
-Approve and I'll execute Phase A (sheet bake + registry + Heat Punch / Ground Smash / Crowbar wired up).
+## Files touched
+
+- create `src/game/_legacy/proceduralAttackPose.ts` (archive of removed code, with header comment "DO NOT IMPORT — reference only")
+- edit `src/game/animation.ts` (delete `computeAttackPose`, `computeFlightPose`, `AttackTiming` export)
+- edit `src/game/engine.ts` (drop imports, simplify `poseFor`, force sprite path, drop crowbar prop)
+
+Approve and I'll execute.
