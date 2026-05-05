@@ -5080,19 +5080,54 @@ export class GameEngine {
         return;
       }
 
-      // ---- Walk loop (frames 0..9) ----
+      // ---- Walk loop: merged 16-slot cycle (10-frame sheet + 6 hand-drawn keys) ----
       const moving = Math.abs(f.vx) > 18;
       const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
-      const fIdx = moving ? cycleF * WALK_LOOP_FRAMES : 0;
-      const f0 = Math.floor(fIdx) % WALK_LOOP_FRAMES;
-      const f1 = (f0 + 1) % WALK_LOOP_FRAMES;
-      const frac = fIdx - Math.floor(fIdx);
-      drawFrame(f0);
-      if (moving && frac > 0.01) {
-        ctx.save();
-        ctx.globalAlpha = frac;
-        drawFrame(f1);
-        ctx.restore();
+
+      // Sub-frame procedural smoothing applied only inside the walk branch.
+      const bob = moving ? Math.sin(cycleF * Math.PI * 4) * 1.5 : 0;
+      const drawAt = (idx: number, src: "sheet" | "v2", mirror: boolean, alpha: number) => {
+        const fy = y + FIGHTER_H - bob;
+        if (alpha < 0.999) { ctx.save(); ctx.globalAlpha = alpha; }
+        if (src === "v2") {
+          if (!drawV2Frame(ctx, skin, idx, x + f.bodyLagX, fy, renderFacing, FIGHTER_H, mirror)) {
+            // v2 not ready → fallback to sheet frame 0
+            drawWalkFrame(ctx, skin, 0, x + f.bodyLagX, fy, renderFacing, FIGHTER_H);
+          }
+        } else {
+          if (mirror) {
+            ctx.save();
+            ctx.translate(x + f.bodyLagX, 0); ctx.scale(-1, 1); ctx.translate(-(x + f.bodyLagX), 0);
+            drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, fy, renderFacing, FIGHTER_H);
+            ctx.restore();
+          } else {
+            drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, fy, renderFacing, FIGHTER_H);
+          }
+        }
+        if (alpha < 0.999) ctx.restore();
+      };
+
+      if (!moving || !isV2Ready()) {
+        // Fallback: original 10-frame loop (unchanged behavior when v2 not loaded
+        // or fighter idle, so neutral pose stays stable).
+        const fIdx = moving ? cycleF * WALK_LOOP_FRAMES : 0;
+        const f0 = Math.floor(fIdx) % WALK_LOOP_FRAMES;
+        const f1 = (f0 + 1) % WALK_LOOP_FRAMES;
+        const frac = fIdx - Math.floor(fIdx);
+        drawFrame(f0);
+        if (moving && frac > 0.01) {
+          ctx.save(); ctx.globalAlpha = frac; drawFrame(f1); ctx.restore();
+        }
+      } else {
+        // Merged 16-slot cycle: pick slot, crossfade to next slot's primary.
+        const slotF = cycleF * MERGED_SLOTS;
+        const s0 = Math.floor(slotF) % MERGED_SLOTS;
+        const s1 = (s0 + 1) % MERGED_SLOTS;
+        const slotFrac = slotF - Math.floor(slotF);
+        const a = getMergedSlot(s0 / MERGED_SLOTS);
+        const b = getMergedSlot(s1 / MERGED_SLOTS);
+        drawAt(a.a.frame, a.a.source, a.a.mirror, 1);
+        if (slotFrac > 0.01) drawAt(b.a.frame, b.a.source, b.a.mirror, slotFrac);
       }
 
       // Sprite is authoritative for the body; FX (slash arc, beams, etc.)
