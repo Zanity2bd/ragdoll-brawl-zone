@@ -1,7 +1,7 @@
 // OgunArena — Canvas 2D engine v3 (a Blkdom production)
 // Per-skin signature melees with impact frames, ragdoll, slow-mo, SFX.
 
-import { computeWalkPose, computeAttackPose, computeRagdollPose, computeFlightPose, blendPose, type Pose } from "./animation";
+import { computeWalkPose, computeRagdollPose, blendPose, type Pose } from "./animation";
 import { getMap, type MapId } from "./maps";
 import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
