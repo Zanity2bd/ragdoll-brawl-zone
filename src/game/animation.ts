@@ -942,48 +942,68 @@ export function computeAttackPose(
 // Each limb is a damped pendulum with its own phase offset so the body
 // flails organically instead of snapping in lockstep — gives a fluid,
 // "rag-doll" silhouette at any framerate.
-export function computeRagdollPose(t: number, _H: number): Pose {
+export function computeRagdollPose(t: number, _H: number, bodyAng: number = 0): Pose {
   const sy = 30;
   const hipY = 56;
-  // Energy decays so the doll settles instead of flailing forever
-  const energy = Math.exp(-t * 0.6);
-  const spin = t * 11;
+  // Energy decays slower so the body keeps flailing for the full ragdoll window
+  const energy = Math.exp(-t * 0.45);
+  const spin = t * 13;
   // Per-limb phase offsets — golden-ratio spaced for natural asymmetry
-  const phLA = spin * 1.15 + 0.0;
-  const phRA = spin * 1.05 + 1.7;
-  const phLL = spin * 0.95 + 3.2;
-  const phRL = spin * 1.10 + 4.6;
+  const phLA = spin * 1.23 + 0.0;
+  const phRA = spin * 1.07 + 1.7;
+  const phLL = spin * 0.91 + 3.2;
+  const phRL = spin * 1.13 + 4.6;
   // Secondary high-frequency wobble (whip-like overshoot)
-  const wob = Math.sin(t * 24) * 1.6 * energy;
+  const wob = Math.sin(t * 28) * 2.2 * energy;
+  const wob2 = Math.cos(t * 19 + 0.7) * 1.8 * energy;
 
-  const armSwL = (Math.cos(phLA) * 6 + Math.sin(phLA * 1.7) * 3) * energy;
-  const armSwR = (Math.cos(phRA) * 6 + Math.sin(phRA * 1.7) * 3) * energy;
-  const armDpL = (Math.sin(phLA) * 5 + 2) * energy + 4;
-  const armDpR = (Math.sin(phRA) * 5 + 2) * energy + 4;
+  // World-down vector projected into the body's local space.
+  // The body is rotated by bodyAng at draw time, so to make limbs always
+  // dangle toward real gravity we add this constant pull.
+  const gx = Math.sin(-bodyAng);
+  const gy = Math.cos(-bodyAng);
+  // Gravity droop strength fades up as energy drops (limbs go limp as they tire)
+  const droop = (1 - energy * 0.7) * 14;
 
-  const legSwL = (Math.cos(phLL) * 7 + Math.sin(phLL * 1.4) * 3) * energy;
-  const legSwR = (Math.cos(phRL) * 7 + Math.sin(phRL * 1.4) * 3) * energy;
-  const legDpL = (Math.sin(phLL) * 4) * energy + 4;
-  const legDpR = (Math.sin(phRL) * 4) * energy + 4;
+  // Larger swing amplitudes so the limbs visibly flail
+  const armSwL = (Math.cos(phLA) * 11 + Math.sin(phLA * 1.7) * 5) * energy;
+  const armSwR = (Math.cos(phRA) * 11 + Math.sin(phRA * 1.7) * 5) * energy;
+  const armDpL = (Math.sin(phLA) * 9 + 3) * energy + 6;
+  const armDpR = (Math.sin(phRA) * 9 + 3) * energy + 6;
+
+  const legSwL = (Math.cos(phLL) * 10 + Math.sin(phLL * 1.4) * 5) * energy;
+  const legSwR = (Math.cos(phRL) * 10 + Math.sin(phRL * 1.4) * 5) * energy;
+  const legDpL = (Math.sin(phLL) * 7) * energy + 6;
+  const legDpR = (Math.sin(phRL) * 7) * energy + 6;
 
   // Shoulder + hip micro-shift from torso flop
-  const torsoX = Math.sin(spin * 0.7) * 2 * energy;
-  const torsoY = Math.cos(spin * 0.9) * 1.2 * energy;
+  const torsoX = Math.sin(spin * 0.7) * 3 * energy;
+  const torsoY = Math.cos(spin * 0.9) * 2 * energy;
+
+  // Hand & foot positions: base swing + gravity droop pulling toward world-down
+  const handLX = -16 + armSwL + gx * droop * 0.9;
+  const handLY = sy + 18 + armDpL * 0.7 + wob + gy * droop * 0.9;
+  const handRX = 16 + armSwR + gx * droop * 0.9;
+  const handRY = sy + 18 + armDpR * 0.7 - wob + gy * droop * 0.9;
+  const footLX = -13 + legSwL + gx * droop * 0.6;
+  const footLY = hipY + 22 + legDpL * 0.7 + gy * droop * 0.6;
+  const footRX = 13 + legSwR + gx * droop * 0.6;
+  const footRY = hipY + 22 + legDpR * 0.7 + gy * droop * 0.6;
 
   return {
-    headOffsetY: -2 + Math.sin(spin) * 1.4 * energy + wob * 0.3,
+    headOffsetY: -2 + Math.sin(spin) * 2.4 * energy + wob * 0.4 + gy * droop * 0.15,
     shoulderY: sy + torsoY,
     hipY: hipY + torsoY * 0.5,
-    legL: [-3 + torsoX, hipY, -7 + legSwL * 0.6, hipY + 12 + legDpL, -13 + legSwL, hipY + 22 + legDpL * 0.7],
-    legR: [3 + torsoX, hipY, 7 + legSwR * 0.6, hipY + 12 + legDpR, 13 + legSwR, hipY + 22 + legDpR * 0.7],
-    armL: [-4 + torsoX, sy, -10 + armSwL * 0.6, sy + 10 + armDpL, -16 + armSwL, sy + 18 + armDpL * 0.7 + wob],
-    armR: [4 + torsoX, sy, 10 + armSwR * 0.6, sy + 10 + armDpR, 16 + armSwR, sy + 18 + armDpR * 0.7 - wob],
-    handL: [-16 + armSwL, sy + 18 + armDpL * 0.7 + wob],
-    handR: [16 + armSwR, sy + 18 + armDpR * 0.7 - wob],
-    footL: [-13 + legSwL, hipY + 22 + legDpL * 0.7],
-    footR: [13 + legSwR, hipY + 22 + legDpR * 0.7],
+    legL: [-3 + torsoX, hipY, -7 + legSwL * 0.5 + gx * droop * 0.3, hipY + 12 + legDpL + gy * droop * 0.3, footLX, footLY],
+    legR: [3 + torsoX, hipY, 7 + legSwR * 0.5 + gx * droop * 0.3, hipY + 12 + legDpR + gy * droop * 0.3, footRX, footRY],
+    armL: [-4 + torsoX, sy, -10 + armSwL * 0.5 + gx * droop * 0.5, sy + 10 + armDpL + gy * droop * 0.5, handLX, handLY],
+    armR: [4 + torsoX, sy, 10 + armSwR * 0.5 + gx * droop * 0.5, sy + 10 + armDpR + gy * droop * 0.5, handRX, handRY],
+    handL: [handLX, handLY],
+    handR: [handRX, handRY],
+    footL: [footLX, footLY],
+    footR: [footRX, footRY],
     lean: spin * 0.3,
-    shoulderRoll: Math.sin(spin * 0.8) * 0.1 * energy,
+    shoulderRoll: Math.sin(spin * 0.8) * 0.18 * energy + wob2 * 0.02,
   };
 }
 
