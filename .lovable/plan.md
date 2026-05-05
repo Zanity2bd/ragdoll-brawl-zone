@@ -1,43 +1,40 @@
-## Problem
+# Walk: Combine 10-frame sheet + 6 hand-drawn keys
 
-The character circled in red is the **old procedural stick-figure body** (`computeAttackPose` in `src/game/animation.ts`). Whenever a fighter uses a special move (Crowbar Swing, Heat Punch, Web Yank, Repulsor, Laser Sweep, Bamf, Superman/Homelander Punch, Ground Smash, etc.) or while flying, the engine renders this old procedural rig **on top of / instead of** the new sprite-sheet character. That's why Butcher's old stickman silhouette appears mid-crowbar swing while Spider-Man's new sprite character is visible elsewhere.
+## Goal
+Keep the existing 10-frame walk loop. Add the 6 hand-drawn keyposes as a second source. At runtime, build a 16-slot merged cycle that pulls from whichever source has the closer-matching pose, with crossfade between adjacent slots and stride-locked timing for true production smoothness.
 
-The new sprite-driven character (frames 0–29 in `walk-sheet.png`) already covers walk, punch, jump, hurt, ragdoll/down, get-up, kick combo, and knee combo — that work stays untouched.
+## Implementation
 
-## What to remove (and archive)
+### 1. New asset folder (already copied)
+`src/assets/walk-frames-v2/walk-00.png` … `walk-05.png`
 
-Move legacy procedural code to `src/game/_legacy/proceduralAttackPose.ts` (kept in-repo for reference, never imported by the runtime):
+### 2. New module `src/game/walkCycleV2.ts`
+- Loads the 6 PNGs, luma-keys the gray background to alpha (bright pixels → opaque white silhouette; everything else → transparent), so they share the same tinting pipeline as `walk-sheet.png`.
+- Auto-fits each silhouette into the same 144×200 cell as `walk-sheet.png`, feet planted at `WALK_FOOT_Y` — guarantees scale + ground contact match the existing frames exactly.
+- Auto-extracts per-frame anchors (head xy/r, chest xy, hipY, footY) by alpha-scanning each cell, mirroring the approach used in `walkAnchors.ts`.
+- Per-skin caches a tinted + overlaid sheet (cape behind, head/eyes/emblem/cowl/beard on top) using the same overlay pipeline copied from `walkSprite.ts`. Hot path = one `drawImage` per fighter per frame.
+- Exports `loadV2Sheet()`, `isV2Ready()`, `drawV2Frame(ctx, skin, idx, cx, footY, facing, height, mirror?)`.
 
-1. `computeAttackPose(...)` from `src/game/animation.ts` — entire function including all attack `case` blocks: `basicKick`, `heatPunch`, `crowbar`, `groundSmash`, `speedFlurry`, `phaseStrike`, `webYank`, `repulsor`, `batCombo`, `laserSweep`, `bamfPunch`, `bamfKick`, `supermanPunch`, `homelanderPunch`.
-2. `computeFlightPose(...)` from `src/game/animation.ts` — the procedural hover stickman (only used during flight, which falls back to procedural rig).
-3. The Butcher crowbar prop draw block in `src/game/engine.ts` lines ~5610-5623 (procedural overlay tied to `f.meleeKind === "crowbar"`).
+### 3. New module `src/game/walkMerge.ts`
+- One-time at init, classifies each of the 16 source frames (10 from sheet + 6 from v2) by its stride phase ∈ [0,1) using leg-anchor X spread + lead-leg sign.
+- Builds `MERGED[16]` lookup: for each evenly-spaced target sub-pose, picks the two closest source frames (with `mirror` flag for re-using one stride-half as the other) and a crossfade weight.
+- Exposes `getMergedSlot(slot01: number)` returning `{ a, b, blend }` where `a`/`b` describe `{ source: "sheet"|"v2", frame, mirror }`.
 
-## What to change in the live engine
+### 4. Engine wiring (`src/game/engine.ts`)
+- Replace lines ~5070–5083 (current 10-frame walk branch) with the merged 16-slot draw: pick `slot = floor(cycleF*16)`, draw primary, alpha-blend the next slot's primary by `slotFrac`. Each draw routes to `drawWalkFrame` (sheet) or `drawV2Frame` (v2) based on the source flag. If v2 isn't loaded yet, fall back to existing 10-frame logic untouched.
+- Replace line ~2809 walk-phase advance with stride-locked timing: `f.walkPhase += (|vx| / STRIDE_PIXELS) * 2π * ldt` (STRIDE_PIXELS ≈ 38) so feet match ground speed (kills foot-sliding).
+- Add inside the walk branch only: vertical bob `sin(phase·4π)·1.5px` subtracted from footY, and `sin(phase·2π)·0.025` added to lean. Idle (|vx|<18) decays phase to 0.
+- Call `loadV2Sheet()` from engine init alongside `loadWalkSheet()`.
 
-`src/game/engine.ts`:
+### 5. Untouched
+`walk-sheet.png`, `walkSprite.ts`, `walkAnchors.ts`, `animation.ts`, all jump/punch/ragdoll/getup/hurt/kick/knee/slash branches, all FX, AI, combat.
 
-- Remove imports of `computeAttackPose` and `computeFlightPose` from `./animation`.
-- In `poseFor(...)` (around lines 4268–4298), strip the `if (f.dash)` / `else if (f.meleeKind)` / `else if (f.heatVisionT > 0 || ...)` branches that call `computeAttackPose`. Keep only the walk pose path. Also drop the `computeFlightPose` branch — flight will use the standard walk pose (sprite renderer already handles airborne frames).
-- In `render(...)` around lines 5113-5118, change the comment + early-return so the sprite renderer is **always authoritative** for grounded fighters. Remove the "fall through so the procedural attack pose renders the arms / weapons on top of the sprite legs" path.
-- Around line 5013, remove `&& !f.flying` from `useSpriteWalk` so the sprite character is also used while flying (cape + glow already layer on top).
-- Remove the Butcher crowbar prop block (5610-5623). Specials still trigger via `f.meleeKind` for damage/SFX/FX overlays — only the procedural body draw is gone. The new sprite frames (PUNCH/KICK/KNEE/SLASH 27-29) continue to play for combo moves.
+## Files
+- **Create**: `src/game/walkCycleV2.ts`, `src/game/walkMerge.ts`
+- **Edit**: `src/game/engine.ts` (walk branch ~5070, phase advance ~2809, init)
+- **Already copied**: `src/assets/walk-frames-v2/walk-0[0-5].png`
 
-## What stays (new animations, unchanged)
+## Risk
+Zero regression risk — until v2 sheet finishes loading the engine renders the original 10-frame loop. The merged path activates seamlessly once `isV2Ready()` flips true.
 
-- All sprite-sheet rendering paths in `render()` lines 5015–5111 (walk loop, punch frames 10-13, jump rise/apex/land, hurt, ragdoll DOWN_FRAME with `ragdollAng`, downed, get-up A/B, combo kick/knee).
-- `computeWalkPose`, `computeRagdollPose`, `blendPose` in `animation.ts`.
-- Cape physics, Nightcrawler tail, Hulk muscles, emblem/eyes/cowl — all layered overlays on top of the sprite.
-- Move definitions in `combat.ts` (damage/range/SFX) — only the visual procedural body is removed.
-
-## Risk / regressions
-
-- Specials will no longer have a unique full-body procedural pose; they'll show the sprite walk/idle frame plus existing FX (slash arc, charge ring, shockwave, beams, projectiles). For specials that have a matching sprite (slash 27-29, kick 23-24, knee 25-26), we can map them in a tiny switch — but per your request we are removing first; mapping each special to a sprite frame is a follow-up if needed.
-- Flight pose becomes the standard sprite (jump apex frame). This removes the "menacing hover stance" but keeps Iron Man / Homelander recognizable via cape + emblem + glow.
-
-## Files touched
-
-- create `src/game/_legacy/proceduralAttackPose.ts` (archive of removed code, with header comment "DO NOT IMPORT — reference only")
-- edit `src/game/animation.ts` (delete `computeAttackPose`, `computeFlightPose`, `AttackTiming` export)
-- edit `src/game/engine.ts` (drop imports, simplify `poseFor`, force sprite path, drop crowbar prop)
-
-Approve and I'll execute.
+After this lands, we move on to **jump** as agreed.
