@@ -122,10 +122,16 @@ function drawOverlays(
   }
 
   // ---- Head fill (mask color) ----
+  // Slightly taller ellipse with a dome cap above so the crown is rounded,
+  // never flat-topped from silhouette clipping.
   ctx.save();
   ctx.fillStyle = skin.head ?? skin.body;
   ctx.beginPath();
-  ctx.arc(hx, hy, r, 0, Math.PI * 2);
+  ctx.ellipse(hx, hy + 1, r * 1.05, r * 1.18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Extra dome cap to cover any flat silhouette pixels at the very top
+  ctx.beginPath();
+  ctx.ellipse(hx, hy - r * 0.25, r * 0.95, r * 0.55, 0, Math.PI, Math.PI * 2);
   ctx.fill();
 
   // Skin-tone face for open faces (Superman, Homelander, Butcher, Heatwave)
