@@ -160,6 +160,18 @@ function drawOverlays(
   // ---- Eyes ----
   drawEyes(ctx, skin, hx, hy, r);
 
+  // ---- Spider-Man web pattern on mask (3 thin radial strokes) ----
+  if (skin.id === "spiderman") {
+    ctx.strokeStyle = "oklch(0.16 0.04 25 / 0.55)";
+    ctx.lineWidth = 0.6;
+    [-0.5, 0, 0.5].forEach((a) => {
+      ctx.beginPath();
+      ctx.moveTo(hx, hy - r * 0.85);
+      ctx.lineTo(hx + Math.sin(a) * r * 0.85, hy + Math.cos(a) * r * 0.65);
+      ctx.stroke();
+    });
+  }
+
   // ---- Beard (Butcher) ----
   if (skin.beard) {
     ctx.fillStyle = "oklch(0.16 0.01 30)";
@@ -195,18 +207,36 @@ function drawEyes(
   const ey = hy - r * 0.05;
   const ex = r * 0.38;
 
-  // Spider-Man lenses
+  // Spider-Man — iconic large white teardrop lenses, black-outlined,
+  // tilted outward (~0.35 rad) for the classic angry shape, with a subtle
+  // inner highlight. All sized off head radius `r` so they scale per-frame.
   if (skin.id === "spiderman") {
-    ctx.fillStyle = "oklch(0.96 0.02 220)";
-    ctx.strokeStyle = "oklch(0.16 0.04 260)";
-    ctx.lineWidth = 1;
-    [-1, 1].forEach(s => {
+    const lensCx = r * 0.42;
+    const lensCy = ey - r * 0.05;
+    [-1, 1].forEach((s) => {
+      // Black outline (slightly larger)
+      ctx.fillStyle = "oklch(0.10 0.02 260)";
       ctx.beginPath();
-      ctx.moveTo(hx + s * ex * 0.3, ey - r * 0.2);
-      ctx.quadraticCurveTo(hx + s * ex * 1.4, ey, hx + s * ex * 0.5, ey + r * 0.35);
-      ctx.closePath();
+      ctx.ellipse(hx + s * lensCx, lensCy, r * 0.42, r * 0.30, s * 0.35, 0, Math.PI * 2);
       ctx.fill();
-      ctx.stroke();
+      // White lens fill
+      ctx.fillStyle = "oklch(0.97 0.01 220)";
+      ctx.beginPath();
+      ctx.ellipse(hx + s * lensCx, lensCy, r * 0.34, r * 0.24, s * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      // Inner highlight
+      ctx.fillStyle = "oklch(0.78 0.02 220)";
+      ctx.beginPath();
+      ctx.ellipse(
+        hx + s * lensCx + s * r * 0.05,
+        lensCy + r * 0.05,
+        r * 0.10,
+        r * 0.06,
+        s * 0.35,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
     });
     return;
   }
@@ -264,21 +294,35 @@ function drawEmblem(
 
   switch (skin.emblem.shape) {
     case "spider": {
+      // Cleaner spider: small head + larger abdomen, 8 thin curved legs.
+      ctx.fillStyle = skin.emblem.color;
+      ctx.strokeStyle = skin.emblem.color;
+      // Abdomen (larger, lower)
       ctx.beginPath();
-      ctx.ellipse(cx, cy, r * 0.35, r * 0.5, 0, 0, Math.PI * 2);
+      ctx.ellipse(cx, cy + r * 0.12, r * 0.26, r * 0.34, 0, 0, Math.PI * 2);
       ctx.fill();
-      // legs
-      for (let i = -2; i <= 2; i++) {
-        if (i === 0) continue;
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + i * r * 0.35, cy - r * 0.4 + Math.abs(i) * r * 0.1);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + i * r * 0.35, cy + r * 0.4 - Math.abs(i) * r * 0.1);
-        ctx.stroke();
-      }
+      // Head (smaller, above)
+      ctx.beginPath();
+      ctx.ellipse(cx, cy - r * 0.26, r * 0.17, r * 0.20, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // 8 legs — 4 each side, gently curved outward
+      ctx.lineWidth = 1.4;
+      ctx.lineCap = "round";
+      const legAngles = [-0.95, -0.5, -0.1, 0.3];
+      legAngles.forEach((ang) => {
+        [-1, 1].forEach((s) => {
+          const x1 = cx;
+          const y1 = cy + ang * r * 0.4;
+          const x2 = cx + s * r * 0.55;
+          const y2 = cy + ang * r * 0.55 + (Math.abs(ang) > 0.5 ? r * 0.1 : 0);
+          const cBendX = cx + s * r * 0.32;
+          const cBendY = y1 + (y2 - y1) * 0.3 - r * 0.18;
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.quadraticCurveTo(cBendX, cBendY, x2, y2);
+          ctx.stroke();
+        });
+      });
       break;
     }
     case "shield": {
