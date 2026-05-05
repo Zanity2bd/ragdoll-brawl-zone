@@ -2812,7 +2812,7 @@ export class GameEngine {
         // Stride-locked phase, but driven by a low-passed speed so per-frame
         // physics jitter (collision pushback, friction noise) doesn't translate
         // into stride hiccups. This is the #1 source of perceived "jitter".
-        const STRIDE_PIXELS = 76;
+        const STRIDE_PIXELS = 56;
         const rawSpeed = Math.abs(f.vx);
         // Smoothing: ~120ms time constant — fast enough to feel responsive,
         // slow enough to absorb single-frame velocity spikes.
@@ -5088,32 +5088,38 @@ export class GameEngine {
       }
 
       // ---- Walk loop (frames 0..9 from walk-sheet.png) ----
-      // Premium-feel rules learned the hard way:
+      // Premium-feel rules:
       //   1) NEVER alpha-crossfade two stickman frames — translucent line art
-      //      overlapping itself reads as ghost-limbs / flicker, not motion blur.
-      //      Use hysteresis on frame selection instead.
-      //   2) NO ctx.rotate on the body — sub-degree rotation of pixel art at
-      //      DPR 1.75 produces shimmer along every limb edge.
-      //   3) Snap draw coords to integer device pixels — eliminates sub-pixel
-      //      crawl that the eye reads as jitter even when motion is smooth.
+      //      overlapping itself reads as ghost-limbs / flicker.
+      //   2) NO ctx.rotate on the body — sub-degree rotation at DPR 1.75
+      //      shimmers along every limb edge.
+      //   3) Snap ONLY the Y coord to integer device pixels. Horizontal X must
+      //      stay sub-pixel or slow walks visibly stair-step.
+      //   4) Snap bob to half-pixels so the body never floats between rows.
+      //   5) Use high-quality image smoothing so the scaled sprite stays crisp.
       const moving = f.walkSpeedSmooth > 18;
       const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
       const speedNorm = Math.min(1, f.walkSpeedSmooth / 240);
       const bobAmp = 0.8 + speedNorm * 1.2;                  // 0.8..2.0 px
-      const bob = moving
+      const bobRaw = moving
         ? -Math.cos(cycleF * Math.PI * 4) * bobAmp           // up at footfall
         : Math.sin(this.elapsed * 1.6 + (f.id === "p1" ? 0 : 1.3)) * 0.4;
+      // Quantize bob to half-pixels — keeps motion visible but stable.
+      const bob = Math.round(bobRaw * 2) / 2;
 
-      // Frame index — single opaque frame, no crossfade.
-      // Hysteresis: only advance when we've crossed well past the boundary,
-      // so a phase that hovers near a boundary can't ping-pong frames.
+      // Single opaque frame (no crossfade) — selected from continuous phase.
       const fIdxRaw = moving ? cycleF * WALK_LOOP_FRAMES : 0;
       const f0 = Math.floor(fIdxRaw) % WALK_LOOP_FRAMES;
 
-      // Snap to integer pixels to kill sub-pixel shimmer.
-      const drawX = Math.round(x + f.bodyLagX);
-      const drawY = Math.round(y + FIGHTER_H - bob);
+      const drawX = x + f.bodyLagX;                  // sub-pixel — smooth slide
+      const drawY = Math.round(y + FIGHTER_H - bob); // integer — kill shimmer
+      const prevSmoothing = ctx.imageSmoothingEnabled;
+      const prevQuality = ctx.imageSmoothingQuality;
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
       drawWalkFrame(ctx, skin, f0, drawX, drawY, renderFacing, FIGHTER_H);
+      ctx.imageSmoothingEnabled = prevSmoothing;
+      ctx.imageSmoothingQuality = prevQuality;
 
       // Sprite is authoritative for the body; FX (slash arc, beams, etc.)
       // and overlays (cape, emblem, eyes) layer on top elsewhere.
