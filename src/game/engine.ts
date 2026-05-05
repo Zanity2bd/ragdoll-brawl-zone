@@ -2276,7 +2276,7 @@ export class GameEngine {
       f.vy = 0;
       f.onGround = true;
       if (f.downedT <= 0) {
-        f.getUpDur = 0.45;
+        f.getUpDur = 0.85;
         f.getUpT = f.getUpDur;
       }
       return;
