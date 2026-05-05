@@ -4989,7 +4989,7 @@ export class GameEngine {
     this.drawFighterAt(f, f.x, f.y, pose, false);
   }
 
-  private drawFighterAt(f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
+  private drawFighterAt(f: Fighter, x: number, y: number, poseIn: Pose, ghost: boolean) {
     const ctx = this.ctx;
     const skin = f.skin;
 
