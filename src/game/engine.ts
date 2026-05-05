@@ -2809,7 +2809,17 @@ export class GameEngine {
       }
 
       if (f.onGround) {
-        f.walkPhase += ldt * (1.6 + Math.abs(f.vx) * 0.018);
+        // Stride-locked phase: foot speed = ground speed → no foot sliding.
+        // STRIDE_PIXELS tuned to match the new sprite's foot-spacing at full stride.
+        const STRIDE_PIXELS = 76;
+        const speed = Math.abs(f.vx);
+        if (speed > 18) {
+          f.walkPhase += (speed / STRIDE_PIXELS) * Math.PI * 2 * ldt;
+        } else {
+          // Idle: gently decay phase toward 0 (neutral pose) with tiny breathing carry.
+          const target = 0;
+          f.walkPhase += (target - (f.walkPhase % (Math.PI * 2))) * Math.min(1, ldt * 4);
+        }
       } else {
         f.walkPhase += ldt * 1.2;
       }
