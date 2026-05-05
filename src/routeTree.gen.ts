@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as PlayRouteImport } from './routes/play'
+import { Route as DprTestRouteImport } from './routes/dpr-test'
 import { Route as IndexRouteImport } from './routes/index'
 
 const PlayRoute = PlayRouteImport.update({
   id: '/play',
   path: '/play',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DprTestRoute = DprTestRouteImport.update({
+  id: '/dpr-test',
+  path: '/dpr-test',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -25,27 +31,31 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dpr-test': typeof DprTestRoute
   '/play': typeof PlayRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dpr-test': typeof DprTestRoute
   '/play': typeof PlayRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dpr-test': typeof DprTestRoute
   '/play': typeof PlayRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/play'
+  fullPaths: '/' | '/dpr-test' | '/play'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/play'
-  id: '__root__' | '/' | '/play'
+  to: '/' | '/dpr-test' | '/play'
+  id: '__root__' | '/' | '/dpr-test' | '/play'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DprTestRoute: typeof DprTestRoute
   PlayRoute: typeof PlayRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/play'
       fullPath: '/play'
       preLoaderRoute: typeof PlayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dpr-test': {
+      id: '/dpr-test'
+      path: '/dpr-test'
+      fullPath: '/dpr-test'
+      preLoaderRoute: typeof DprTestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DprTestRoute: DprTestRoute,
   PlayRoute: PlayRoute,
 }
 export const routeTree = rootRouteImport

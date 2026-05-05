@@ -1,27 +1,61 @@
-# Fix: walk looks bad — revert merge, keep smoothness wins
+# DPR Walk-Smoothness Test Mode
 
-## Diagnosis
-Looking at frames extracted from your recording, the merged cycle is alternating between **two visually inconsistent art styles** every slot — the original sheet sprite (with proper head circle, cape, emblem) and the v2 hand-drawn silhouette (different proportions, head sits higher, my auto-anchor mis-placed the face overlay so you see a floating head + ghost body). Each source looks fine alone; crossfading between them every 1/16 cycle is what produces the broken look.
+A hidden dev route that renders the same fighters walking across four canvases simultaneously, each forced to a different `devicePixelRatio`. Lets you eyeball jitter, sub-pixel crawl and shimmer side-by-side without juggling browser zoom or real devices.
 
-The merge approach can't recover from this — the two sources have different foot lines, head positions, and limb thickness. No phase math fixes that.
+## Route
 
-## Fix (this turn)
-1. **Revert the walk render** to draw exclusively from `walk-sheet.png` (the 10-frame loop you said looked good).
-2. **Keep the smoothness wins** that *do* help and don't conflict:
-   - Stride-locked phase advance (`speed / STRIDE_PIXELS * 2π`) — kills foot sliding.
-   - Vertical bob (`sin(phase·4π) · 1.5px`) — adds life.
-   - Idle decay to neutral pose.
-3. **Remove** the merged 16-slot path, the v2 draw call, and the imports from `walkMerge` + `walkCycleV2` in `engine.ts`. Leave the v2 modules + asset files in place (no churn, future use).
+New file: `src/routes/dpr-test.tsx` (path `/dpr-test`, not linked from anywhere — dev-only).
 
-## Path forward for your 6 hand-drawn frames
-Mixing two art styles at runtime won't work. Two real options when you want to revisit:
-- **Option A — Replace, don't merge**: bake your 6 frames into a *new* 12-frame walk sheet (mirror the 6 → 12) and switch the walk loop to use only that sheet. One consistent art style, no flicker. Requires re-doing per-frame anchors for cape/emblem.
-- **Option B — Use them as a separate skin**: ship the hand-drawn style as an unlockable "classic stickman" skin with its own dedicated sheet, instead of mixing into existing skins.
+Layout:
+```text
++---------------------------------------------------+
+|  DPR 1.0      |  DPR 1.5                          |
+|  [canvas]     |  [canvas]                         |
++---------------+-----------------------------------+
+|  DPR 2.0      |  DPR 3.0                          |
+|  [canvas]     |  [canvas]                         |
++---------------------------------------------------+
+[ Pause ]  [ Slow walk ] [ Run ] [ Toggle skins ]
+```
 
-I'd recommend Option A when you're ready — but only after we finish polishing jump/ragdoll/getup/basic-attack on the current sheet, so we have one stable visual baseline.
+Each cell:
+- Label chip: `DPR x.x  •  <css w>×<css h>  •  <buffer w>×<buffer h>`
+- Canvas sized to fill the cell, but its backing buffer is forced to `cssW * targetDpr` regardless of the real `window.devicePixelRatio`.
+- Independent `GameEngine` instance, same map (Cyber Dojo — clean floor), same skins (Spider-Man vs Homelander by default).
+
+## Auto-walk driver
+
+Each engine runs an interval that flips `setIntent` every 1.6 s:
+- Phase A: `p1.right=true, p2.left=true`
+- Phase B: invert.
+
+Plus a "Slow walk / Run" toggle that switches between holding direction (run) vs tapping it briefly (walk). This exercises both the smoothed-velocity stride lock and the bob amplitude curve.
+
+CPU is disabled — both fighters are puppeteered identically across all four engines so any visual difference is purely DPR-dependent.
+
+## Technical details
+
+`src/routes/dpr-test.tsx`:
+- `createFileRoute("/dpr-test")` with a noindex meta tag.
+- Component renders a 2×2 CSS grid filling the viewport.
+- Maps over `[1, 1.5, 2, 3]` and renders a `<DprCell dpr={...} />`.
+
+`DprCell` (inline component in same file):
+- `useRef<HTMLCanvasElement>`, `useRef<GameEngine>`.
+- On mount: `ResizeObserver` on the parent → set `canvas.style.width/height` to CSS size, set `canvas.width = round(cssW * dpr)`, `canvas.height = round(cssH * dpr)`. Re-run on resize.
+- Construct `new GameEngine(canvas)`, call `engine.configure("cyber-dojo", "spiderman", "homelander", { cpu: false })`, `engine.start()`.
+- Drive auto-walk via `setInterval`, cleaned up on unmount.
+- Cleanup: `engine.stop()` + remove observer + clear interval.
+
+Top toolbar:
+- Pause/Resume → call `engine.stop()` / `engine.start()` on all 4.
+- Walk/Run → toggle the auto-walk pattern (tap vs hold).
+- Toggle skins → cycle through a small list (Spider-Man/Homelander → Hulk/Superman → Flash/Ironman) by re-calling `engine.configure(...)` on all 4.
+
+No engine changes — purely a new route consuming the existing `GameEngine` API (`configure`, `start`, `stop`, `setIntent`).
 
 ## Files
-- **Edit**: `src/game/engine.ts` — revert walk branch (~5083) to sheet-only with stride-lock + bob; drop unused imports.
-- **No-op**: leave `src/game/walkCycleV2.ts`, `src/game/walkMerge.ts`, and `src/assets/walk-frames-v2/*` in place for the future Option A path.
 
-After this lands, walk should look like before but with no foot-slide and a subtle bob. Then we move to **jump** as planned.
+- Add: `src/routes/dpr-test.tsx`
+
+That's it. After approval, visit `/dpr-test` to compare walk smoothness across DPRs side-by-side.
