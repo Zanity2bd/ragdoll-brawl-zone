@@ -4982,9 +4982,7 @@ export class GameEngine {
     // Sprite renderer covers walk, punch, jump, ragdoll, down/get-up, and hurt.
     // Procedural rig still owns: flight and special melee arms.
     const spriteReady = !ghost && isWalkSheetReady();
-    const useSpriteWalk =
-      spriteReady &&
-      !f.flying;
+    const useSpriteWalk = spriteReady;
 
     if (useSpriteWalk) {
       // Soft accent pool — only when grounded
