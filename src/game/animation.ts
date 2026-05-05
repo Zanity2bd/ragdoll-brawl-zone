@@ -204,52 +204,72 @@ export function computeWalkPose(
   }
 
   if (!onGround) {
-    // Three-phase jump: launch (vy<<0) → apex (|vy|≈0) → fall (vy>0).
+    // Four-phase jump: launch (squat-extend) → rising → apex (tuck) → fall (reach for ground).
     // Smoothed with cosine ease so transitions between phases never pop.
     const apexLin = 1 - Math.min(1, Math.abs(vy) / 320);
-    const apex = 0.5 - 0.5 * Math.cos(apexLin * Math.PI); // ease in/out
+    const apex = 0.5 - 0.5 * Math.cos(apexLin * Math.PI); // ease in/out (peak at apex)
     const launching = vy < 0;
-    const fallLin = launching ? 0 : Math.min(1, vy / 320);
+    const fallLin = launching ? 0 : Math.min(1, vy / 380);
     const fallT = fallLin * fallLin * (3 - 2 * fallLin);
-    const tuckLin = launching ? Math.min(1, -vy / 380) : 0;
-    const tuck = tuckLin * tuckLin * (3 - 2 * tuckLin);
+    // Strong push-off at the very start of the jump (when vy is most negative)
+    const launchLin = launching ? Math.min(1, -vy / 420) : 0;
+    const launchPush = launchLin * launchLin * (3 - 2 * launchLin);
+    // Tuck during the second half of the rise / apex
+    const tuckLin = launching ? Math.max(0, 1 - (-vy) / 420) : Math.max(0, 1 - vy / 240);
+    const tuck = (1 - launchPush) * (tuckLin * tuckLin * (3 - 2 * tuckLin));
 
     // Air micro-rotation — body slowly tilts forward through the arc
     const airSpin = Math.sin(phase * 0.6) * 0.02;
 
-    // Hip/knee/foot — knees tuck high on launch, splay at apex, extend on fall
-    const legSplay = 4 + apex * 5;
-    const kneeY = hipYBase + (10 + tuck * 14 - fallT * 5);
-    const kneeXIn = 5 + tuck * 5 - fallT * 2;
-    const footTuck = launching ? 14 + tuck * 8 : 22 + fallT * 12;
-    const footYL = hipYBase + footTuck;
-    const footYR = hipYBase + footTuck - apex * 4;
-    // Slight asymmetric leg offset for organic, non-symmetrical look
-    const legAsym = Math.sin(phase * 0.8) * 1.5 * apex;
+    // Bicycle pump — alternating leg motion driven by vertical phase, peaks on launch.
+    // Adds the visible "kicking up off the ground" feeling.
+    const pumpPhase = phase * 1.6;
+    const pumpAmt = launchPush * 0.85 + apex * 0.25;
+    const legPumpL = Math.sin(pumpPhase) * pumpAmt;
+    const legPumpR = -legPumpL;
 
-    // Arms — smoothly arc from forward swing → wide splay → trailing back
-    // Use cosine blends instead of hard branching so there is never a snap
-    const armSwingX = facing * (10 - tuck * 4 - apex * 18 - fallT * 6);
-    const armSwingY = 22 - tuck * 5 + apex * 4 + fallT * 8;
-    const armCounterX = -armSwingX * 0.7;
-    const elbowBend = 4 + apex * 3;
+    // Lead leg drives forward & up on push-off (extended below hip → drives knee high)
+    // Trail leg extends down for the kick-off, then folds up
+    const kneeUpL = launchPush * (8 + legPumpL * 6) + tuck * 16 - fallT * 4;
+    const kneeUpR = launchPush * (8 + legPumpR * 6) + tuck * 16 - fallT * 4;
+    const kneeXIn = 4 + tuck * 6 - fallT * 2;
+    const kneeYL = hipYBase + (12 - kneeUpL);
+    const kneeYR = hipYBase + (12 - kneeUpR);
 
-    const lean = facing * (0.08 + tuck * 0.08 - fallT * 0.04) + airSpin;
+    // Feet: on launch one foot is still pushing down (extended), the other is rising.
+    // On apex both tuck up. On fall both extend down to "stick the landing".
+    const footExtendL = launchPush * (10 - legPumpL * 8) + fallT * 14 - tuck * 12;
+    const footExtendR = launchPush * (10 - legPumpR * 8) + fallT * 14 - tuck * 12;
+    const footYL = hipYBase + 22 + footExtendL;
+    const footYR = hipYBase + 22 + footExtendR;
+    const legSplayBase = 4 + apex * 4;
+    const footXL = -2 - legSplayBase - launchPush * 2;
+    const footXR = 2 + legSplayBase + launchPush * 2;
+
+    // Arms — windmill on launch (counter-balance), splay at apex, reach down on landing
+    const armSwingX = facing * (8 - launchPush * 14 - apex * 18 - fallT * 4);
+    const armSwingY = 24 - launchPush * 10 + apex * 4 + fallT * 10;
+    const armCounterX = facing * (-6 + launchPush * 18 + apex * 6);
+    const armCounterY = 24 - launchPush * 4 + apex * 2 + fallT * 8;
+    const elbowBend = 4 + apex * 3 + launchPush * 2;
+
+    const lean = facing * (0.06 + launchPush * 0.10 + tuck * 0.04 - fallT * 0.06) + airSpin;
+    const sqUp = launchPush * 2; // small stretch on push-off
 
     return {
-      headOffsetY: -3 - tuck * 1.5 + fallT * 0.5,
-      shoulderY: 28 - tuck * 1.5 + fallT * 0.8,
-      hipY: hipYBase - tuck * 1 + fallT * 0.5,
-      legL: [-3, hipYBase, -3 - kneeXIn, kneeY + legAsym, -2 - legSplay, footYL + legAsym],
-      legR: [3, hipYBase, 3 + kneeXIn, kneeY - legAsym, 2 + legSplay, footYR - legAsym],
-      armL: [-4, 28, -10 + armCounterX * 0.3, 30 + apex * 2 + elbowBend, armCounterX, armSwingY + 2],
-      armR: [4, 28, 10 + armSwingX * 0.3, 30 + apex * 2 + elbowBend, armSwingX, armSwingY],
-      handL: [armCounterX, armSwingY + 2],
+      headOffsetY: -3 - launchPush * 1 - tuck * 2 + fallT * 0.8,
+      shoulderY: 28 - sqUp - tuck * 2 + fallT * 1,
+      hipY: hipYBase - sqUp * 0.6 - tuck * 1 + fallT * 0.5,
+      legL: [-3, hipYBase, -3 - kneeXIn, kneeYL, footXL, footYL],
+      legR: [3, hipYBase, 3 + kneeXIn, kneeYR, footXR, footYR],
+      armL: [-4, 28, -10 + armCounterX * 0.3, 30 + elbowBend, armCounterX, armCounterY],
+      armR: [4, 28, 10 + armSwingX * 0.3, 30 + elbowBend, armSwingX, armSwingY],
+      handL: [armCounterX, armCounterY],
       handR: [armSwingX, armSwingY],
-      footL: [-2 - legSplay, footYL + legAsym],
-      footR: [2 + legSplay, footYR - legAsym],
+      footL: [footXL, footYL],
+      footR: [footXR, footYR],
       lean,
-      shoulderRoll: -facing * apex * 0.06 + airSpin * 0.5,
+      shoulderRoll: -facing * apex * 0.08 + airSpin * 0.5,
     };
   }
 
