@@ -5459,35 +5459,11 @@ export class GameEngine {
       drawFist(ctx, pose.handR, skin.gloves);
     }
 
-    // Torso — premium fighters get a filled trapezoid (matches SkinSelect card);
-    // legacy fighters keep the simple thick stroke.
+    // Torso — premium fighters get the full SkinSelect-style body (torso,
+    // emblem, head, mask, eyes) drawn by the shared premiumRender helper.
+    // Legacy fighters keep the simple thick stroke + downstream head pass.
     if (skin.premiumRender) {
-      const shoulderHalf = skin.thickBody ? 11 : 8.5;
-      const hipHalf = skin.thickBody ? 8 : 6;
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath();
-      ctx.moveTo(-shoulderHalf, shoulderY);
-      ctx.lineTo(shoulderHalf, shoulderY);
-      ctx.lineTo(hipHalf + 0.5, hipY);
-      ctx.lineTo(-hipHalf - 0.5, hipY);
-      ctx.closePath();
-      ctx.fill();
-      // Neck patch — connects head to torso cleanly
-      ctx.fillRect(-2.5, headY + headR - 2, 5, shoulderY - (headY + headR) + 3);
-      // Shoulder caps
-      const capR = skin.thickBody ? 4 : 3.2;
-      ctx.fillStyle = limbColor;
-      ctx.beginPath(); ctx.arc(-shoulderHalf, shoulderY, capR, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(shoulderHalf, shoulderY, capR, 0, Math.PI * 2); ctx.fill();
-      // Subtle highlight band down the center
-      if (!ghost) {
-        ctx.save();
-        ctx.strokeStyle = `color-mix(in oklab, ${bodyColor} 40%, white)`;
-        ctx.lineWidth = 1.6;
-        ctx.globalAlpha = 0.32;
-        ctx.beginPath(); ctx.moveTo(0, shoulderY + 3); ctx.lineTo(0, hipY - 3); ctx.stroke();
-        ctx.restore();
-      }
+      drawPremiumBody(ctx, skin, pose, headR, f.facing, ghost);
     } else {
       ctx.strokeStyle = bodyColor;
       ctx.lineWidth = torsoW;
@@ -5508,13 +5484,13 @@ export class GameEngine {
       const jr = baseW * 0.32;
       ctx.beginPath(); ctx.arc(-4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
-    }
 
-    if (skin.emblem) {
-      const ey = (shoulderY + hipY) / 2;
-      ctx.fillStyle = skin.emblem.color;
-      ctx.strokeStyle = skin.emblem.color;
-      drawEmblem(ctx, skin.emblem, ey, shoulderY, hipY);
+      if (skin.emblem) {
+        const ey = (shoulderY + hipY) / 2;
+        ctx.fillStyle = skin.emblem.color;
+        ctx.strokeStyle = skin.emblem.color;
+        drawEmblem(ctx, skin.emblem, ey, shoulderY, hipY);
+      }
     }
 
     // Head: fill disc first, then proportional rim. Highlight follows below.
