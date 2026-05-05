@@ -5575,21 +5575,7 @@ export class GameEngine {
       ctx.fillRect(-5, headY + 1, 10, 1.4);
     }
 
-    // Crowbar prop for Butcher during melee
-    if (skin.id === "butcher" && f.meleeKind === "crowbar" && !ghost) {
-      const hand = f.facing > 0 ? pose.handR : pose.handL;
-      ctx.strokeStyle = "oklch(0.55 0.02 60)";
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.moveTo(hand[0], hand[1]);
-      ctx.lineTo(hand[0] + f.facing * 16, hand[1] - 18);
-      ctx.stroke();
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(hand[0] + f.facing * 16, hand[1] - 18);
-      ctx.lineTo(hand[0] + f.facing * 22, hand[1] - 22);
-      ctx.stroke();
-    }
+    // Crowbar prop removed with legacy procedural attack rig.
 
     ctx.restore();
   }
