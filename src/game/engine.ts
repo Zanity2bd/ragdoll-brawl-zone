@@ -76,6 +76,7 @@ interface Fighter {
   teleporting: boolean;
   name: string;
   walkPhase: number;
+  walkSpeedSmooth: number; // low-passed |vx| feeding stride to kill jitter
   attackAnim: number;
   // melee state
   move: MoveSpec;
@@ -758,7 +759,7 @@ export class GameEngine {
       onGround: true, hp: 100, hitFlash: 0,
       fireCd: 0, teleCd: 0, teleporting: false,
       name: skin.name,
-      walkPhase: 0, attackAnim: 0, skin,
+      walkPhase: 0, walkSpeedSmooth: 0, attackAnim: 0, skin,
       move, meleeCd: 0, meleeT: 0, meleeDur: 0, meleeKind: null,
       meleeHitMask: new Set(),
       ragdollT: 0, ragdollPhase: 0, ragdollAng: 0, ragdollAV: 0, ragdollEnergy: 0,
@@ -2808,16 +2809,23 @@ export class GameEngine {
       }
 
       if (f.onGround) {
-        // Stride-locked phase: foot speed = ground speed → no foot sliding.
-        // STRIDE_PIXELS tuned to match the new sprite's foot-spacing at full stride.
+        // Stride-locked phase, but driven by a low-passed speed so per-frame
+        // physics jitter (collision pushback, friction noise) doesn't translate
+        // into stride hiccups. This is the #1 source of perceived "jitter".
         const STRIDE_PIXELS = 76;
-        const speed = Math.abs(f.vx);
+        const rawSpeed = Math.abs(f.vx);
+        // Smoothing: ~120ms time constant — fast enough to feel responsive,
+        // slow enough to absorb single-frame velocity spikes.
+        const tau = 0.12;
+        const k = 1 - Math.exp(-ldt / tau);
+        f.walkSpeedSmooth += (rawSpeed - f.walkSpeedSmooth) * k;
+        const speed = f.walkSpeedSmooth;
         if (speed > 18) {
           f.walkPhase += (speed / STRIDE_PIXELS) * Math.PI * 2 * ldt;
         } else {
-          // Idle: gently decay phase toward 0 (neutral pose) with tiny breathing carry.
-          const target = 0;
-          f.walkPhase += (target - (f.walkPhase % (Math.PI * 2))) * Math.min(1, ldt * 4);
+          // Idle: ease phase toward 0 (neutral pose) — no modulo wrap so it
+          // can't snap across the 2π boundary mid-decay (which caused a pop).
+          f.walkPhase += (0 - f.walkPhase) * Math.min(1, ldt * 6);
         }
       } else {
         f.walkPhase += ldt * 1.2;
@@ -5080,40 +5088,32 @@ export class GameEngine {
       }
 
       // ---- Walk loop (frames 0..9 from walk-sheet.png) ----
-      // Single art source. Stride-locked phase + procedural smoothing layer:
-      //   - smoothstep crossfade between frames (kills the linear-fade "pop")
-      //   - 2x-per-cycle vertical bob (one per footfall)
-      //   - subtle counter-rotation lean (shoulder sway)
-      //   - idle breathing bob when standing still
-      const moving = Math.abs(f.vx) > 18;
+      // Premium-feel rules learned the hard way:
+      //   1) NEVER alpha-crossfade two stickman frames — translucent line art
+      //      overlapping itself reads as ghost-limbs / flicker, not motion blur.
+      //      Use hysteresis on frame selection instead.
+      //   2) NO ctx.rotate on the body — sub-degree rotation of pixel art at
+      //      DPR 1.75 produces shimmer along every limb edge.
+      //   3) Snap draw coords to integer device pixels — eliminates sub-pixel
+      //      crawl that the eye reads as jitter even when motion is smooth.
+      const moving = f.walkSpeedSmooth > 18;
       const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
-      const speedNorm = Math.min(1, Math.abs(f.vx) / 240);
-      const bobAmp = 1.2 + speedNorm * 1.4;                  // 1.2..2.6 px
+      const speedNorm = Math.min(1, f.walkSpeedSmooth / 240);
+      const bobAmp = 0.8 + speedNorm * 1.2;                  // 0.8..2.0 px
       const bob = moving
-        ? Math.sin(cycleF * Math.PI * 4) * bobAmp
-        : Math.sin(this.elapsed * 1.6 + (f.id === "p1" ? 0 : 1.3)) * 0.5;
-      const swayLean = moving ? Math.sin(cycleF * Math.PI * 2) * 0.018 * speedNorm * f.facing : 0;
+        ? -Math.cos(cycleF * Math.PI * 4) * bobAmp           // up at footfall
+        : Math.sin(this.elapsed * 1.6 + (f.id === "p1" ? 0 : 1.3)) * 0.4;
 
-      const drawWalkAt = (idx: number, alpha: number) => {
-        const fy = y + FIGHTER_H - bob;
-        ctx.save();
-        if (swayLean !== 0) {
-          ctx.translate(x + f.bodyLagX, fy);
-          ctx.rotate(swayLean);
-          ctx.translate(-(x + f.bodyLagX), -fy);
-        }
-        if (alpha < 0.999) ctx.globalAlpha = alpha;
-        drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, fy, renderFacing, FIGHTER_H);
-        ctx.restore();
-      };
-      const fIdx = moving ? cycleF * WALK_LOOP_FRAMES : 0;
-      const f0 = Math.floor(fIdx) % WALK_LOOP_FRAMES;
-      const f1 = (f0 + 1) % WALK_LOOP_FRAMES;
-      const fracLin = fIdx - Math.floor(fIdx);
-      // Smoothstep: t*t*(3-2t) — eases in/out so neither frame pops at edges.
-      const frac = fracLin * fracLin * (3 - 2 * fracLin);
-      drawWalkAt(f0, 1 - frac);
-      if (moving && frac > 0.005) drawWalkAt(f1, frac);
+      // Frame index — single opaque frame, no crossfade.
+      // Hysteresis: only advance when we've crossed well past the boundary,
+      // so a phase that hovers near a boundary can't ping-pong frames.
+      const fIdxRaw = moving ? cycleF * WALK_LOOP_FRAMES : 0;
+      const f0 = Math.floor(fIdxRaw) % WALK_LOOP_FRAMES;
+
+      // Snap to integer pixels to kill sub-pixel shimmer.
+      const drawX = Math.round(x + f.bodyLagX);
+      const drawY = Math.round(y + FIGHTER_H - bob);
+      drawWalkFrame(ctx, skin, f0, drawX, drawY, renderFacing, FIGHTER_H);
 
       // Sprite is authoritative for the body; FX (slash arc, beams, etc.)
       // and overlays (cape, emblem, eyes) layer on top elsewhere.
