@@ -2,6 +2,7 @@
 // Per-skin signature melees with impact frames, ragdoll, slow-mo, SFX.
 
 import { computeWalkPose, computeRagdollPose, blendPose, type Pose } from "./animation";
+import { drawPremiumBody, premiumShoulderHalf } from "./premiumRender";
 import { getMap, type MapId } from "./maps";
 import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
@@ -4988,7 +4989,8 @@ export class GameEngine {
     this.drawFighterAt(f, f.x, f.y, pose, false);
   }
 
-  private drawFighterAt(f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
+  private drawFighterAt(f: Fighter, x: number, y: number, poseIn: Pose, ghost: boolean) {
+    let pose = poseIn;
     const ctx = this.ctx;
     const skin = f.skin;
 
@@ -5212,6 +5214,18 @@ export class GameEngine {
     const headY = headR + 2 + pose.headOffsetY;
     const shoulderY = pose.shoulderY;
     const hipY = pose.hipY;
+
+    // Premium skins: snap upper-arm roots to the trapezoid corners so the
+    // shoulder caps, torso edge and arm origin all coincide (matches the
+    // SkinSelect card silhouette). Mutate a copy so trails/AI don't see it.
+    if (skin.premiumRender) {
+      const sh = premiumShoulderHalf(skin, hipY - shoulderY);
+      pose = {
+        ...pose,
+        armL: [-sh, shoulderY, pose.armL[2], pose.armL[3], pose.armL[4], pose.armL[5]],
+        armR: [ sh, shoulderY, pose.armR[2], pose.armR[3], pose.armR[4], pose.armR[5]],
+      };
+    }
 
     const bodyColor = f.hitFlash > 0 && !ghost ? "oklch(0.95 0.20 30)" : skin.body;
     const limbColor = skin.limb ?? bodyColor;
@@ -5445,35 +5459,11 @@ export class GameEngine {
       drawFist(ctx, pose.handR, skin.gloves);
     }
 
-    // Torso — premium fighters get a filled trapezoid (matches SkinSelect card);
-    // legacy fighters keep the simple thick stroke.
+    // Torso — premium fighters get the full SkinSelect-style body (torso,
+    // emblem, head, mask, eyes) drawn by the shared premiumRender helper.
+    // Legacy fighters keep the simple thick stroke + downstream head pass.
     if (skin.premiumRender) {
-      const shoulderHalf = skin.thickBody ? 11 : 8.5;
-      const hipHalf = skin.thickBody ? 8 : 6;
-      ctx.fillStyle = bodyColor;
-      ctx.beginPath();
-      ctx.moveTo(-shoulderHalf, shoulderY);
-      ctx.lineTo(shoulderHalf, shoulderY);
-      ctx.lineTo(hipHalf + 0.5, hipY);
-      ctx.lineTo(-hipHalf - 0.5, hipY);
-      ctx.closePath();
-      ctx.fill();
-      // Neck patch — connects head to torso cleanly
-      ctx.fillRect(-2.5, headY + headR - 2, 5, shoulderY - (headY + headR) + 3);
-      // Shoulder caps
-      const capR = skin.thickBody ? 4 : 3.2;
-      ctx.fillStyle = limbColor;
-      ctx.beginPath(); ctx.arc(-shoulderHalf, shoulderY, capR, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(shoulderHalf, shoulderY, capR, 0, Math.PI * 2); ctx.fill();
-      // Subtle highlight band down the center
-      if (!ghost) {
-        ctx.save();
-        ctx.strokeStyle = `color-mix(in oklab, ${bodyColor} 40%, white)`;
-        ctx.lineWidth = 1.6;
-        ctx.globalAlpha = 0.32;
-        ctx.beginPath(); ctx.moveTo(0, shoulderY + 3); ctx.lineTo(0, hipY - 3); ctx.stroke();
-        ctx.restore();
-      }
+      drawPremiumBody(ctx, skin, pose, headR, f.facing, ghost);
     } else {
       ctx.strokeStyle = bodyColor;
       ctx.lineWidth = torsoW;
@@ -5494,86 +5484,87 @@ export class GameEngine {
       const jr = baseW * 0.32;
       ctx.beginPath(); ctx.arc(-4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(4, shoulderY, jr, 0, Math.PI * 2); ctx.fill();
+
+      if (skin.emblem) {
+        const ey = (shoulderY + hipY) / 2;
+        ctx.fillStyle = skin.emblem.color;
+        ctx.strokeStyle = skin.emblem.color;
+        drawEmblem(ctx, skin.emblem, ey, shoulderY, hipY);
+      }
     }
 
-    if (skin.emblem) {
-      const ey = (shoulderY + hipY) / 2;
-      ctx.fillStyle = skin.emblem.color;
-      ctx.strokeStyle = skin.emblem.color;
-      drawEmblem(ctx, skin.emblem, ey, shoulderY, hipY);
-    }
-
-    // Head: fill disc first, then proportional rim. Highlight follows below.
-    ctx.fillStyle = headColor;
-    ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
-    if (!ghost) {
-      ctx.save();
-      const hg = ctx.createRadialGradient(
-        f.facing * -2.5, headY - headR * 0.55, 0.5,
-        f.facing * -2.5, headY - headR * 0.55, headR * 1.1,
-      );
-      hg.addColorStop(0, "rgba(255,255,255,0.32)");
-      hg.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = hg;
-      ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
-
-    if (skin.skinTone) {
-      ctx.fillStyle = skin.skinTone;
-      ctx.beginPath();
-      ctx.ellipse(f.facing * 1.5, headY + 2, headR - 2.5, headR - 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    if (skin.cowlEars) {
+    // Head + eyes — only for legacy fighters. Premium fighters had this drawn
+    // by drawPremiumBody above (matches SkinSelect card exactly).
+    if (!skin.premiumRender) {
+      // Head: fill disc first, then proportional rim. Highlight follows below.
       ctx.fillStyle = headColor;
-      ctx.beginPath();
-      ctx.moveTo(-headR + 3, headY - headR + 4);
-      ctx.lineTo(-headR - 1, headY - headR - 7);
-      ctx.lineTo(-1, headY - headR + 1);
-      ctx.closePath(); ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(headR - 3, headY - headR + 4);
-      ctx.lineTo(headR + 1, headY - headR - 7);
-      ctx.lineTo(1, headY - headR + 1);
-      ctx.closePath(); ctx.fill();
-    }
+      ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
+      if (!ghost) {
+        ctx.save();
+        const hg = ctx.createRadialGradient(
+          f.facing * -2.5, headY - headR * 0.55, 0.5,
+          f.facing * -2.5, headY - headR * 0.55, headR * 1.1,
+        );
+        hg.addColorStop(0, "rgba(255,255,255,0.32)");
+        hg.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = hg;
+        ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
 
-    if (skin.id === "superman") {
-      ctx.fillStyle = "oklch(0.18 0.02 30)";
-      ctx.beginPath();
-      ctx.moveTo(-headR + 3, headY - headR + 5);
-      ctx.quadraticCurveTo(0, headY - headR - 4, headR - 3, headY - headR + 5);
-      ctx.quadraticCurveTo(headR - 1, headY - 4, headR - 5, headY - 5);
-      ctx.lineTo(-headR + 5, headY - 5);
-      ctx.quadraticCurveTo(-headR + 1, headY - 4, -headR + 3, headY - headR + 5);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(-2 + f.facing * 1, headY - 3, 1.6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (skin.id === "homelander") {
-      ctx.fillStyle = "oklch(0.78 0.10 85)";
-      ctx.beginPath();
-      ctx.moveTo(-headR + 3, headY - headR + 4);
-      ctx.quadraticCurveTo(f.facing * 4, headY - headR - 3, headR - 3, headY - headR + 4);
-      ctx.quadraticCurveTo(0, headY - headR + 1, -headR + 3, headY - headR + 4);
-      ctx.fill();
-    }
+      if (skin.skinTone) {
+        ctx.fillStyle = skin.skinTone;
+        ctx.beginPath();
+        ctx.ellipse(f.facing * 1.5, headY + 2, headR - 2.5, headR - 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
-    const eyeColor = skin.id === "spiderman" ? "oklch(0.95 0.02 250)" : "oklch(0.10 0 0)";
-    ctx.fillStyle = eyeColor;
-    if (skin.id === "spiderman") {
-      ctx.beginPath(); ctx.ellipse(-3.5, headY - 1, 3, 2, -0.35, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(3.5, headY - 1, 3, 2, 0.35, 0, Math.PI * 2); ctx.fill();
-    } else if (skin.cowlEars) {
-      ctx.fillStyle = "oklch(0.92 0.02 250)";
-      ctx.fillRect(-5, headY - 1, 3, 1.6);
-      ctx.fillRect(2, headY - 1, 3, 1.6);
-    } else {
-      ctx.beginPath(); ctx.arc(-3, headY, 1.4, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(3, headY, 1.4, 0, Math.PI * 2); ctx.fill();
+      if (skin.cowlEars) {
+        ctx.fillStyle = headColor;
+        ctx.beginPath();
+        ctx.moveTo(-headR + 3, headY - headR + 4);
+        ctx.lineTo(-headR - 1, headY - headR - 7);
+        ctx.lineTo(-1, headY - headR + 1);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(headR - 3, headY - headR + 4);
+        ctx.lineTo(headR + 1, headY - headR - 7);
+        ctx.lineTo(1, headY - headR + 1);
+        ctx.closePath(); ctx.fill();
+      }
+
+      if (skin.id === "superman") {
+        ctx.fillStyle = "oklch(0.18 0.02 30)";
+        ctx.beginPath();
+        ctx.moveTo(-headR + 3, headY - headR + 5);
+        ctx.quadraticCurveTo(0, headY - headR - 4, headR - 3, headY - headR + 5);
+        ctx.quadraticCurveTo(headR - 1, headY - 4, headR - 5, headY - 5);
+        ctx.lineTo(-headR + 5, headY - 5);
+        ctx.quadraticCurveTo(-headR + 1, headY - 4, -headR + 3, headY - headR + 5);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(-2 + f.facing * 1, headY - 3, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (skin.id === "homelander") {
+        ctx.fillStyle = "oklch(0.78 0.10 85)";
+        ctx.beginPath();
+        ctx.moveTo(-headR + 3, headY - headR + 4);
+        ctx.quadraticCurveTo(f.facing * 4, headY - headR - 3, headR - 3, headY - headR + 4);
+        ctx.quadraticCurveTo(0, headY - headR + 1, -headR + 3, headY - headR + 4);
+        ctx.fill();
+      }
+
+      const eyeColor = "oklch(0.10 0 0)";
+      ctx.fillStyle = eyeColor;
+      if (skin.cowlEars) {
+        ctx.fillStyle = "oklch(0.92 0.02 250)";
+        ctx.fillRect(-5, headY - 1, 3, 1.6);
+        ctx.fillRect(2, headY - 1, 3, 1.6);
+      } else {
+        ctx.beginPath(); ctx.arc(-3, headY, 1.4, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(3, headY, 1.4, 0, Math.PI * 2); ctx.fill();
+      }
     }
 
     if (skin.glowingEyes) {

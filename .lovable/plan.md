@@ -1,71 +1,47 @@
-## Goal
+# Make in-game Spider-Man identical to the Skins-menu render
 
-Make the in-match fighter look identical to the polished SkinSelect card preview, while keeping every existing animation (walk cycle, punch, kick, knee, slash, jump, hurt, ragdoll, web-swing). Roll out on Spider-Man only first; then apply to all skins.
+The Skins menu uses a self-contained procedural drawing function (`src/components/game/SkinSelect.tsx` lines 209-364). The in-engine "premium render" path (`src/game/engine.ts` lines 5448-5497) is a partial reimplementation with different numbers, which is why Spider-Man looks wrong on the field. Plan: port the SkinSelect routine literally, scale it to engine units, and lock arm/shoulder anchors so the silhouette matches.
 
-## Approach
+## 1. Extract the canonical render as a shared helper
 
-Today the in-match renderer has two paths:
+Create `src/game/premiumRender.ts` exporting `drawPremiumBody(ctx, skin, pose, headR, facing, ghost)`. The body of this function is a near-1:1 copy of the SkinSelect drawing block (lines 240-364), but parameterized:
 
-1. **Walk-sheet path** — `drawWalkFrame()` blits a baked silhouette PNG with overlays anchored to per-frame coordinates (`WALK_ANCHORS`).
-2. **Pose path** — `drawLimb()` strokes lines between physics joints (`pose.armL/armR/legL/legR`, `shoulderY`, `hipY`) for ragdoll, kicks, web-swing, etc.
+- Uses `pose.shoulderY`, `pose.hipY`, `pose.headOffsetY`, plus `headR` from the engine — instead of the hard-coded `56 / 92 / 146 / 206 / 17` from SkinSelect.
+- Derives sizes from the SkinSelect proportions, not from new magic numbers. Concretely, with `H = pose.hipY - pose.shoulderY` (engine torso height):
+  - `shoulderHalf = H * (13 / 54)` for thickBody, `H * (10 / 54)` otherwise
+  - `hipHalf      = H * (10 / 54)` for thickBody, `H * (7 / 54)` otherwise
+  - `capR         = H * (4 / 54)` (thick) or `H * (3.2 / 54)`
+  - emblem position, neck rect, eye placement, mask lenses all scale off `headR` using the same ratios as SkinSelect.
+- Spider-Man-specific bits (`skin.id === "spiderman"` lens shape, web-stripe accents) are copied verbatim from SkinSelect lines 347-351 so the eyes are the same teardrop ovals at the same offsets-relative-to-`headR`.
 
-The SkinSelect look is purely procedural (filled trapezoid torso + thick curved limbs + filled head). We adopt the **pose path** as the single source of truth, drop the walk-sheet for fighters with `premiumRender`, and render the same primitives the SkinSelect uses but anchored to live pose joints.
+This function becomes the single source of truth shared by both screens.
 
-## Spider-Man Pilot
+## 2. Align the arm anchors so the silhouette closes
 
-Add an opt-in flag `premiumRender: true` on the Spider-Man skin. The renderer branches:
+In `src/game/animation.ts`, the walk/idle/attack pose anchors arms at `armL[0..1] = [-4, shoulderY]` and `armR[0..1] = [4, shoulderY]`. SkinSelect anchors them at `±shoulderHalf` so the shoulder cap sits exactly where the upper-arm starts.
 
-- If `premiumRender`: skip `drawWalkFrame`, draw the procedural body using pose joints.
-- Else: keep current walk-sheet path (no regression for other skins yet).
+Add a single post-process step inside `engine.ts` right after `computeWalkPose(...)` returns: snap the arm shoulder X to `±shoulderHalf` (same value the new helper computes) by overwriting `pose.armL[0]` and `pose.armR[0]`. Elbow / hand joints are unchanged — only the root moves outward, which is what makes the limb meet the torso corner.
 
-### Procedural body (matches SkinSelect)
+## 3. Replace the engine's premium block with a call to the helper
 
-Drawn in the fighter's local space (origin at feet, y-up flipped to match engine):
+In `src/game/engine.ts` lines 5448-5504, delete the trapezoid + neck + caps + emblem code and replace it with `drawPremiumBody(ctx, skin, pose, headR, f.facing, ghost)`. The eye/mask block at 5565-5571 also moves into the helper so that when premiumRender is true, the head/eyes are drawn by SkinSelect's exact code path, not the legacy engine path.
 
-```text
-        head (filled circle, r ≈ headR*1.1, centered ~hy+0.2r)
-         │
-         neck patch (6px wide rect)
-         │
-   ┌─────┴─────┐  ← shoulder line (width = shoulderHalf*2 ≈ 18)
-   │           │
-   │  torso    │  filled trapezoid: shoulders→hips
-   │ (emblem)  │  hipHalf*2 ≈ 14
-   └─┬───────┬─┘
-     │       │   limbs: thick stroke (8px) along pose joints
-   shoulder caps (filled circles)
-```
+## 4. Use SkinSelect for SkinSelect too
 
-Implementation:
+Update `SkinSelect.tsx` to call the same `drawPremiumBody` helper (passing a synthetic idle `Pose` built from its current `headY/shoulderY/hipY`). This guarantees the menu and the in-game render can never drift again.
 
-1. **Torso fill** — replace the single vertical stroke with a filled trapezoid path using `(-shoulderHalf, shoulderY) → (shoulderHalf, shoulderY) → (hipHalf, hipY) → (-hipHalf, hipY)`. Keep emblem drawing on top.
-2. **Limbs** — keep `drawLimb()` joint geometry but bump stroke width via skin flag (already done globally, now confirmed). Add a thin shadow-side stroke for depth.
-3. **Shoulder caps** — filled circles at `(±shoulderHalf, shoulderY)` so torso/arm joints read clean.
-4. **Head** — already domed via `walkSprite.ts`; for premium path, draw the filled head + jaw taper + neck rect directly (no sprite blit), then run the existing overlay code (lenses, emblem, mask web) using the same drawing helpers we already extracted.
-5. **Gloves / boots / cape** — already drawn from pose joints in the engine; unchanged.
+## 5. Verify with a screenshot before declaring done
 
-### Animations preserved
+After the edits, open `/play`, start a Spider-Man match, and capture a screenshot of the active fighter at idle and mid-stride. Compare against the reference you uploaded:
+- Torso edges flush with shoulder caps and arm roots (no floating caps)
+- Spider lenses are the angled white teardrops, not round dots
+- Red trapezoid + blue limbs proportions read like the menu card
+- Emblem sits at torso midpoint
 
-All animations are pose-driven — they update `pose.armL/armR/legL/legR/shoulderY/hipY` per frame for walk, punch (10–13), kick (23–24), knee (25–26), slash (27–29), jump (15–18), hurt (22), ragdoll (19), get-up (20–21). Because we draw on top of the same joints, every animation continues to work; we only swap *how* the silhouette is filled.
+If any of those four checks fail, iterate on the helper (not on the engine call site) and re-screenshot. Only then report back.
 
-For the walk cycle specifically, the engine already drives leg/arm angles from `walkPhase` even when the walk sheet is shown — the pose joints are always live. Confirmed by the existing fallback path that renders without the sheet.
+## Technical notes
 
-### Files to change
-
-- `src/game/skins.ts` — add `premiumRender?: boolean`, set on Spider-Man only.
-- `src/game/engine.ts` — in the fighter draw block, branch on `premiumRender`:
-  - Skip `drawWalkFrame` call.
-  - Draw cape (existing) → trapezoid torso fill → limbs (existing `drawAllLimbs`) → shoulder caps → emblem (existing) → head circle + jaw taper + neck patch → eyes/lenses/mask web (extract from `walkSprite.ts` into a shared `drawHeadOverlay(ctx, skin, hx, hy, r)` helper).
-- `src/game/headOverlay.ts` (new) — pure function shared between walk-sheet baker and live renderer for head/face details so Spider-Man's lenses, web pattern, and spider emblem look identical in both.
-
-## QA
-
-- Spider-Man stands idle: matches SkinSelect card.
-- Walk left/right: legs swing, torso tilts, head stays domed, lenses don't drift (anchored to pose `headX/headY`, not to baked frame).
-- Punch / kick / slash / jump / hurt / ragdoll: limbs follow pose, torso trapezoid deforms with `shoulderY`/`hipY`, no sprite ghost.
-- Web-swing: cape/limbs already pose-driven — verify torso trapezoid rotates with `bodyAngle`.
-- Other 10 fighters: unchanged (still walk-sheet).
-
-## Rollout
-
-After Spider-Man is approved, flip `premiumRender: true` on every skin in one pass and delete the walk-sheet code path + `walk-sheet.png` import. Confirms ~200KB asset removal and one less render branch.
+- `Pose` type already exposes everything the helper needs (`shoulderY`, `hipY`, `headOffsetY`, `lean`); no schema changes required.
+- The helper must respect `ghost` (skip the highlight band / outer glow) so KO ghosts still look right.
+- No other skins have `premiumRender: true` yet, so this change is contained to Spider-Man until you greenlight rolling it to the rest of the roster.
