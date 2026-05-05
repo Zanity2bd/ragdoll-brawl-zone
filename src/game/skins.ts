@@ -35,6 +35,7 @@ export const SKINS: Skin[] = [
     head: "oklch(0.50 0.16 25)",
     gloves: "oklch(0.50 0.16 25)", boots: "oklch(0.50 0.16 25)",
     emblem: { shape: "spider", color: "oklch(0.18 0.04 260)" },
+    thickBody: true,
     glow: "oklch(0.55 0.18 20)" },
 
   { id: "ironman", name: "Iron Man", universe: "Marvel",

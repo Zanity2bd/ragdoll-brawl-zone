@@ -1,61 +1,40 @@
-# DPR Walk-Smoothness Test Mode
+# Spider-Man Pilot — Pinned Overlays + Slightly Thicker Body
 
-A hidden dev route that renders the same fighters walking across four canvases simultaneously, each forced to a different `devicePixelRatio`. Lets you eyeball jitter, sub-pixel crawl and shimmer side-by-side without juggling browser zoom or real devices.
+Iterate on Spider-Man only. Once approved, the same recipe rolls out to the other 8.
 
-## Route
+## How overlays stay locked to the character (no drift, ever)
 
-New file: `src/routes/dpr-test.tsx` (path `/dpr-test`, not linked from anywhere — dev-only).
+The walk sheet has 30 hand-authored anchor points (one per frame) in `src/game/walkAnchors.ts`, recording exactly where the head, chest, hips and feet sit on every single frame — walk, punch, jump, hurt, KO. The per-skin overlay pipeline in `walkSprite.ts` reads those anchors and bakes the mask, eyes, emblem and web lines onto each frame **once at skin-load time**, then caches the result.
 
-Layout:
-```text
-+---------------------------------------------------+
-|  DPR 1.0      |  DPR 1.5                          |
-|  [canvas]     |  [canvas]                         |
-+---------------+-----------------------------------+
-|  DPR 2.0      |  DPR 3.0                          |
-|  [canvas]     |  [canvas]                         |
-+---------------------------------------------------+
-[ Pause ]  [ Slow walk ] [ Run ] [ Toggle skins ]
-```
+That means:
 
-Each cell:
-- Label chip: `DPR x.x  •  <css w>×<css h>  •  <buffer w>×<buffer h>`
-- Canvas sized to fill the cell, but its backing buffer is forced to `cssW * targetDpr` regardless of the real `window.devicePixelRatio`.
-- Independent `GameEngine` instance, same map (Cyber Dojo — clean floor), same skins (Spider-Man vs Homelander by default).
+- No runtime overlay positioning — every frame is a single pre-composed image.
+- The eyes/emblem/web-lines are physically painted onto the same pixels as the head/chest of that specific frame, so they cannot shift relative to the body.
+- Frame-to-frame swap (walk cycle, punch, jump) just blits a different already-composed image. There is no separate "overlay layer" that could lag.
 
-## Auto-walk driver
+This pipeline is already what's in production — the new art slots straight into it.
 
-Each engine runs an interval that flips `setIntent` every 1.6 s:
-- Phase A: `p1.right=true, p2.left=true`
-- Phase B: invert.
+## Changes (Spider-Man only)
 
-Plus a "Slow walk / Run" toggle that switches between holding direction (run) vs tapping it briefly (walk). This exercises both the smoothed-velocity stride lock and the bob amplitude curve.
+All edits in `src/game/walkSprite.ts` and `src/game/skins.ts`. No engine, animation, or asset changes.
 
-CPU is disabled — both fighters are puppeteered identically across all four engines so any visual difference is purely DPR-dependent.
+1. **Iconic mask lenses** — replace the tiny dot eyes in `drawEyes`'s spiderman branch with large white teardrop lenses, black-outlined, tilted ~0.35 rad outward, with a subtle inner highlight. Sized off head radius `r` so they scale with each frame's anchor.
+2. **Cleaner spider emblem** — rewrite the `"spider"` case in `drawEmblem` as a two-segment body (small head + larger abdomen) with 8 thin curved legs, 4 per side. Sized off chest radius `r`.
+3. **Web-line mask hint** — three thin radial strokes at ~55% opacity from the forehead anchor, only on the spiderman branch in `drawOverlays`.
+4. **Slightly thicker body** — set `thickBody: true` on the Spider-Man entry in `src/game/skins.ts`. The walkSprite renderer already reads this flag and uses a chunkier silhouette / thicker emblem strokes.
 
-## Technical details
+Everything keys off `WALK_ANCHORS[i]` (the head/chest position for frame i), so it animates with the body automatically and cannot drift.
 
-`src/routes/dpr-test.tsx`:
-- `createFileRoute("/dpr-test")` with a noindex meta tag.
-- Component renders a 2×2 CSS grid filling the viewport.
-- Maps over `[1, 1.5, 2, 3]` and renders a `<DprCell dpr={...} />`.
+## How to verify
 
-`DprCell` (inline component in same file):
-- `useRef<HTMLCanvasElement>`, `useRef<GameEngine>`.
-- On mount: `ResizeObserver` on the parent → set `canvas.style.width/height` to CSS size, set `canvas.width = round(cssW * dpr)`, `canvas.height = round(cssH * dpr)`. Re-run on resize.
-- Construct `new GameEngine(canvas)`, call `engine.configure("cyber-dojo", "spiderman", "homelander", { cpu: false })`, `engine.start()`.
-- Drive auto-walk via `setInterval`, cleaned up on unmount.
-- Cleanup: `engine.stop()` + remove observer + clear interval.
+1. `/play` → pick Spider-Man. Walk back and forth, jump, punch, get hit.
+2. The lenses, web pattern and emblem must stay perfectly glued to the head and chest through every frame.
+3. Body should look slightly chunkier than before but same height/stance.
+4. Compare to the hero portrait in Skin Select — same character identity.
 
-Top toolbar:
-- Pause/Resume → call `engine.stop()` / `engine.start()` on all 4.
-- Walk/Run → toggle the auto-walk pattern (tap vs hold).
-- Toggle skins → cycle through a small list (Spider-Man/Homelander → Hulk/Superman → Flash/Ironman) by re-calling `engine.configure(...)` on all 4.
-
-No engine changes — purely a new route consuming the existing `GameEngine` API (`configure`, `start`, `stop`, `setIntent`).
+If approved, I roll out the same recipe (iconic feature + emblem fix + small detail + thickness if appropriate) to Hulk and Flash, then the remaining 6.
 
 ## Files
 
-- Add: `src/routes/dpr-test.tsx`
-
-That's it. After approval, visit `/dpr-test` to compare walk smoothness across DPRs side-by-side.
+- `src/game/walkSprite.ts`
+- `src/game/skins.ts`
