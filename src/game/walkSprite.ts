@@ -95,6 +95,33 @@ function drawOverlays(
   const cy = a.cy;
   const r = a.hr;
 
+  // ---- Body thickening pass (baked) ----
+  // Adds visible torso + limb mass so thickBody skins look premium, not skinny.
+  if (skin.thickBody) {
+    ctx.save();
+    ctx.fillStyle = skin.body;
+    // Torso slab: shoulders → hips
+    const torsoTop = cy - r * 0.55;
+    const torsoBot = a.hipY + 4;
+    const torsoH = torsoBot - torsoTop;
+    const torsoW = r * 1.55;
+    ctx.beginPath();
+    // Rounded torso (capsule-ish)
+    ctx.moveTo(cx - torsoW * 0.5, torsoTop + r * 0.25);
+    ctx.quadraticCurveTo(cx - torsoW * 0.5, torsoTop, cx, torsoTop);
+    ctx.quadraticCurveTo(cx + torsoW * 0.5, torsoTop, cx + torsoW * 0.5, torsoTop + r * 0.25);
+    ctx.lineTo(cx + torsoW * 0.42, torsoBot);
+    ctx.quadraticCurveTo(cx, torsoBot + r * 0.18, cx - torsoW * 0.42, torsoBot);
+    ctx.closePath();
+    ctx.fill();
+    // Neck patch so head connects cleanly to torso
+    ctx.fillStyle = skin.head ?? skin.body;
+    ctx.fillRect(hx - r * 0.45, hy + r * 0.6, r * 0.9, (torsoTop - (hy + r * 0.6)) + 2);
+    ctx.restore();
+    // unused-var guard
+    void torsoH;
+  }
+
   // ---- Cape (drawn behind torso via destination-over) ----
   if (skin.cape) {
     ctx.save();
