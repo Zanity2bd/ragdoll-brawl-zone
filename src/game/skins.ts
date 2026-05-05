@@ -23,6 +23,7 @@ export interface Skin {
   glowingEyes?: string;
   emblem?: { shape: "oval" | "shield" | "circle" | "stripe" | "spider" | "lightning"; color: string };
   thickBody?: boolean;
+  premiumRender?: boolean;  // skip walk-sheet, use procedural SkinSelect-style body
   beard?: boolean;
   glow: string;             // subtle accent glow (used sparingly for emblem/eyes only)
   streaks?: string;
