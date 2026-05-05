@@ -4266,37 +4266,11 @@ export class GameEngine {
     // with the yaw scale we apply at draw time. Both flip at the same instant
     // (when facingT crosses zero), avoiding any pose/render desync.
     const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
-    const base = f.flying
-      ? computeFlightPose(f.walkPhase, f.vx, f.vy, f.hoverPhase, renderFacing, FIGHTER_H)
-      : computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0 || f.punchT > 0, renderFacing, FIGHTER_H);
-    let posed: Pose;
-    if (f.dash) {
-      // Cinematic super-punch pose during the dash. Superman = 1-hand cross,
-      // Homelander = 2-hand wedge. Use the dash progress as the timing so
-      // the wind-up coils early and the foreshortened strike peaks at impact.
-      const kind = f.skin.id === "homelander" ? "homelanderPunch" : "supermanPunch";
-      const u = Math.min(1, f.dash.t / Math.max(0.001, f.dash.dur));
-      // Heavily front-loaded: most of the dash is the swing toward the camera.
-      const wp = 0.35, ap = 0.55;
-      posed = computeAttackPose(base, kind, u, { wp, ap }, renderFacing);
-    } else if (f.meleeKind) {
-      const m = f.move;
-      const wp = m.windup / f.meleeDur;
-      const ap = m.active / f.meleeDur;
-      const prog = f.meleeT / f.meleeDur;
-      posed = computeAttackPose(base, f.meleeKind, prog, { wp, ap }, renderFacing);
-    } else if (f.heatVisionT > 0 || f.unibeamFireT > 0 || f.unibeamChargeT > 0) {
-      // Superman heat vision and Iron Man unibeam don't use meleeKind, but they
-      // deserve the same menacing beam stance. Synthesize a laserSweep timing
-      // so the pose ramps in (wind-up) and sustains during fire.
-      const isCharge = f.unibeamChargeT > 0;
-      const wp = 0.25, ap = 0.7;
-      const prog = isCharge ? wp * 0.6 : wp + ap * 0.5;
-      posed = computeAttackPose(base, "laserSweep", prog, { wp, ap }, renderFacing);
-    } else {
-      posed = base;
-    }
-    return applyWobble(posed, f.wobble, this.lowPower, f.onGround && !f.flying);
+    // Sprite-sheet character is authoritative — no procedural attack/flight
+    // pose overlays. Only the walk pose is computed here; the renderer reads
+    // it for cape/torso/head positioning while sprite frames draw the body.
+    const base = computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0 || f.punchT > 0, renderFacing, FIGHTER_H);
+    return applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying);
   }
 
   /**
