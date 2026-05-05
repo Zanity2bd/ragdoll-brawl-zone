@@ -5080,22 +5080,40 @@ export class GameEngine {
       }
 
       // ---- Walk loop (frames 0..9 from walk-sheet.png) ----
-      // Single art source. Stride-locked phase + small vertical bob for life.
+      // Single art source. Stride-locked phase + procedural smoothing layer:
+      //   - smoothstep crossfade between frames (kills the linear-fade "pop")
+      //   - 2x-per-cycle vertical bob (one per footfall)
+      //   - subtle counter-rotation lean (shoulder sway)
+      //   - idle breathing bob when standing still
       const moving = Math.abs(f.vx) > 18;
       const cycleF = ((f.walkPhase / (Math.PI * 2)) % 1 + 1) % 1;
-      const bob = moving ? Math.sin(cycleF * Math.PI * 4) * 1.5 : 0;
+      const speedNorm = Math.min(1, Math.abs(f.vx) / 240);
+      const bobAmp = 1.2 + speedNorm * 1.4;                  // 1.2..2.6 px
+      const bob = moving
+        ? Math.sin(cycleF * Math.PI * 4) * bobAmp
+        : Math.sin(this.elapsed * 1.6 + (f.id === "p1" ? 0 : 1.3)) * 0.5;
+      const swayLean = moving ? Math.sin(cycleF * Math.PI * 2) * 0.018 * speedNorm * f.facing : 0;
+
       const drawWalkAt = (idx: number, alpha: number) => {
         const fy = y + FIGHTER_H - bob;
-        if (alpha < 0.999) { ctx.save(); ctx.globalAlpha = alpha; }
+        ctx.save();
+        if (swayLean !== 0) {
+          ctx.translate(x + f.bodyLagX, fy);
+          ctx.rotate(swayLean);
+          ctx.translate(-(x + f.bodyLagX), -fy);
+        }
+        if (alpha < 0.999) ctx.globalAlpha = alpha;
         drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, fy, renderFacing, FIGHTER_H);
-        if (alpha < 0.999) ctx.restore();
+        ctx.restore();
       };
       const fIdx = moving ? cycleF * WALK_LOOP_FRAMES : 0;
       const f0 = Math.floor(fIdx) % WALK_LOOP_FRAMES;
       const f1 = (f0 + 1) % WALK_LOOP_FRAMES;
-      const frac = fIdx - Math.floor(fIdx);
-      drawWalkAt(f0, 1);
-      if (moving && frac > 0.01) drawWalkAt(f1, frac);
+      const fracLin = fIdx - Math.floor(fIdx);
+      // Smoothstep: t*t*(3-2t) — eases in/out so neither frame pops at edges.
+      const frac = fracLin * fracLin * (3 - 2 * fracLin);
+      drawWalkAt(f0, 1 - frac);
+      if (moving && frac > 0.005) drawWalkAt(f1, frac);
 
       // Sprite is authoritative for the body; FX (slash arc, beams, etc.)
       // and overlays (cape, emblem, eyes) layer on top elsewhere.
