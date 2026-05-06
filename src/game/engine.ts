@@ -5053,11 +5053,26 @@ export class GameEngine {
       // ---- Downed (KO laydown) ----
       if (f.downedT > 0) { drawFrame(DOWN_FRAME); return; }
 
-      // ---- Get-up (two-frame transition) ----
+      // ---- Get-up (multi-phase rise: prone → push-up → kneel → crouch → stand) ----
       if (f.getUpT > 0) {
         const total = Math.max(0.001, f.getUpDur);
-        const u = 1 - (f.getUpT / total);
-        drawFrame(u < 0.5 ? GETUP_FRAME_A : GETUP_FRAME_B);
+        const u = 1 - (f.getUpT / total); // 0..1
+        // Eased vertical settle: starts low (still on ground), springs upright.
+        // easeOutCubic for a snappy-but-natural rise.
+        const ease = 1 - Math.pow(1 - u, 3);
+        // Frame ladder — held longer on early prone so it reads as "pushing up".
+        let idx: number;
+        if (u < 0.18) idx = DOWN_FRAME;             // still flat, gathering
+        else if (u < 0.42) idx = GETUP_FRAME_A;     // pushing up on hands
+        else if (u < 0.68) idx = GETUP_FRAME_B;     // kneeling
+        else if (u < 0.88) idx = KNEE_CHAMBER_FRAME;// deep crouch
+        else idx = 0;                                // stand (walk frame 0)
+        // Vertical bias: still partially on the ground early, smooth lift to 0.
+        // Negative offset pulls the sprite anchor downward (closer to ground).
+        const groundLift = (1 - ease) * (FIGHTER_H * 0.42);
+        // Subtle forward lean as they push up.
+        const leanPx = Math.sin(u * Math.PI) * 3 * renderFacing;
+        drawWalkFrame(ctx, skin, idx, x + f.bodyLagX + leanPx, y + FIGHTER_H + groundLift, renderFacing, FIGHTER_H);
         return;
       }
 
