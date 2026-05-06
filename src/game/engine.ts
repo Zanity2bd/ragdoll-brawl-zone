@@ -2280,8 +2280,24 @@ export class GameEngine {
       f.vy = 0;
       f.onGround = true;
       if (f.downedT <= 0) {
-        f.getUpDur = 0.85;
+        // Longer, more cinematic 4-phase rise (push-up → kneel → crouch → stand).
+        f.getUpDur = 1.25;
         f.getUpT = f.getUpDur;
+        // Dust puff as the body pushes off the ground.
+        if (!this.lowPower) {
+          for (let i = 0; i < 10; i++) {
+            this.particles.push({
+              x: f.x + (Math.random() - 0.5) * 32,
+              y: GROUND_Y - 2,
+              vx: (Math.random() - 0.5) * 90,
+              vy: -25 - Math.random() * 55,
+              life: 0.55, maxLife: 0.55,
+              color: "oklch(0.74 0.02 60)",
+              size: 2 + Math.random() * 2.4,
+            });
+          }
+          Sfx.play("thud", 0.18);
+        }
       }
       return;
     }
