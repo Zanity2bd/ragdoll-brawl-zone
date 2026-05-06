@@ -403,12 +403,13 @@ const BAMF_CLOUD_RADIUS = 130;
 const BAMF_CLOUD_DMG = 14;
 const SHADOW_STRIKE_CD = 5;
 const SHADOW_STRIKE_DMG = 18;
-// Bamf Combo — 3 scripted teleport-strikes
+// Taijutsu Flurry — bamf-in then a smooth 5-strike combo (no per-hit teleport).
+// Reference: taijutsu100..137 frames — alternating punch / high-kick / knee / punch / finisher.
 const BAMF_COMBO_CD = 12;
-const BAMF_COMBO_STEP = 1.0;        // 1s between hits → ~3s total
-const BAMF_COMBO_DMG = [12, 14, 18];
-const BAMF_COMBO_HITSTOP = [0.08, 0.10, 0.18];
-const BAMF_COMBO_SHAKE = [12, 14, 22];
+const BAMF_COMBO_STEP = 0.22;       // ~220ms per strike → ~1.1s flurry
+const BAMF_COMBO_DMG = [8, 9, 10, 11, 18];
+const BAMF_COMBO_HITSTOP = [0.05, 0.05, 0.06, 0.07, 0.18];
+const BAMF_COMBO_SHAKE = [8, 9, 10, 12, 22];
 
 interface Missile {
   owner: PlayerId; target: PlayerId;
