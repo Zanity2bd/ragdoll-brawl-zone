@@ -208,86 +208,75 @@ function SkinPreview({ skin }: { skin: Skin }) {
 
         const cx = W / 2;
         const breath = Math.sin(t * 1.5) * 1.2;
-        const headR = skin.thickBody ? 17 : 15;
+        const headR = 13;
         const headY = 56 + breath;
-        const shoulderY = 92 + breath;
-        const hipY = 146;
+        const shoulderY = 86 + breath;
+        const hipY = 142;
         const feetY = 206;
-        const shoulderHalf = skin.thickBody ? 13 : 10;
-        const hipHalf = skin.thickBody ? 10 : 7;
 
         // contact shadow
         ctx.fillStyle = "oklch(0 0 0 / 0.3)";
-        ctx.beginPath(); ctx.ellipse(cx, feetY + 5, 26, 4.8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(cx, feetY + 5, 24, 4.5, 0, 0, Math.PI * 2); ctx.fill();
 
         // cape
         if (skin.cape) {
           const sway = Math.sin(t * 1.2) * 4;
           ctx.fillStyle = skin.cape;
           ctx.beginPath();
-          ctx.moveTo(cx - shoulderHalf, shoulderY);
-          ctx.lineTo(cx + shoulderHalf, shoulderY);
-          ctx.quadraticCurveTo(cx + 18 + sway, hipY + 28, cx + 8 + sway, hipY + 58);
-          ctx.lineTo(cx - 8 + sway, hipY + 58);
-          ctx.quadraticCurveTo(cx - 18 + sway, hipY + 28, cx - shoulderHalf, shoulderY);
+          ctx.moveTo(cx - 10, shoulderY);
+          ctx.lineTo(cx + 10, shoulderY);
+          ctx.quadraticCurveTo(cx + 16 + sway, hipY + 26, cx + 6 + sway, hipY + 56);
+          ctx.lineTo(cx - 6 + sway, hipY + 56);
+          ctx.quadraticCurveTo(cx - 16 + sway, hipY + 26, cx - 10, shoulderY);
           ctx.fill();
           if (skin.capeAccent) {
             ctx.fillStyle = skin.capeAccent;
-            ctx.fillRect(cx - 1.5 + sway * 0.3, shoulderY, 3, hipY + 54 - shoulderY);
+            ctx.fillRect(cx - 1.5 + sway * 0.3, shoulderY, 3, hipY + 52 - shoulderY);
           }
         }
 
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
 
-        // limbs — thicker, anchored to wider shoulders/hips
+        // limbs
         const armSwing = Math.sin(t * 2) * 5;
         ctx.strokeStyle = skin.limb ?? skin.body;
-        ctx.lineWidth = skin.thickBody ? 8 : 6;
-        const handLX = cx - 22 + armSwing;
-        const handRX = cx + 22 - armSwing;
-        const handY = shoulderY + 46;
+        ctx.lineWidth = skin.thickBody ? 5 : 4;
+        const handLX = cx - 20 + armSwing;
+        const handRX = cx + 20 - armSwing;
+        const handY = shoulderY + 42;
         ctx.beginPath();
-        ctx.moveTo(cx - shoulderHalf, shoulderY); ctx.quadraticCurveTo(cx - 18, shoulderY + 22, handLX, handY); ctx.stroke();
+        ctx.moveTo(cx - 4, shoulderY); ctx.quadraticCurveTo(cx - 16, shoulderY + 20, handLX, handY); ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(cx + shoulderHalf, shoulderY); ctx.quadraticCurveTo(cx + 18, shoulderY + 22, handRX, handY); ctx.stroke();
+        ctx.moveTo(cx + 4, shoulderY); ctx.quadraticCurveTo(cx + 16, shoulderY + 20, handRX, handY); ctx.stroke();
         const legSway = Math.sin(t * 2 + Math.PI) * 2;
-        const footLX = cx - 11 + legSway;
-        const footRX = cx + 11 - legSway;
-        ctx.lineWidth = skin.thickBody ? 9 : 7;
+        const footLX = cx - 10 + legSway;
+        const footRX = cx + 10 - legSway;
         ctx.beginPath();
-        ctx.moveTo(cx - hipHalf, hipY); ctx.quadraticCurveTo(cx - 11, (hipY + feetY) / 2 + 4, footLX, feetY); ctx.stroke();
+        ctx.moveTo(cx - 3, hipY); ctx.quadraticCurveTo(cx - 9, (hipY + feetY) / 2 + 4, footLX, feetY); ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(cx + hipHalf, hipY); ctx.quadraticCurveTo(cx + 11, (hipY + feetY) / 2 + 4, footRX, feetY); ctx.stroke();
+        ctx.moveTo(cx + 3, hipY); ctx.quadraticCurveTo(cx + 9, (hipY + feetY) / 2 + 4, footRX, feetY); ctx.stroke();
 
         // boots
         if (skin.boots) {
           ctx.fillStyle = skin.boots;
-          ctx.beginPath(); ctx.ellipse(footLX, feetY - 1, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(footRX, feetY - 1, 7, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(footLX, feetY - 1, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(footRX, feetY - 1, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
         }
         // gloves
         if (skin.gloves) {
           ctx.fillStyle = skin.gloves;
-          ctx.beginPath(); ctx.arc(handLX, handY, 5, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.arc(handRX, handY, 5, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(handLX, handY, 4, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(handRX, handY, 4, 0, Math.PI * 2); ctx.fill();
         }
 
-        // torso — filled trapezoid (shoulders → hips) for premium silhouette
+        // torso
+        ctx.strokeStyle = skin.body;
+        ctx.lineWidth = skin.thickBody ? 7 : 5;
+        ctx.beginPath(); ctx.moveTo(cx, shoulderY); ctx.lineTo(cx, hipY); ctx.stroke();
         ctx.fillStyle = skin.body;
-        ctx.beginPath();
-        ctx.moveTo(cx - shoulderHalf, shoulderY);
-        ctx.lineTo(cx + shoulderHalf, shoulderY);
-        ctx.lineTo(cx + hipHalf + 1, hipY);
-        ctx.lineTo(cx - hipHalf - 1, hipY);
-        ctx.closePath();
-        ctx.fill();
-        // shoulder caps
-        ctx.beginPath(); ctx.arc(cx - shoulderHalf, shoulderY, skin.thickBody ? 4 : 3.2, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx + shoulderHalf, shoulderY, skin.thickBody ? 4 : 3.2, 0, Math.PI * 2); ctx.fill();
-        // neck
-        ctx.fillRect(cx - 3, headY + headR - 2, 6, shoulderY - (headY + headR) + 3);
-
+        ctx.beginPath(); ctx.arc(cx - 4, shoulderY, 2.8, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(cx + 4, shoulderY, 2.8, 0, Math.PI * 2); ctx.fill();
 
         // emblem
         if (skin.emblem) {

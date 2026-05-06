@@ -277,7 +277,7 @@ function SkinThumb({ skin }: { skin: Skin }) {
         // limbs (curved with quad)
         const armSwing = Math.sin(t * 2) * 5;
         ctx.strokeStyle = skin.limb ?? skin.body;
-        ctx.lineWidth = skin.thickBody ? 7 : 5.5;
+        ctx.lineWidth = skin.thickBody ? 4.5 : 3.5;
         // arms
         const handLX = cx - 18 + armSwing;
         const handRX = cx + 18 - armSwing;
@@ -310,7 +310,7 @@ function SkinThumb({ skin }: { skin: Skin }) {
 
         // torso
         ctx.strokeStyle = skin.body;
-        ctx.lineWidth = skin.thickBody ? 9 : 7;
+        ctx.lineWidth = skin.thickBody ? 6 : 4.5;
         ctx.beginPath(); ctx.moveTo(cx, shoulderY); ctx.lineTo(cx, hipY); ctx.stroke();
         // shoulder caps
         ctx.fillStyle = skin.body;

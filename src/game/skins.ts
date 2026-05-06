@@ -60,7 +60,6 @@ export const SKINS: Skin[] = [
     head: "oklch(0.32 0.12 260)",
     gloves: "oklch(0.50 0.16 25)", boots: "oklch(0.50 0.16 25)",
     glowingEyes: "oklch(0.85 0.18 60)",
-    thickBody: true,
     glow: "oklch(0.55 0.20 280)" },
 
   // DC
@@ -70,7 +69,6 @@ export const SKINS: Skin[] = [
     gloves: "oklch(0.18 0.02 280)", boots: "oklch(0.18 0.02 280)",
     cape: "oklch(0.16 0.02 280)", cowlEars: true,
     emblem: { shape: "oval", color: "oklch(0.78 0.16 90)" },
-    thickBody: true,
     glow: "oklch(0.40 0.04 280)" },
 
   { id: "superman", name: "Superman", universe: "DC",
@@ -79,7 +77,6 @@ export const SKINS: Skin[] = [
     gloves: "oklch(0.40 0.18 260)", boots: "oklch(0.50 0.20 25)",
     cape: "oklch(0.45 0.20 25)", capeAccent: "oklch(0.55 0.22 20)",
     emblem: { shape: "shield", color: "oklch(0.78 0.16 85)" },
-    thickBody: true,
     glow: "oklch(0.55 0.18 255)" },
 
   { id: "flash", name: "The Flash", universe: "DC",
@@ -88,7 +85,6 @@ export const SKINS: Skin[] = [
     gloves: "oklch(0.78 0.16 85)", boots: "oklch(0.78 0.16 85)",
     streaks: "oklch(0.85 0.16 85)",
     emblem: { shape: "lightning", color: "oklch(0.85 0.16 85)" },
-    thickBody: true,
     glow: "oklch(0.78 0.16 85)" },
 
   { id: "heatwave", name: "Heatwave", universe: "DC",
@@ -105,7 +101,6 @@ export const SKINS: Skin[] = [
     gloves: "oklch(0.40 0.16 260)", boots: "oklch(0.40 0.16 260)",
     cape: "oklch(0.45 0.20 25)", capeAccent: "oklch(0.92 0.04 250)",
     glowingEyes: "oklch(0.82 0.18 60)",
-    thickBody: true,
     glow: "oklch(0.55 0.18 30)" },
 
   { id: "butcher", name: "Butcher", universe: "The Boys",
@@ -121,7 +116,6 @@ export const SKINS: Skin[] = [
     gloves: "oklch(0.92 0.02 250)", boots: "oklch(0.92 0.02 250)",
     streaks: "oklch(0.92 0.02 250)",
     emblem: { shape: "stripe", color: "oklch(0.92 0.02 250)" },
-    thickBody: true,
     glow: "oklch(0.55 0.18 25)" },
 ];
 

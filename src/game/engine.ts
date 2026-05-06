@@ -5327,9 +5327,9 @@ export class GameEngine {
     // ---- Size-driven dimensions ----
     // Match the SkinPicker preview look: slim stickman lines, no chunky
     // outline pass. Iconic accents (cape, ears, mask, emblem) layer on top.
-    const baseW = skin.thickBody ? 7 : 5.5;
+    const baseW = skin.thickBody ? 5 : 4;
     const lowerW = baseW;                                            // uniform stroke like preview
-    const torsoW = skin.thickBody ? 11 : 8;
+    const torsoW = skin.thickBody ? 7 : 5;
     const overlap = 0;
 
     // ---- Curvature: facing-anchored sign, velocity / state amplitude ----
