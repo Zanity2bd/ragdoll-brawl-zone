@@ -407,10 +407,11 @@ const SHADOW_STRIKE_DMG = 18;
 // Taijutsu Flurry — bamf-in then a smooth 5-strike combo (no per-hit teleport).
 // Reference: taijutsu100..137 frames — alternating punch / high-kick / knee / punch / finisher.
 const BAMF_COMBO_CD = 12;
-const BAMF_COMBO_STEP = 0.22;       // ~220ms per strike → ~1.1s flurry
+const BAMF_COMBO_STEP = 0.22;       // legacy, unused (kept for refs)
 const BAMF_COMBO_DMG = [8, 9, 10, 11, 18];
 const BAMF_COMBO_HITSTOP = [0.05, 0.05, 0.06, 0.07, 0.18];
 const BAMF_COMBO_SHAKE = [8, 9, 10, 12, 22];
+const TAIJUTSU_FPS = 24;            // playback rate for the 42-frame sheet (~1.75s)
 
 interface Missile {
   owner: PlayerId; target: PlayerId;
