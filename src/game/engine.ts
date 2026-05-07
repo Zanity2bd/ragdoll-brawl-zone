@@ -1149,13 +1149,21 @@ export class GameEngine {
         return true;
       }
       case "nightcrawler": {
-        // Bamf Combo — scripted 3-hit teleport sequence (top punch, left kick, left punch)
+        // Taijutsu Flurry — frame-driven scripted sequence (42 frames).
         if (a.bamfCombo) return false;
         a.power2Cd = BAMF_COMBO_CD;
-        a.bamfCombo = { step: 0, t: 0, nextAt: 0, targetId: t.id };
-        // Cleanse self stuns/snares so the combo always plays out
+        // Bamf-in to point-blank in front of target
+        const dir = (t.x >= a.x ? 1 : -1) as 1 | -1;
+        this.bamfPuff(a.x, a.y + FIGHTER_H / 2, "depart");
+        Sfx.play("bamf", 1.0);
+        a.x = Math.max(30, Math.min(W - 30, t.x - dir * 38));
+        a.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, GROUND_Y - FIGHTER_H));
+        a.facing = dir; a.facingT = dir;
+        a.onGround = true; a.vx = 0; a.vy = 0;
+        this.bamfPuff(a.x, a.y + FIGHTER_H / 2, "arrive");
+        a.bamfCombo = { t: 0, targetId: t.id, hits: new Set(), startX: a.x };
         a.stunT = 0; a.webSnareT = 0; a.slowedT = 0;
-        a.iframeT = Math.max(a.iframeT, 0.2);
+        a.iframeT = Math.max(a.iframeT, 0.3);
         return true;
       }
       case "spiderman": {
