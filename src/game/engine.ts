@@ -165,8 +165,8 @@ interface Fighter {
   invisT: number;        // Batman smoke bomb invisibility / iframes
   webSnareT: number;     // Spider-Man web snare lock
   speedBoostT: number;   // A-Train Sonic Sprint
-  // Nightcrawler Bamf Combo — scripted 3-hit teleport sequence
-  bamfCombo: null | { step: number; t: number; nextAt: number; targetId: PlayerId };
+  // Nightcrawler Taijutsu Flurry — frame-driven scripted sequence
+  bamfCombo: null | { t: number; targetId: PlayerId; hits: Set<number>; startX: number };
   // Spider-Man Web Swing — pendulum physics
   swing: null | { ax: number; ay: number; len: number; angle: number; angV: number; t: number };
   justLandedT: number;  // brief squash on touchdown
