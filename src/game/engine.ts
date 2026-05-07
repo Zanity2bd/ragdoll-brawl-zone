@@ -3376,184 +3376,103 @@ export class GameEngine {
     }
   }
 
+  // Frame-driven taijutsu flurry. The 42 sheet frames play at TAIJUTSU_FPS;
+  // contact frames trigger one hit each. The renderer in drawFighterAt swaps
+  // to drawTaijutsuFrame while bamfCombo is active so the visible animation
+  // is the literal sheet (tinted to the skin), not a procedural pose.
   private updateBamfCombo(a: Fighter, dt: number) {
     if (!a.bamfCombo) return;
     const combo = a.bamfCombo;
     combo.t += dt;
     a.iframeT = Math.max(a.iframeT, 0.25);
-    a.vy = 0; a.onGround = a.y >= GROUND_Y - FIGHTER_H - 1;
     a.stunT = 0; a.webSnareT = 0; a.ragdollImmuneT = 0;
+    a.meleeKind = null; a.attackAnim = 0; a.meleeT = 0; a.meleeDur = 0;
+    a.punchT = 0; a.comboT = 0; a.comboKind = null;
+    a.vy = 0; a.onGround = true;
 
     const t = combo.targetId === "p1" ? this.p1 : this.p2;
+    const dir = (t.x >= a.x ? 1 : -1) as 1 | -1;
+    a.facing = dir; a.facingT = dir;
+    // Stay glued in front of target so flurry reads as a tight rush.
+    const desiredX = t.x - dir * 38;
+    a.x += (desiredX - a.x) * Math.min(1, dt * 14);
+    a.vx = 0;
 
-    // Stay glued in front of the target (face them, ride their drift) so
-    // the flurry reads as a tight, in-place taijutsu rush.
-    if (combo.step > 0) {
-      a.facing = (t.x >= a.x ? 1 : -1) as 1 | -1;
-      a.facingT = a.facing;
-      // Gentle approach if the target was knocked back mid-combo
-      const desiredX = t.x - a.facing * 38;
-      a.x += (desiredX - a.x) * Math.min(1, dt * 14);
-      a.vx = 0;
-    }
+    const FPS = TAIJUTSU_FPS;
+    const frame = Math.floor(combo.t * FPS);
+    const TOTAL = TAI_FRAME_COUNT;
 
-    // Tick the visible swing through the pose system so the punch/kick animates.
-    if (a.meleeKind === "bamfPunch" || a.meleeKind === "bamfKick") {
-      a.meleeT += dt;
-      if (a.meleeT >= a.meleeDur) {
-        a.meleeKind = null; a.meleeT = 0; a.attackAnim = 0;
-      } else {
-        a.attackAnim = Math.max(a.attackAnim, a.meleeDur - a.meleeT);
+    // Hit beats — frame indices that connect, with damage tier.
+    // Sequence read from the sheet: jab(7), cross(11), high-kick-1(15),
+    // high-kick-2(19), splits-sweep(23), launching-axe-kick(27).
+    type Beat = { f: number; dmg: number; finisher?: boolean; sfx: "punch" | "heavy"; kind: "punch" | "kick" };
+    const beats: Beat[] = [
+      { f: 7,  dmg: BAMF_COMBO_DMG[0], sfx: "punch", kind: "punch" },
+      { f: 11, dmg: BAMF_COMBO_DMG[1], sfx: "punch", kind: "punch" },
+      { f: 15, dmg: BAMF_COMBO_DMG[2], sfx: "punch", kind: "kick" },
+      { f: 19, dmg: BAMF_COMBO_DMG[2], sfx: "punch", kind: "kick" },
+      { f: 23, dmg: BAMF_COMBO_DMG[3], sfx: "punch", kind: "kick" },
+      { f: 27, dmg: BAMF_COMBO_DMG[4], sfx: "heavy", kind: "kick", finisher: true },
+    ];
+
+    for (const beat of beats) {
+      if (frame >= beat.f && !combo.hits.has(beat.f)) {
+        combo.hits.add(beat.f);
+        this.applyTaijutsuHit(a, t, dir, beat);
+        if (a.bamfCombo == null) return;
       }
     }
 
-    if (combo.t < combo.nextAt) return;
-
-    const step = combo.step;
-    const TOTAL_STEPS = 5;
-    if (step >= TOTAL_STEPS) {
+    if (frame >= TOTAL - 1) {
       a.bamfCombo = null;
       a.iframeT = Math.max(a.iframeT, 0.4);
-      a.meleeKind = null;
-      return;
     }
+  }
 
-    // Step 0 = single bamf-in to point-blank range in front of opponent.
-    // Steps 1..4 = smooth in-place flurry alternating punch/kick (no teleport).
-    type Step = {
-      kind: "bamfPunch" | "bamfKick";
-      kbDir: 1 | -1; kbY: number; kbX: number;
-      ragdoll: number; spin: number;
-      dmg: number; hs: number; sh: number; slow: number;
-      teleport: boolean;
-    };
-    const dir = (t.x >= a.x ? 1 : -1) as 1 | -1;
-    const flurry: Step[] = [
-      // Bamf-in jab — appears point-blank, quick lead punch
-      { kind: "bamfPunch", kbDir: dir, kbY: -40, kbX: 60,
-        ragdoll: 0, spin: 0,
-        dmg: BAMF_COMBO_DMG[0], hs: BAMF_COMBO_HITSTOP[0], sh: BAMF_COMBO_SHAKE[0], slow: 0,
-        teleport: true },
-      // Cross
-      { kind: "bamfPunch", kbDir: dir, kbY: -50, kbX: 70,
-        ragdoll: 0, spin: 0,
-        dmg: BAMF_COMBO_DMG[1], hs: BAMF_COMBO_HITSTOP[1], sh: BAMF_COMBO_SHAKE[1], slow: 0,
-        teleport: false },
-      // Mid kick
-      { kind: "bamfKick", kbDir: dir, kbY: -60, kbX: 80,
-        ragdoll: 0, spin: 0,
-        dmg: BAMF_COMBO_DMG[2], hs: BAMF_COMBO_HITSTOP[2], sh: BAMF_COMBO_SHAKE[2], slow: 0,
-        teleport: false },
-      // Spinning back-fist
-      { kind: "bamfPunch", kbDir: dir, kbY: -80, kbX: 110,
-        ragdoll: 0, spin: 0,
-        dmg: BAMF_COMBO_DMG[3], hs: BAMF_COMBO_HITSTOP[3], sh: BAMF_COMBO_SHAKE[3], slow: 0.06,
-        teleport: false },
-      // Finisher — high kick that launches & ragdolls
-      { kind: "bamfKick", kbDir: dir, kbY: -360, kbX: 520,
-        ragdoll: 1.0, spin: 7,
-        dmg: BAMF_COMBO_DMG[4], hs: BAMF_COMBO_HITSTOP[4], sh: BAMF_COMBO_SHAKE[4], slow: 0.4,
-        teleport: false },
-    ];
-    const s = flurry[step];
-
-    if (s.teleport) {
-      // Departure puff at old position + ghost trail for motion read
-      this.bamfPuff(a.x, a.y + FIGHTER_H / 2, "depart");
-      for (let i = 0; i < 3; i++) {
-        a.trail.push({
-          x: a.x, y: a.y, phase: a.walkPhase, vx: 0, vy: 0,
-          onGround: true, facing: a.facing, pose: this.poseFor(a),
+  private applyTaijutsuHit(
+    a: Fighter, t: Fighter, dir: 1 | -1,
+    beat: { f: number; dmg: number; finisher?: boolean; sfx: "punch" | "heavy"; kind: "punch" | "kick" },
+  ) {
+    const isFinisher = !!beat.finisher;
+    const ix = t.x;
+    const iy = t.y + (beat.kind === "punch" ? 32 : 50);
+    Sfx.play("whoosh", 0.35);
+    if (t.iframeT > 0 || t.downedT > 0 || t.getUpT > 0) return;
+    t.ragdollImmuneT = 0;
+    t.hp = Math.max(0, t.hp - beat.dmg);
+    t.hitFlash = isFinisher ? 0.55 : 0.3;
+    if (isFinisher) {
+      t.vx = dir * 520; t.vy = -360; t.onGround = false;
+      t.ragdollT = 1.0; t.ragdollPhase = 0; t.ragdollAng = 0;
+      t.ragdollAV = dir * 7 + (Math.random() - 0.5) * 3;
+      t.ragdollEnergy = 1;
+    } else {
+      t.vx = dir * (beat.kind === "kick" ? 30 : 22);
+      t.wobble.staggerT = Math.max(t.wobble.staggerT, 0.18);
+    }
+    applyImpulse(t.wobble, dir, -0.5, isFinisher ? 1.0 : 0.45);
+    this.shake = Math.max(this.shake, isFinisher ? 22 : 9);
+    this.hitstopT = Math.max(this.hitstopT, isFinisher ? 0.18 : 0.05);
+    this.impactFlash = isFinisher ? 1 : 0.4;
+    if (isFinisher) { this.slowmoT = Math.max(this.slowmoT, 0.4); this.slowmoMode = "impact"; }
+    this.burst(ix, iy, "oklch(0.96 0.06 80)", isFinisher ? 26 : 12);
+    this.burst(ix, iy, "oklch(0.7 0.22 305)", isFinisher ? 22 : 10);
+    this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: isFinisher ? 70 : 36, life: 0.32, maxLife: 0.32, color: "oklch(0.95 0.18 95)" });
+    if (isFinisher) {
+      this.shockwaves.push({ x: ix, y: iy, r: 10, rMax: 90, life: 0.5, maxLife: 0.5, color: "oklch(0.55 0.22 305)" });
+      for (let i = 0; i < 16; i++) {
+        const ang = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
+        const sp = 280 + Math.random() * 240;
+        this.particles.push({
+          x: ix, y: iy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 70,
+          life: 0.4 + Math.random() * 0.25, maxLife: 0.65,
+          color: i % 2 ? "oklch(0.95 0.05 80)" : "oklch(0.6 0.22 300)",
+          size: 2 + Math.random() * 2.6,
         });
       }
-      // Land point-blank in front of target on the ground.
-      a.x = Math.max(30, Math.min(W - 30, t.x - dir * 38));
-      a.y = Math.max(40, Math.min(GROUND_Y - FIGHTER_H, t.y));
-      a.facing = dir;
-      a.facingT = dir;
-      a.onGround = a.y >= GROUND_Y - FIGHTER_H - 1;
-      Sfx.play("bamf", 1.0);
-      this.bamfPuff(a.x, a.y + FIGHTER_H / 2, "arrive");
-      this.shockwaves.push({
-        x: a.x, y: a.y + FIGHTER_H / 2, r: 8, rMax: 64,
-        life: 0.32, maxLife: 0.32, color: "oklch(0.75 0.22 305)",
-      });
     }
-
-    // Drive the visible swing through the pose system
-    const stepDur = BAMF_COMBO_STEP * 0.95;
-    a.meleeKind = s.kind;
-    a.meleeT = 0;
-    a.meleeDur = stepDur;
-    a.attackAnim = stepDur;
-    Sfx.play("whoosh", 0.35);
-
-    // Hit alignment — fighters are point-blank, hit at limb-tip in facing dir.
-    const reachWorld = s.kind === "bamfPunch" ? 40 : 36;
-    const limbTipX = a.x + a.facing * reachWorld;
-    const shoulderWorldY = a.y + 28;
-    const hipWorldY = a.y + 56;
-    const limbTipY = (s.kind === "bamfPunch" ? shoulderWorldY : hipWorldY) - 4;
-    const hitsTarget =
-      Math.abs(limbTipX - t.x) < 50 &&
-      limbTipY > t.y - 8 &&
-      limbTipY < t.y + FIGHTER_H + 8;
-
-    const isFinisher = step === TOTAL_STEPS - 1;
-
-    if (hitsTarget && t.iframeT <= 0 && t.downedT <= 0 && t.getUpT <= 0) {
-      t.ragdollImmuneT = 0;
-      t.hp = Math.max(0, t.hp - s.dmg);
-      t.hitFlash = isFinisher ? 0.55 : 0.3;
-      // Non-finisher hits: keep target staggered upright so the combo flows;
-      // only the finisher launches & ragdolls.
-      if (isFinisher) {
-        t.vx = s.kbDir * s.kbX;
-        t.vy = s.kbY;
-        t.onGround = false;
-        t.ragdollT = s.ragdoll;
-        t.ragdollPhase = 0;
-        t.ragdollAng = 0;
-        t.ragdollAV = s.kbDir * s.spin + (Math.random() - 0.5) * 3;
-        t.ragdollEnergy = 1;
-      } else {
-        // Light push + stagger wobble — keeps them on their feet for next strike.
-        t.vx = s.kbDir * s.kbX * 0.4;
-        t.wobble.staggerT = Math.max(t.wobble.staggerT, 0.18);
-      }
-      applyImpulse(t.wobble, s.kbDir, -0.5, isFinisher ? 1.0 : 0.45);
-      this.shake = Math.max(this.shake, s.sh);
-      this.hitstopT = Math.max(this.hitstopT, s.hs);
-      this.impactFlash = isFinisher ? 1 : 0.4;
-      if (s.slow > 0) {
-        this.slowmoT = Math.max(this.slowmoT, s.slow);
-        this.slowmoMode = "impact";
-      }
-
-      const ix = limbTipX * 0.4 + t.x * 0.6;
-      const iy = limbTipY * 0.5 + (t.y + (s.kind === "bamfPunch" ? 32 : 50)) * 0.5;
-      this.burst(ix, iy, "oklch(0.96 0.06 80)", isFinisher ? 26 : 12);
-      this.burst(ix, iy, "oklch(0.7 0.22 305)", isFinisher ? 22 : 10);
-      this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: isFinisher ? 70 : 36, life: 0.32, maxLife: 0.32, color: "oklch(0.95 0.18 95)" });
-      if (isFinisher) {
-        this.shockwaves.push({ x: ix, y: iy, r: 10, rMax: 90, life: 0.5, maxLife: 0.5, color: "oklch(0.55 0.22 305)" });
-        for (let i = 0; i < 16; i++) {
-          const ang = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
-          const sp = 280 + Math.random() * 240;
-          this.particles.push({
-            x: ix, y: iy, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 70,
-            life: 0.4 + Math.random() * 0.25, maxLife: 0.65,
-            color: i % 2 ? "oklch(0.95 0.05 80)" : "oklch(0.6 0.22 300)",
-            size: 2 + Math.random() * 2.6,
-          });
-        }
-      }
-      Sfx.play(isFinisher ? "heavy" : "punch", isFinisher ? 1 : 0.7);
-      if (t.hp <= 0) { this.triggerKo(a.id); a.bamfCombo = null; return; }
-    }
-
-    combo.step = step + 1;
-    combo.nextAt = combo.t + BAMF_COMBO_STEP;
+    Sfx.play(beat.sfx, isFinisher ? 1 : 0.7);
+    if (t.hp <= 0) { this.triggerKo(a.id); a.bamfCombo = null; }
   }
 
   private applyMeleeHit(f: Fighter, target: Fighter, m: MoveSpec, fx: number, fy: number) {
