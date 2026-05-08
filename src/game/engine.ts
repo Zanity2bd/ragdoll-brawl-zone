@@ -15,7 +15,7 @@ import {
   DOWN_FRAME, GETUP_FRAME_A, GETUP_FRAME_B, HURT_FRAME,
   KICK_CHAMBER_FRAME, KICK_HIT_FRAME, KNEE_CHAMBER_FRAME, KNEE_HIT_FRAME,
 } from "./walkSprite";
-import { loadTaijutsuSheet, isTaijutsuReady, drawTaijutsuFrame, TAI_FRAME_COUNT } from "./taijutsuSprite";
+// (taijutsu sprite removed)
 import { getStance } from "./stances";
 import { loadV2Sheet } from "./walkCycleV2";
 import { loadAttackFx, spawnFx, tickFx, drawFxPool, type ActiveFx } from "./attackFx";
