@@ -2293,8 +2293,8 @@ export class GameEngine {
       f.vy = 0;
       f.onGround = true;
       if (f.downedT <= 0) {
-        // Cinematic 5-phase rise (gather → press → kneel → coil → stand).
-        f.getUpDur = 1.45;
+        // Snappier 5-phase rise (gather → press → kneel → coil → stand).
+        f.getUpDur = 0.85;
         f.getUpT = f.getUpDur;
         // Dust puff as the body pushes off the ground.
         if (!this.lowPower) {
