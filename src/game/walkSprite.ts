@@ -163,6 +163,34 @@ function drawOverlays(
   ctx.beginPath();
   ctx.ellipse(headCx, headCy + headR * 0.45, headR * 0.78, headR * 0.55, 0, 0, Math.PI * 2);
   ctx.fill();
+  // Soft top-light highlight — gives the head dimensional volume.
+  const headHi = ctx.createRadialGradient(
+    headCx - headR * 0.3, headCy - headR * 0.45, 1,
+    headCx, headCy, headR,
+  );
+  headHi.addColorStop(0, "oklch(1 0 0 / 0.18)");
+  headHi.addColorStop(1, "transparent");
+  ctx.fillStyle = headHi;
+  ctx.beginPath();
+  ctx.arc(headCx, headCy, headR, 0, Math.PI * 2);
+  ctx.fill();
+  // Lower-jaw shadow for grounded weight.
+  const headSh = ctx.createRadialGradient(
+    headCx, headCy + headR * 0.55, 1,
+    headCx, headCy + headR * 0.2, headR,
+  );
+  headSh.addColorStop(0, "oklch(0 0 0 / 0.22)");
+  headSh.addColorStop(1, "transparent");
+  ctx.fillStyle = headSh;
+  ctx.beginPath();
+  ctx.ellipse(headCx, headCy + headR * 0.35, headR * 0.95, headR * 0.7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Crisp 1px rim outline for cleaner silhouette.
+  ctx.strokeStyle = "oklch(0.12 0.02 260 / 0.55)";
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.arc(headCx, headCy, headR, 0, Math.PI * 2);
+  ctx.stroke();
 
   // Skin-tone face for open faces (Superman, Homelander, Butcher, Heatwave)
   if (skin.skinTone) {
