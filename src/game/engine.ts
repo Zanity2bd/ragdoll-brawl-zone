@@ -2292,8 +2292,8 @@ export class GameEngine {
       f.vy = 0;
       f.onGround = true;
       if (f.downedT <= 0) {
-        // Longer, more cinematic 4-phase rise (push-up → kneel → crouch → stand).
-        f.getUpDur = 1.25;
+        // Cinematic 5-phase rise (gather → press → kneel → coil → stand).
+        f.getUpDur = 1.45;
         f.getUpT = f.getUpDur;
         // Dust puff as the body pushes off the ground.
         if (!this.lowPower) {
