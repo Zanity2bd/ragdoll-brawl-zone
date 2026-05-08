@@ -529,7 +529,7 @@ export class GameEngine {
     if (!ctx) throw new Error("no ctx");
     this.ctx = ctx;
     loadWalkSheet();
-    loadTaijutsuSheet();
+    
     loadV2Sheet();
     loadAttackFx();
     if (typeof document !== "undefined") {
