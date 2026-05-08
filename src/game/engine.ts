@@ -5067,7 +5067,7 @@ export class GameEngine {
         }
         drawWalkFrame(ctx, skin, idx, 0, 0, renderFacing, FIGHTER_H);
         ctx.restore();
-        // Plant-beat FX: dust trails + impact decal scuff.
+        // Plant-beat FX: dust trails + impact decal scuff + rim flash.
         if (!this.lowPower && f.getUpT > 0) {
           const lastU = 1 - ((f.getUpT + 0.016) / total);
           const crossed = (a: number) => lastU < a && u >= a;
@@ -5075,38 +5075,83 @@ export class GameEngine {
           const plant = crossed(0.34) ? 0.34 : crossed(0.56) ? 0.56 : crossed(0.78) ? 0.78 : crossed(0.94) ? 0.94 : 0;
           if (plant > 0) {
             const heavy = plant >= 0.78;
-            const burst = heavy ? 14 : plant === 0.56 ? 10 : 6;
+            const burst = heavy ? 18 : plant === 0.56 ? 12 : 8;
             // Screen-space dust trails — wide horizontal streaks
             for (let i = 0; i < burst; i++) {
               const dir = (Math.random() < 0.5 ? -1 : 1);
               this.particles.push({
                 x: f.x + (Math.random() - 0.5) * 30,
                 y: GROUND_Y - 1 - Math.random() * 4,
-                vx: dir * (60 + Math.random() * (heavy ? 180 : 110)),
-                vy: -10 - Math.random() * (heavy ? 55 : 32),
-                life: heavy ? 0.7 : 0.5,
-                maxLife: heavy ? 0.7 : 0.5,
-                color: "oklch(0.82 0.02 60)",
-                size: 1.4 + Math.random() * (heavy ? 2.6 : 1.8),
+                vx: dir * (70 + Math.random() * (heavy ? 220 : 130)),
+                vy: -12 - Math.random() * (heavy ? 65 : 36),
+                life: heavy ? 0.75 : 0.55,
+                maxLife: heavy ? 0.75 : 0.55,
+                color: "oklch(0.84 0.02 60)",
+                size: 1.5 + Math.random() * (heavy ? 2.8 : 2),
               });
+            }
+            // Embers (heavy beat) — warm sparks driven up
+            if (heavy) {
+              for (let i = 0; i < 6; i++) {
+                this.particles.push({
+                  x: f.x + (Math.random() - 0.5) * 18,
+                  y: GROUND_Y - 2,
+                  vx: (Math.random() - 0.5) * 90,
+                  vy: -60 - Math.random() * 80,
+                  life: 0.55, maxLife: 0.55,
+                  color: skin.glow,
+                  size: 1.2 + Math.random() * 1.4,
+                });
+              }
             }
             // Impact decal — long-lived flat scuff ellipse on the ground
-            const decalW = heavy ? 38 : 24;
-            const decalH = heavy ? 5 : 3.5;
+            const decalW = heavy ? 42 : 26;
             for (let i = 0; i < (heavy ? 3 : 2); i++) {
               this.particles.push({
-                x: f.x + (Math.random() - 0.5) * 8,
+                x: f.x + (Math.random() - 0.5) * 10,
                 y: GROUND_Y - 0.5,
                 vx: 0, vy: 0,
-                life: 1.4, maxLife: 1.4,
+                life: 1.6, maxLife: 1.6,
                 color: "oklch(0.22 0.02 30 / 0.55)",
                 size: decalW * (0.6 + Math.random() * 0.6),
-                // store secondary axis via flat-decal flag (size is width, life-fade gives shape)
               });
-              void decalH;
             }
-            // Camera kick on the heavy beat for tactile weight
-            if (heavy) this.shake = Math.max(this.shake, 6);
+            // Radial shock-ring flash (skin-tinted) on heavy beats
+            if (heavy) {
+              ctx.save();
+              ctx.globalCompositeOperation = "lighter";
+              const ringGrad = ctx.createRadialGradient(
+                f.x, GROUND_Y - 2, 4,
+                f.x, GROUND_Y - 2, 60,
+              );
+              ringGrad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 65%, transparent)`);
+              ringGrad.addColorStop(0.6, `color-mix(in oklab, ${skin.glow} 18%, transparent)`);
+              ringGrad.addColorStop(1, "transparent");
+              ctx.fillStyle = ringGrad;
+              ctx.beginPath();
+              ctx.ellipse(f.x, GROUND_Y - 2, 60, 14, 0, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
+            }
+            // Camera kick — bigger on stand drive
+            this.shake = Math.max(this.shake, heavy ? 9 : 3);
+          }
+          // Continuous low-rim glow during the coil-to-stand window
+          if (u > 0.78 && u < 1.0) {
+            const glowA = Math.sin((u - 0.78) / 0.22 * Math.PI) * 0.55;
+            ctx.save();
+            ctx.globalCompositeOperation = "lighter";
+            const g = ctx.createRadialGradient(
+              f.x, GROUND_Y - 2, 2,
+              f.x, GROUND_Y - 2, 36,
+            );
+            g.addColorStop(0, `color-mix(in oklab, ${skin.glow} ${Math.round(glowA * 100)}%, transparent)`);
+            g.addColorStop(1, "transparent");
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.ellipse(f.x, GROUND_Y - 2, 36, 7, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
           }
         }
         return;
