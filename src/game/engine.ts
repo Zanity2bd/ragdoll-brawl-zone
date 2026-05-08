@@ -2292,8 +2292,8 @@ export class GameEngine {
       f.vy = 0;
       f.onGround = true;
       if (f.downedT <= 0) {
-        // Longer, more cinematic 4-phase rise (push-up → kneel → crouch → stand).
-        f.getUpDur = 1.25;
+        // Cinematic 5-phase rise (gather → press → kneel → coil → stand).
+        f.getUpDur = 1.45;
         f.getUpT = f.getUpDur;
         // Dust puff as the body pushes off the ground.
         if (!this.lowPower) {
@@ -5010,26 +5010,63 @@ export class GameEngine {
       // ---- Downed (KO laydown) ----
       if (f.downedT > 0) { drawFrame(DOWN_FRAME); return; }
 
-      // ---- Get-up (multi-phase rise: prone → push-up → kneel → crouch → stand) ----
+      // ---- Get-up (cinematic 5-phase rise) ----
+      // Prone gather → push-up press → kneel plant → crouch coil → stand.
+      // Uses easeOutQuart for buttery vertical lift with a tiny easeOutBack
+      // overshoot at the very top so the rise "lands" on a confident stance.
       if (f.getUpT > 0) {
         const total = Math.max(0.001, f.getUpDur);
         const u = 1 - (f.getUpT / total); // 0..1
-        // Eased vertical settle: starts low (still on ground), springs upright.
-        // easeOutCubic for a snappy-but-natural rise.
-        const ease = 1 - Math.pow(1 - u, 3);
-        // Frame ladder — held longer on early prone so it reads as "pushing up".
+        // Smooth quartic settle for the body, plus a small back-overshoot.
+        const ease = 1 - Math.pow(1 - u, 4);
+        const overshoot =
+          u > 0.82 ? Math.sin((u - 0.82) / 0.18 * Math.PI) * 4 : 0;
+        // Frame ladder — extra dwell on push-up so the rise reads as effortful.
         let idx: number;
-        if (u < 0.18) idx = DOWN_FRAME;             // still flat, gathering
-        else if (u < 0.42) idx = GETUP_FRAME_A;     // pushing up on hands
-        else if (u < 0.68) idx = GETUP_FRAME_B;     // kneeling
-        else if (u < 0.88) idx = KNEE_CHAMBER_FRAME;// deep crouch
-        else idx = 0;                                // stand (walk frame 0)
-        // Vertical bias: still partially on the ground early, smooth lift to 0.
-        // Negative offset pulls the sprite anchor downward (closer to ground).
-        const groundLift = (1 - ease) * (FIGHTER_H * 0.42);
-        // Subtle forward lean as they push up.
-        const leanPx = Math.sin(u * Math.PI) * 3 * renderFacing;
-        drawWalkFrame(ctx, skin, idx, x + f.bodyLagX + leanPx, y + FIGHTER_H + groundLift, renderFacing, FIGHTER_H);
+        if (u < 0.14) idx = DOWN_FRAME;             // gathering, still flat
+        else if (u < 0.34) idx = GETUP_FRAME_A;     // pressing up on hands
+        else if (u < 0.56) idx = GETUP_FRAME_B;     // one knee
+        else if (u < 0.78) idx = KNEE_CHAMBER_FRAME;// deep crouch
+        else if (u < 0.94) idx = RECOVERY_FRAME;    // post-coil straightening
+        else idx = 0;                                // stand
+        // Lift from ground using eased curve, minus the tiny overshoot bump.
+        const groundLift = (1 - ease) * (FIGHTER_H * 0.46) - overshoot;
+        // Forward lean dips during push-up, settles to 0 on stand.
+        const leanCurve = u < 0.6 ? Math.sin(u / 0.6 * Math.PI) : 0;
+        const leanPx = leanCurve * 5 * renderFacing;
+        // Subtle horizontal sway / weight-shift as they plant the kneel.
+        const sway = Math.sin(u * Math.PI * 1.4) * 1.2 * renderFacing;
+        // Squash & stretch on the rise: compress at coil, stretch at stand.
+        const sx = 1 + (u > 0.78 && u < 0.94 ? (u - 0.78) / 0.16 * 0.06 : 0);
+        const sy =
+          u < 0.34 ? 0.92 + u / 0.34 * 0.04
+          : u < 0.78 ? 0.96
+          : u < 0.94 ? 1.0 + (u - 0.78) / 0.16 * 0.05
+          : 1.02 - (u - 0.94) / 0.06 * 0.02;
+        ctx.save();
+        ctx.translate(x + f.bodyLagX + leanPx + sway, y + FIGHTER_H + groundLift);
+        ctx.scale(sx, sy);
+        drawWalkFrame(ctx, skin, idx, 0, 0, renderFacing, FIGHTER_H);
+        ctx.restore();
+        // Dust puff at the kneel-plant moment for tactile weight.
+        if (!this.lowPower && f.getUpT > 0) {
+          const lastU = 1 - ((f.getUpT + 0.016) / total);
+          const crossed = (a: number) => lastU < a && u >= a;
+          if (crossed(0.34) || crossed(0.78)) {
+            const burst = crossed(0.78) ? 8 : 5;
+            for (let i = 0; i < burst; i++) {
+              this.particles.push({
+                x: f.x + (Math.random() - 0.5) * 26,
+                y: GROUND_Y - 1,
+                vx: (Math.random() - 0.5) * 70,
+                vy: -18 - Math.random() * 38,
+                life: 0.45, maxLife: 0.45,
+                color: "oklch(0.78 0.02 60)",
+                size: 1.6 + Math.random() * 1.8,
+              });
+            }
+          }
+        }
         return;
       }
 
