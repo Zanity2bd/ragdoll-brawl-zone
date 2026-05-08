@@ -2226,15 +2226,15 @@ export class GameEngine {
       f.ragdollT -= dt;
       f.ragdollPhase += dt;
       f.vy += GRAVITY * 0.95 * ldt;
-      // Air drag
-      f.vx *= Math.pow(0.985, dt * 60);
-      f.vy *= Math.pow(0.995, dt * 60);
+      // Air drag (slightly stronger so tumbles don't drift forever)
+      f.vx *= Math.pow(0.965, dt * 60);
+      f.vy *= Math.pow(0.99, dt * 60);
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
       // Angular: torque from horizontal speed; damp gradually
       const targetAV = Math.sign(f.vx) * Math.min(12, Math.abs(f.vx) * 0.02);
       f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 2);
-      f.ragdollAV *= Math.pow(0.97, dt * 60);
+      f.ragdollAV *= Math.pow(0.94, dt * 60);
       f.ragdollAng += f.ragdollAV * dt;
       // Walls — bounce with energy loss
       if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
