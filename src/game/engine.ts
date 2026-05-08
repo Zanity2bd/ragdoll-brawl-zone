@@ -4976,13 +4976,7 @@ export class GameEngine {
     const spriteReady = !ghost && isWalkSheetReady();
     const useSpriteWalk = spriteReady;
 
-    // ---- Taijutsu Flurry frame playback (Nightcrawler power) ----
-    if (!ghost && f.bamfCombo && isTaijutsuReady()) {
-      const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
-      const fIdx = Math.min(TAI_FRAME_COUNT - 1, Math.floor(f.bamfCombo.t * 24));
-      drawTaijutsuFrame(ctx, skin, fIdx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
-      return;
-    }
+    // (Taijutsu sprite playback removed — Nightcrawler uses default sprite rig.)
 
     if (useSpriteWalk) {
       // Soft accent pool — only when grounded
