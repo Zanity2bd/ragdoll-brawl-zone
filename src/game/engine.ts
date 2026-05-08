@@ -3401,7 +3401,7 @@ export class GameEngine {
 
     const FPS = TAIJUTSU_FPS;
     const frame = Math.floor(combo.t * FPS);
-    const TOTAL = TAI_FRAME_COUNT;
+    const TOTAL = 42;
 
     // Hit beats — frame indices that connect, with damage tier.
     // Sequence read from the sheet: jab(7), cross(11), high-kick-1(15),
