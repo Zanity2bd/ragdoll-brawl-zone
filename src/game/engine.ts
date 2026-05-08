@@ -15,7 +15,7 @@ import {
   DOWN_FRAME, GETUP_FRAME_A, GETUP_FRAME_B, HURT_FRAME,
   KICK_CHAMBER_FRAME, KICK_HIT_FRAME, KNEE_CHAMBER_FRAME, KNEE_HIT_FRAME,
 } from "./walkSprite";
-import { loadTaijutsuSheet, isTaijutsuReady, drawTaijutsuFrame, TAI_FRAME_COUNT } from "./taijutsuSprite";
+// (taijutsu sprite removed)
 import { getStance } from "./stances";
 import { loadV2Sheet } from "./walkCycleV2";
 import { loadAttackFx, spawnFx, tickFx, drawFxPool, type ActiveFx } from "./attackFx";
@@ -529,7 +529,7 @@ export class GameEngine {
     if (!ctx) throw new Error("no ctx");
     this.ctx = ctx;
     loadWalkSheet();
-    loadTaijutsuSheet();
+    
     loadV2Sheet();
     loadAttackFx();
     if (typeof document !== "undefined") {
@@ -3401,7 +3401,7 @@ export class GameEngine {
 
     const FPS = TAIJUTSU_FPS;
     const frame = Math.floor(combo.t * FPS);
-    const TOTAL = TAI_FRAME_COUNT;
+    const TOTAL = 42;
 
     // Hit beats — frame indices that connect, with damage tier.
     // Sequence read from the sheet: jab(7), cross(11), high-kick-1(15),
@@ -4976,13 +4976,7 @@ export class GameEngine {
     const spriteReady = !ghost && isWalkSheetReady();
     const useSpriteWalk = spriteReady;
 
-    // ---- Taijutsu Flurry frame playback (Nightcrawler power) ----
-    if (!ghost && f.bamfCombo && isTaijutsuReady()) {
-      const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
-      const fIdx = Math.min(TAI_FRAME_COUNT - 1, Math.floor(f.bamfCombo.t * 24));
-      drawTaijutsuFrame(ctx, skin, fIdx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
-      return;
-    }
+    // (Taijutsu sprite playback removed — Nightcrawler uses default sprite rig.)
 
     if (useSpriteWalk) {
       // Soft accent pool — only when grounded
