@@ -2267,14 +2267,15 @@ export class GameEngine {
           }
         } else {
           f.vy = 0;
-          f.vx *= Math.pow(0.6, dt * 60);
-          f.ragdollAV *= Math.pow(0.7, dt * 60);
+          // Aggressive ground friction + angular damping → ragdoll settles faster.
+          f.vx *= Math.pow(0.42, dt * 60);
+          f.ragdollAV *= Math.pow(0.55, dt * 60);
           f.onGround = true;
-          // Settle when slow enough
-          if (Math.abs(f.vx) < 30 && Math.abs(f.ragdollAV) < 1.2) {
+          // Settle when slow enough (raised thresholds = quicker transition)
+          if (Math.abs(f.vx) < 60 && Math.abs(f.ragdollAV) < 2.0) {
             // Transition: ragdoll → downed (laydown)
             f.ragdollT = 0;
-            f.downedT = 0.55; // brief lay on ground
+            f.downedT = 0.28; // brief lay on ground (was 0.55)
             // Snap ragdoll angle toward nearest 90° (face-down/up) for stable laydown
             const target = Math.abs(Math.sin(f.ragdollAng)) > 0.5 ? Math.PI / 2 * Math.sign(Math.sin(f.ragdollAng)) : 0;
             f.ragdollAng = target;
