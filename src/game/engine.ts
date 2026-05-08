@@ -2289,12 +2289,12 @@ export class GameEngine {
     // Downed (laying on ground) — locked, then triggers get-up
     if (f.downedT > 0) {
       f.downedT -= dt;
-      f.vx *= Math.pow(0.5, dt * 60);
+      f.vx *= Math.pow(0.4, dt * 60);
       f.vy = 0;
       f.onGround = true;
       if (f.downedT <= 0) {
-        // Snappier 5-phase rise (gather → press → kneel → coil → stand).
-        f.getUpDur = 0.85;
+        // Crisp 5-phase rise: gather → press → kneel → coil → stand.
+        f.getUpDur = 0.7;
         f.getUpT = f.getUpDur;
         // Dust puff as the body pushes off the ground.
         if (!this.lowPower) {
