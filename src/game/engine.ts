@@ -2267,14 +2267,15 @@ export class GameEngine {
           }
         } else {
           f.vy = 0;
-          f.vx *= Math.pow(0.6, dt * 60);
-          f.ragdollAV *= Math.pow(0.7, dt * 60);
+          // Aggressive ground friction + angular damping → ragdoll settles faster.
+          f.vx *= Math.pow(0.42, dt * 60);
+          f.ragdollAV *= Math.pow(0.55, dt * 60);
           f.onGround = true;
-          // Settle when slow enough
-          if (Math.abs(f.vx) < 30 && Math.abs(f.ragdollAV) < 1.2) {
+          // Settle when slow enough (raised thresholds = quicker transition)
+          if (Math.abs(f.vx) < 60 && Math.abs(f.ragdollAV) < 2.0) {
             // Transition: ragdoll → downed (laydown)
             f.ragdollT = 0;
-            f.downedT = 0.55; // brief lay on ground
+            f.downedT = 0.28; // brief lay on ground (was 0.55)
             // Snap ragdoll angle toward nearest 90° (face-down/up) for stable laydown
             const target = Math.abs(Math.sin(f.ragdollAng)) > 0.5 ? Math.PI / 2 * Math.sign(Math.sin(f.ragdollAng)) : 0;
             f.ragdollAng = target;
@@ -2292,8 +2293,8 @@ export class GameEngine {
       f.vy = 0;
       f.onGround = true;
       if (f.downedT <= 0) {
-        // Cinematic 5-phase rise (gather → press → kneel → coil → stand).
-        f.getUpDur = 1.45;
+        // Snappier 5-phase rise (gather → press → kneel → coil → stand).
+        f.getUpDur = 0.85;
         f.getUpT = f.getUpDur;
         // Dust puff as the body pushes off the ground.
         if (!this.lowPower) {
@@ -5046,25 +5047,66 @@ export class GameEngine {
         ctx.save();
         ctx.translate(x + f.bodyLagX + leanPx + sway, y + FIGHTER_H + groundLift);
         ctx.scale(sx, sy);
+        // ---- Motion-blur afterimage ----
+        // Stronger blur during the explosive press/coil/stand window.
+        const blurAmt =
+          u < 0.14 ? 0
+          : u < 0.34 ? 0.18
+          : u < 0.78 ? 0.10
+          : u < 0.94 ? 0.32   // coil → stand: most velocity
+          : 0.20;
+        if (blurAmt > 0 && !this.lowPower) {
+          ctx.save();
+          ctx.globalAlpha = blurAmt;
+          ctx.globalCompositeOperation = "lighter";
+          // Trail offset behind the lift direction (down = where they came from).
+          drawWalkFrame(ctx, skin, idx, 0, 4, renderFacing, FIGHTER_H);
+          ctx.globalAlpha = blurAmt * 0.55;
+          drawWalkFrame(ctx, skin, idx, -2 * renderFacing, 8, renderFacing, FIGHTER_H);
+          ctx.restore();
+        }
         drawWalkFrame(ctx, skin, idx, 0, 0, renderFacing, FIGHTER_H);
         ctx.restore();
-        // Dust puff at the kneel-plant moment for tactile weight.
+        // Plant-beat FX: dust trails + impact decal scuff.
         if (!this.lowPower && f.getUpT > 0) {
           const lastU = 1 - ((f.getUpT + 0.016) / total);
           const crossed = (a: number) => lastU < a && u >= a;
-          if (crossed(0.34) || crossed(0.78)) {
-            const burst = crossed(0.78) ? 8 : 5;
+          // Plants: push-up press (0.34), kneel plant (0.56), coil drive (0.78), stand (0.94)
+          const plant = crossed(0.34) ? 0.34 : crossed(0.56) ? 0.56 : crossed(0.78) ? 0.78 : crossed(0.94) ? 0.94 : 0;
+          if (plant > 0) {
+            const heavy = plant >= 0.78;
+            const burst = heavy ? 14 : plant === 0.56 ? 10 : 6;
+            // Screen-space dust trails — wide horizontal streaks
             for (let i = 0; i < burst; i++) {
+              const dir = (Math.random() < 0.5 ? -1 : 1);
               this.particles.push({
-                x: f.x + (Math.random() - 0.5) * 26,
-                y: GROUND_Y - 1,
-                vx: (Math.random() - 0.5) * 70,
-                vy: -18 - Math.random() * 38,
-                life: 0.45, maxLife: 0.45,
-                color: "oklch(0.78 0.02 60)",
-                size: 1.6 + Math.random() * 1.8,
+                x: f.x + (Math.random() - 0.5) * 30,
+                y: GROUND_Y - 1 - Math.random() * 4,
+                vx: dir * (60 + Math.random() * (heavy ? 180 : 110)),
+                vy: -10 - Math.random() * (heavy ? 55 : 32),
+                life: heavy ? 0.7 : 0.5,
+                maxLife: heavy ? 0.7 : 0.5,
+                color: "oklch(0.82 0.02 60)",
+                size: 1.4 + Math.random() * (heavy ? 2.6 : 1.8),
               });
             }
+            // Impact decal — long-lived flat scuff ellipse on the ground
+            const decalW = heavy ? 38 : 24;
+            const decalH = heavy ? 5 : 3.5;
+            for (let i = 0; i < (heavy ? 3 : 2); i++) {
+              this.particles.push({
+                x: f.x + (Math.random() - 0.5) * 8,
+                y: GROUND_Y - 0.5,
+                vx: 0, vy: 0,
+                life: 1.4, maxLife: 1.4,
+                color: "oklch(0.22 0.02 30 / 0.55)",
+                size: decalW * (0.6 + Math.random() * 0.6),
+                // store secondary axis via flat-decal flag (size is width, life-fade gives shape)
+              });
+              void decalH;
+            }
+            // Camera kick on the heavy beat for tactile weight
+            if (heavy) this.shake = Math.max(this.shake, 6);
           }
         }
         return;
