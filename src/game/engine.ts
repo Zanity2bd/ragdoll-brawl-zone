@@ -5118,55 +5118,58 @@ export class GameEngine {
       // ---- Downed (KO laydown) ----
       if (f.downedT > 0) { drawFrame(DOWN_FRAME); return; }
 
-      // ---- Get-up (cinematic 5-phase rise) ----
-      // Prone gather → push-up press → kneel plant → crouch coil → stand.
-      // Uses easeOutQuart for buttery vertical lift with a tiny easeOutBack
-      // overshoot at the very top so the rise "lands" on a confident stance.
+      // ---- Get-up (phased rise: gather/press/kneel/coil/drive/settle) ----
+      // Pose, sprite, lift, lean, and FX share one risePhase() clock.
       if (f.getUpT > 0) {
         const total = Math.max(0.001, f.getUpDur);
-        const u = 1 - (f.getUpT / total); // 0..1
-        // Smooth quartic settle for the body, plus a small back-overshoot.
-        const ease = 1 - Math.pow(1 - u, 4);
-        const overshoot =
-          u > 0.82 ? Math.sin((u - 0.82) / 0.18 * Math.PI) * 4 : 0;
-        // Frame ladder — extra dwell on push-up so the rise reads as effortful.
+        const u = 1 - (f.getUpT / total);
+        const info = risePhase(u);
+        // Sprite frame per phase.
         let idx: number;
-        if (u < 0.14) idx = DOWN_FRAME;             // gathering, still flat
-        else if (u < 0.34) idx = GETUP_FRAME_A;     // pressing up on hands
-        else if (u < 0.56) idx = GETUP_FRAME_B;     // one knee
-        else if (u < 0.78) idx = KNEE_CHAMBER_FRAME;// deep crouch
-        else if (u < 0.94) idx = RECOVERY_FRAME;    // post-coil straightening
-        else idx = 0;                                // stand
-        // Lift from ground using eased curve, minus the tiny overshoot bump.
-        const groundLift = (1 - ease) * (FIGHTER_H * 0.46) - overshoot;
-        // Forward lean dips during push-up, settles to 0 on stand.
-        const leanCurve = u < 0.6 ? Math.sin(u / 0.6 * Math.PI) : 0;
-        const leanPx = leanCurve * 5 * renderFacing;
-        // Subtle horizontal sway / weight-shift as they plant the kneel.
-        const sway = Math.sin(u * Math.PI * 1.4) * 1.2 * renderFacing;
-        // Squash & stretch on the rise: compress at coil, stretch at stand.
-        const sx = 1 + (u > 0.78 && u < 0.94 ? (u - 0.78) / 0.16 * 0.06 : 0);
+        switch (info.phase) {
+          case "gather": idx = DOWN_FRAME; break;
+          case "press":  idx = GETUP_FRAME_A; break;
+          case "kneel":  idx = GETUP_FRAME_B; break;
+          case "coil":   idx = KNEE_CHAMBER_FRAME; break;
+          case "drive":  idx = info.local < 0.6 ? KNEE_CHAMBER_FRAME : RECOVERY_FRAME; break;
+          default:       idx = 0; break;
+        }
+        // Vertical lift: 0 = fully prone, 1 = standing. Driven by hand-shaped
+        // curve so we plant on kneel and explode on drive instead of drifting.
+        const groundLift = (1 - info.lift) * (FIGHTER_H * 0.46);
+        // Forward weight-shift lean — peaks on press, settles to 0 on stand.
+        const leanCurve =
+          info.phase === "gather" ? info.local * 0.6
+          : info.phase === "press" ? 0.6 + info.local * 0.4
+          : info.phase === "kneel" ? 1.0 - info.local * 0.6
+          : info.phase === "coil"  ? 0.4 - info.local * 0.4
+          : 0;
+        const leanPx = leanCurve * 4 * renderFacing;
+        const sway = Math.sin(u * Math.PI * 1.4) * 1.0 * renderFacing;
+        // Squash & stretch — compress on coil, stretch on drive, settle on stand.
+        const sx =
+          info.phase === "coil" ? 1 + info.local * 0.04
+          : info.phase === "drive" ? 1.04 - info.local * 0.04
+          : 1;
         const sy =
-          u < 0.34 ? 0.92 + u / 0.34 * 0.04
-          : u < 0.78 ? 0.96
-          : u < 0.94 ? 1.0 + (u - 0.78) / 0.16 * 0.05
-          : 1.02 - (u - 0.94) / 0.06 * 0.02;
+          info.phase === "press" ? 0.94 + info.local * 0.04
+          : info.phase === "coil" ? 0.96 - info.local * 0.04
+          : info.phase === "drive" ? 0.92 + info.local * 0.10
+          : info.phase === "settle" ? 1.02 - info.local * 0.02
+          : 0.96;
         ctx.save();
         ctx.translate(x + f.bodyLagX + leanPx + sway, y + FIGHTER_H + groundLift);
         ctx.scale(sx, sy);
-        // ---- Motion-blur afterimage ----
-        // Stronger blur during the explosive press/coil/stand window.
+        // Motion-blur afterimage — concentrated on the drive (explosive) phase.
         const blurAmt =
-          u < 0.14 ? 0
-          : u < 0.34 ? 0.18
-          : u < 0.78 ? 0.10
-          : u < 0.94 ? 0.32   // coil → stand: most velocity
-          : 0.20;
+          info.phase === "drive" ? 0.18 + info.local * 0.18
+          : info.phase === "press" ? 0.12
+          : info.phase === "settle" ? 0.10 * (1 - info.local)
+          : 0;
         if (blurAmt > 0 && !this.lowPower) {
           ctx.save();
           ctx.globalAlpha = blurAmt;
           ctx.globalCompositeOperation = "lighter";
-          // Trail offset behind the lift direction (down = where they came from).
           drawWalkFrame(ctx, skin, idx, 0, 4, renderFacing, FIGHTER_H);
           ctx.globalAlpha = blurAmt * 0.55;
           drawWalkFrame(ctx, skin, idx, -2 * renderFacing, 8, renderFacing, FIGHTER_H);
@@ -5174,78 +5177,115 @@ export class GameEngine {
         }
         drawWalkFrame(ctx, skin, idx, 0, 0, renderFacing, FIGHTER_H);
         ctx.restore();
-        // Plant-beat FX: dust trails + impact decal scuff + rim flash.
+
+        // ---- Phase-entry beats: audio, FX, decals ----
         if (!this.lowPower && f.getUpT > 0) {
           const lastU = 1 - ((f.getUpT + 0.016) / total);
-          const crossed = (a: number) => lastU < a && u >= a;
-          // Plants: push-up press (0.34), kneel plant (0.56), coil drive (0.78), stand (0.94)
-          const plant = crossed(0.34) ? 0.34 : crossed(0.56) ? 0.56 : crossed(0.78) ? 0.78 : crossed(0.94) ? 0.94 : 0;
-          if (plant > 0) {
-            const heavy = plant >= 0.78;
-            const burst = heavy ? 18 : plant === 0.56 ? 12 : 8;
-            // Screen-space dust trails — wide horizontal streaks
-            for (let i = 0; i < burst; i++) {
-              const dir = (Math.random() < 0.5 ? -1 : 1);
-              this.particles.push({
-                x: f.x + (Math.random() - 0.5) * 30,
-                y: GROUND_Y - 1 - Math.random() * 4,
-                vx: dir * (70 + Math.random() * (heavy ? 220 : 130)),
-                vy: -12 - Math.random() * (heavy ? 65 : 36),
-                life: heavy ? 0.75 : 0.55,
-                maxLife: heavy ? 0.75 : 0.55,
-                color: "oklch(0.84 0.02 60)",
-                size: 1.5 + Math.random() * (heavy ? 2.8 : 2),
-              });
-            }
-            // Embers (heavy beat) — warm sparks driven up
-            if (heavy) {
-              for (let i = 0; i < 6; i++) {
-                this.particles.push({
-                  x: f.x + (Math.random() - 0.5) * 18,
-                  y: GROUND_Y - 2,
-                  vx: (Math.random() - 0.5) * 90,
-                  vy: -60 - Math.random() * 80,
-                  life: 0.55, maxLife: 0.55,
-                  color: skin.glow,
-                  size: 1.2 + Math.random() * 1.4,
+          const lastInfo = risePhase(Math.max(0, lastU));
+          if (lastInfo.phase !== info.phase) {
+            // We just crossed into a new phase.
+            switch (info.phase) {
+              case "press": {
+                // Hand plant — small foot scuff
+                for (let i = 0; i < 4; i++) {
+                  this.particles.push({
+                    x: f.x + (Math.random() - 0.5) * 18,
+                    y: GROUND_Y - 1,
+                    vx: (Math.random() - 0.5) * 60,
+                    vy: -10 - Math.random() * 22,
+                    life: 0.4, maxLife: 0.4,
+                    color: "oklch(0.8 0.02 60)",
+                    size: 1.2 + Math.random() * 1.4,
+                  });
+                }
+                this.groundDecals.push({
+                  x: f.x + renderFacing * 6, w: 14,
+                  life: 1.2, maxLife: 1.2,
+                  color: "oklch(0.22 0.02 30 / 0.45)",
                 });
+                Sfx.play("thud", 0.10);
+                break;
+              }
+              case "kneel": {
+                // Knee plant — slightly bigger scuff
+                for (let i = 0; i < 6; i++) {
+                  this.particles.push({
+                    x: f.x + (Math.random() - 0.5) * 22,
+                    y: GROUND_Y - 1,
+                    vx: (Math.random() - 0.5) * 90,
+                    vy: -14 - Math.random() * 28,
+                    life: 0.5, maxLife: 0.5,
+                    color: "oklch(0.82 0.02 60)",
+                    size: 1.4 + Math.random() * 1.6,
+                  });
+                }
+                this.groundDecals.push({
+                  x: f.x, w: 18,
+                  life: 1.4, maxLife: 1.4,
+                  color: "oklch(0.22 0.02 30 / 0.5)",
+                });
+                Sfx.play("thud", 0.18);
+                break;
+              }
+              case "drive": {
+                // Hero beat — explosive launch into stand.
+                for (let i = 0; i < 16; i++) {
+                  const dir = (Math.random() < 0.5 ? -1 : 1);
+                  this.particles.push({
+                    x: f.x + (Math.random() - 0.5) * 30,
+                    y: GROUND_Y - 1 - Math.random() * 4,
+                    vx: dir * (90 + Math.random() * 220),
+                    vy: -25 - Math.random() * 70,
+                    life: 0.75, maxLife: 0.75,
+                    color: "oklch(0.86 0.02 60)",
+                    size: 1.6 + Math.random() * 2.6,
+                  });
+                }
+                for (let i = 0; i < 8; i++) {
+                  this.particles.push({
+                    x: f.x + (Math.random() - 0.5) * 18,
+                    y: GROUND_Y - 2,
+                    vx: (Math.random() - 0.5) * 90,
+                    vy: -60 - Math.random() * 80,
+                    life: 0.6, maxLife: 0.6,
+                    color: skin.glow,
+                    size: 1.2 + Math.random() * 1.4,
+                  });
+                }
+                this.groundDecals.push({
+                  x: f.x, w: 28,
+                  life: 1.8, maxLife: 1.8,
+                  color: "oklch(0.20 0.02 30 / 0.6)",
+                });
+                // Skin-tinted shock-ring flash
+                ctx.save();
+                ctx.globalCompositeOperation = "lighter";
+                const ringGrad = ctx.createRadialGradient(
+                  f.x, GROUND_Y - 2, 4,
+                  f.x, GROUND_Y - 2, 60,
+                );
+                ringGrad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 70%, transparent)`);
+                ringGrad.addColorStop(0.6, `color-mix(in oklab, ${skin.glow} 20%, transparent)`);
+                ringGrad.addColorStop(1, "transparent");
+                ctx.fillStyle = ringGrad;
+                ctx.beginPath();
+                ctx.ellipse(f.x, GROUND_Y - 2, 60, 14, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+                this.shake = Math.max(this.shake, 8);
+                Sfx.play("thud", 0.32);
+                break;
+              }
+              case "settle": {
+                // Soft landing tap.
+                this.shake = Math.max(this.shake, 2);
+                break;
               }
             }
-            // Impact decal — long-lived flat scuff ellipse on the ground
-            const decalW = heavy ? 42 : 26;
-            for (let i = 0; i < (heavy ? 3 : 2); i++) {
-              this.particles.push({
-                x: f.x + (Math.random() - 0.5) * 10,
-                y: GROUND_Y - 0.5,
-                vx: 0, vy: 0,
-                life: 1.6, maxLife: 1.6,
-                color: "oklch(0.22 0.02 30 / 0.55)",
-                size: decalW * (0.6 + Math.random() * 0.6),
-              });
-            }
-            // Radial shock-ring flash (skin-tinted) on heavy beats
-            if (heavy) {
-              ctx.save();
-              ctx.globalCompositeOperation = "lighter";
-              const ringGrad = ctx.createRadialGradient(
-                f.x, GROUND_Y - 2, 4,
-                f.x, GROUND_Y - 2, 60,
-              );
-              ringGrad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 65%, transparent)`);
-              ringGrad.addColorStop(0.6, `color-mix(in oklab, ${skin.glow} 18%, transparent)`);
-              ringGrad.addColorStop(1, "transparent");
-              ctx.fillStyle = ringGrad;
-              ctx.beginPath();
-              ctx.ellipse(f.x, GROUND_Y - 2, 60, 14, 0, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.restore();
-            }
-            // Camera kick — bigger on stand drive
-            this.shake = Math.max(this.shake, heavy ? 9 : 3);
           }
-          // Continuous low-rim glow during the coil-to-stand window
-          if (u > 0.78 && u < 1.0) {
-            const glowA = Math.sin((u - 0.78) / 0.22 * Math.PI) * 0.55;
+          // Continuous low-rim glow during the drive window
+          if (info.phase === "drive") {
+            const glowA = Math.sin(info.local * Math.PI) * 0.55;
             ctx.save();
             ctx.globalCompositeOperation = "lighter";
             const g = ctx.createRadialGradient(
