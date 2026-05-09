@@ -501,7 +501,7 @@ interface GroundDecal {
   color: string;
 }
 
-
+export class GameEngine {
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
   private last = 0;
