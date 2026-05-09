@@ -769,7 +769,7 @@ export class GameEngine {
       move, meleeCd: 0, meleeT: 0, meleeDur: 0, meleeKind: null,
       meleeHitMask: new Set(),
       ragdollT: 0, ragdollPhase: 0, ragdollAng: 0, ragdollAV: 0, ragdollEnergy: 0,
-      downedT: 0, getUpT: 0, getUpDur: 0, iframeT: 0, ragdollImmuneT: 0, lastLean: 0,
+      downedT: 0, getUpT: 0, getUpDur: 0, iframeT: 0, ragdollImmuneT: 0, groundedT: 0, lastLean: 0,
       slowedT: 0,
       trail: [],
       canFly, flying: canFly, hoverPhase: 0, superCd: 0,
