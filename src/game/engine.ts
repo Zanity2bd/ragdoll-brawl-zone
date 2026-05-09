@@ -2329,63 +2329,83 @@ export class GameEngine {
           }
         } else {
           f.vy = 0;
-          // Aggressive ground friction + angular damping → ragdoll settles faster.
+          // Aggressive ground friction + angular damping → ragdoll settles.
           f.vx *= Math.pow(0.42, dt * 60);
           f.ragdollAV *= Math.pow(0.55, dt * 60);
           f.onGround = true;
-          // Settle when slow enough (raised thresholds = quicker transition)
-          if (Math.abs(f.vx) < 60 && Math.abs(f.ragdollAV) < 2.0) {
-            // Transition: ragdoll → downed (laydown)
+          // Track grounded time so we don't snap-flat mid-roll.
+          f.groundedT += dt;
+          // Settle gate: slow + angle near rest + grounded long enough.
+          if (
+            Math.abs(f.vx) < 35 &&
+            Math.abs(f.ragdollAV) < 1.2 &&
+            f.groundedT > 0.18
+          ) {
+            // Transition: ragdoll → downed (laydown). Snap angle softly toward
+            // the nearest face-down/up rest pose; the downed branch eases it.
             f.ragdollT = 0;
-            f.downedT = 0.28; // brief lay on ground (was 0.55)
-            // Snap ragdoll angle toward nearest 90° (face-down/up) for stable laydown
-            const target = Math.abs(Math.sin(f.ragdollAng)) > 0.5 ? Math.PI / 2 * Math.sign(Math.sin(f.ragdollAng)) : 0;
-            f.ragdollAng = target;
+            f.downedT = 0.28;
+            const tgt = Math.abs(Math.sin(f.ragdollAng)) > 0.5
+              ? (Math.PI / 2) * Math.sign(Math.sin(f.ragdollAng))
+              : 0;
+            f.ragdollAng = tgt;
             f.ragdollAV = 0;
+            f.groundedT = 0;
           }
         }
+      } else {
+        // Airborne — reset grounded accumulator.
+        f.groundedT = 0;
       }
       return;
     }
 
-    // Downed (laying on ground) — locked, then triggers get-up
+    // Downed (laying on ground) — locked, then triggers get-up.
     if (f.downedT > 0) {
       f.downedT -= dt;
       f.vx *= Math.pow(0.4, dt * 60);
       f.vy = 0;
       f.onGround = true;
       if (f.downedT <= 0) {
-        // Crisp 5-phase rise: gather → press → kneel → coil → stand.
-        f.getUpDur = 0.7;
+        // Phased rise driven by risePhase(): gather→press→kneel→coil→drive→settle.
+        f.getUpDur = 0.95;
         f.getUpT = f.getUpDur;
-        // Dust puff as the body pushes off the ground.
+        // Soft gather scuff — small puff to sell the first weight shift.
         if (!this.lowPower) {
-          for (let i = 0; i < 10; i++) {
+          for (let i = 0; i < 4; i++) {
             this.particles.push({
-              x: f.x + (Math.random() - 0.5) * 32,
+              x: f.x + (Math.random() - 0.5) * 22,
               y: GROUND_Y - 2,
-              vx: (Math.random() - 0.5) * 90,
-              vy: -25 - Math.random() * 55,
-              life: 0.55, maxLife: 0.55,
+              vx: (Math.random() - 0.5) * 50,
+              vy: -8 - Math.random() * 22,
+              life: 0.4, maxLife: 0.4,
               color: "oklch(0.74 0.02 60)",
-              size: 2 + Math.random() * 2.4,
+              size: 1.4 + Math.random() * 1.4,
             });
           }
-          Sfx.play("thud", 0.18);
+          Sfx.play("thud", 0.10);
         }
       }
       return;
     }
 
-    // Get-up animation — locked but visually rising
+    // Get-up animation — locked while rising.
     if (f.getUpT > 0) {
       f.getUpT -= dt;
       f.vx *= Math.pow(0.4, dt * 60);
       f.vy = 0;
       f.onGround = true;
+      // Smoothly damp ragdollAng toward 0 during the early gather/press phases
+      // so a face-down body rotates back to vertical without a visible snap.
+      const u = 1 - (f.getUpT / Math.max(0.001, f.getUpDur));
+      if (u < 0.30 && f.ragdollAng !== 0) {
+        const k = Math.pow(0.001, dt / 0.10); // 90% to zero in 100ms
+        f.ragdollAng *= k;
+        if (Math.abs(f.ragdollAng) < 0.01) f.ragdollAng = 0;
+      }
       if (f.getUpT <= 0) {
         f.iframeT = 1.0;            // 1s post-rise invulnerability
-        f.ragdollImmuneT = 2.0;     // additional anti-chain window (no re-ragdoll)
+        f.ragdollImmuneT = 2.0;     // anti-chain window
         f.ragdollAng = 0; f.ragdollAV = 0; f.ragdollEnergy = 0;
         resetWobble(f.wobble);
       }
