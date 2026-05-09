@@ -5117,6 +5117,24 @@ export class GameEngine {
         ctx.restore();
       }
 
+      // Iframe pulse — visible "I'm invulnerable" tell after a rise.
+      if (!ghost && f.iframeT > 0 && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && !this.lowPower) {
+        const pulse = 0.18 + Math.abs(Math.sin(this.elapsed * Math.PI * 5.5)) * 0.22;
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        const g = ctx.createRadialGradient(
+          x, y + FIGHTER_H * 0.55, 4,
+          x, y + FIGHTER_H * 0.55, FIGHTER_H * 0.55,
+        );
+        g.addColorStop(0, `color-mix(in oklab, ${skin.glow} ${Math.round(pulse * 100)}%, transparent)`);
+        g.addColorStop(1, "transparent");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(x, y + FIGHTER_H * 0.55, FIGHTER_H * 0.32, FIGHTER_H * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
       const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
       const drawFrame = (idx: number) =>
         drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
