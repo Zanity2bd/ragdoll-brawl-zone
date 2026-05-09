@@ -98,6 +98,7 @@ interface Fighter {
   getUpDur: number;        // total rise duration
   iframeT: number;         // invulnerability after rise
   ragdollImmuneT: number;  // chain-prevention: still takes damage, no re-ragdoll
+  groundedT: number;       // continuous time on ground while ragdolling (for settle gate)
   lastLean: number;        // last applied torso lean (for blend)
   // victim slow (a-train)
   slowedT: number;
