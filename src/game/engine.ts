@@ -4606,6 +4606,21 @@ export class GameEngine {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
 
+    // Ground decals (scuff ellipses from rises) — under everything else.
+    if (this.groundDecals.length > 0) {
+      ctx.save();
+      for (const d of this.groundDecals) {
+        const a = Math.max(0, d.life / d.maxLife);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = d.color;
+        ctx.beginPath();
+        ctx.ellipse(d.x, GROUND_Y - 0.5, d.w, Math.max(2, d.w * 0.18), 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
     // Afterimage ghosts (drawn under main fighters)
     for (const f of [this.p1, this.p2]) {
       if (f.trail.length === 0) continue;
