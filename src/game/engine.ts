@@ -520,6 +520,7 @@ export class GameEngine {
   private p2!: Fighter;
   private projectiles: Projectile[] = [];
   private particles: Particle[] = [];
+  private groundDecals: GroundDecal[] = [];
   private shockwaves: Shockwave[] = [];
   private attackFx: ActiveFx[] = [];
   private beams: Beam[] = [];
