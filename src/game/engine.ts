@@ -441,7 +441,67 @@ interface MagmaBlast {
   explosionT: number;   // post-impact growth
 }
 
-export class GameEngine {
+// ---- Ragdoll → get-up phase clock ----
+// Single source of truth shared by update(), poseFor() and the renderer so the
+// pose blend, sprite frame, vertical lift, lean, and FX never desync.
+type RisePhase = "gather" | "press" | "kneel" | "coil" | "drive" | "settle";
+interface RiseInfo {
+  phase: RisePhase;
+  /** 0..1 progress within the current phase */
+  local: number;
+  /** Hand-shaped vertical lift, 0 = on ground, 1 = standing eye-line */
+  lift: number;
+  /** Overall normalized progress 0..1 (echoes input) */
+  u: number;
+}
+function risePhase(u: number): RiseInfo {
+  // Phase windows.
+  // gather 0.00-0.10  : on the ground, body drops shoulder
+  // press  0.10-0.30  : push up onto hands, hips lift
+  // kneel  0.30-0.50  : plant a knee — flat plateau (weight bearing)
+  // coil   0.50-0.68  : anticipation crouch — small dip
+  // drive  0.68-0.88  : explosive rise to standing
+  // settle 0.88-1.00  : tiny overshoot then hold
+  let phase: RisePhase;
+  let local: number;
+  if (u < 0.10) { phase = "gather"; local = u / 0.10; }
+  else if (u < 0.30) { phase = "press"; local = (u - 0.10) / 0.20; }
+  else if (u < 0.50) { phase = "kneel"; local = (u - 0.30) / 0.20; }
+  else if (u < 0.68) { phase = "coil"; local = (u - 0.50) / 0.18; }
+  else if (u < 0.88) { phase = "drive"; local = (u - 0.68) / 0.20; }
+  else { phase = "settle"; local = (u - 0.88) / 0.12; }
+
+  // lift curve — built to plateau on plant beats and explode on drive
+  let lift: number;
+  switch (phase) {
+    case "gather": lift = 0.02 * local; break;
+    case "press":  lift = 0.02 + 0.18 * (local * local * (3 - 2 * local)); break; // 0.02 -> 0.20
+    case "kneel":  lift = 0.20 + 0.10 * local; break;                              // gentle 0.20 -> 0.30
+    case "coil":   lift = 0.30 - 0.04 * Math.sin(local * Math.PI); break;          // dip below 0.30
+    case "drive": {
+      // easeOutQuart from 0.28 (post-dip) to 1.04 (overshoot)
+      const e = 1 - Math.pow(1 - local, 4);
+      lift = 0.28 + (1.04 - 0.28) * e;
+      break;
+    }
+    case "settle": {
+      // 1.04 → 1.00 settle
+      lift = 1.04 - 0.04 * (local * local * (3 - 2 * local));
+      break;
+    }
+  }
+  return { phase, local, lift, u };
+}
+
+interface GroundDecal {
+  x: number;
+  w: number;          // half-width of the scuff ellipse
+  life: number;
+  maxLife: number;
+  color: string;
+}
+
+
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
   private last = 0;
