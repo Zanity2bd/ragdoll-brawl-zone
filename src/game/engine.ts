@@ -4290,52 +4290,77 @@ export class GameEngine {
       return { ...p, hipY: p.hipY + breath, shoulderY: p.shoulderY + breath * 0.6, lean: targetAng };
     }
     if (f.getUpT > 0) {
-      // Three-stage get-up: laydown → push-up/kneel → upright.
-      // Easing: slow start (push off ground), accelerate to standing.
-      const tLin = 1 - (f.getUpT / Math.max(0.001, f.getUpDur));
+      // Phased rise driven by the same risePhase() clock the renderer uses,
+      // so cape/head/eye anchors stay glued to the sprite frame.
+      const u = 1 - (f.getUpT / Math.max(0.001, f.getUpDur));
+      const info = risePhase(u);
       const targetAng = f.ragdollAng >= 0 ? Math.PI / 2 : -Math.PI / 2;
       const flat = computeRagdollPose(f.ragdollPhase, FIGHTER_H, targetAng);
       const stand = computeWalkPose(0, 0, true, 0, false, f.facing, FIGHTER_H);
-      if (tLin < 0.5) {
-        // Stage 1: push off ground onto hands & knees (kneel pose)
-        const u = tLin / 0.5;
-        const ease = u * u * (3 - 2 * u);
-        // Kneel target: hips lifted, head still low, hands planted forward
-        const kneel: Pose = {
-          headOffsetY: 18,
-          shoulderY: 38,
-          hipY: 60,
-          legL: [-4, 60, -8, 70, -10, 80],
-          legR: [4, 60, 8, 70, 10, 80],
-          armL: [-5, 38, -10, 52, -14, 70],
-          armR: [5, 38, 10, 52, 14, 70],
-          handL: [-14, 70], handR: [14, 70],
-          footL: [-10, 80], footR: [10, 80],
-          lean: targetAng * 0.35,
-          shoulderRoll: 0,
-        };
-        const lean = targetAng * (1 - ease * 0.7);
-        return blendPose(flat, kneel, ease, lean);
-      } else {
-        // Stage 2: rise from kneel to standing
-        const u = (tLin - 0.5) / 0.5;
-        const ease = u * u * (3 - 2 * u);
-        const kneel: Pose = {
-          headOffsetY: 18,
-          shoulderY: 38,
-          hipY: 60,
-          legL: [-4, 60, -8, 70, -10, 80],
-          legR: [4, 60, 8, 70, 10, 80],
-          armL: [-5, 38, -10, 52, -14, 70],
-          armR: [5, 38, 10, 52, 14, 70],
-          handL: [-14, 70], handR: [14, 70],
-          footL: [-10, 80], footR: [10, 80],
-          lean: targetAng * 0.35,
-          shoulderRoll: 0,
-        };
-        const lean = targetAng * 0.35 * (1 - ease);
-        return blendPose(kneel, stand, ease, lean);
+      const press: Pose = {
+        headOffsetY: 28, shoulderY: 50, hipY: 70,
+        legL: [-4, 70, -6, 78, -10, 84], legR: [4, 70, 6, 78, 10, 84],
+        armL: [-6, 50, -12, 64, -18, 76], armR: [6, 50, 12, 64, 18, 76],
+        handL: [-18, 76], handR: [18, 76],
+        footL: [-10, 84], footR: [10, 84],
+        lean: targetAng * 0.55, shoulderRoll: 0,
+      };
+      const kneel: Pose = {
+        headOffsetY: 14, shoulderY: 36, hipY: 58,
+        legL: [-5, 58, -8, 70, -12, 80], legR: [5, 58, 6, 68, 8, 80],
+        armL: [-6, 36, -10, 50, -12, 60], armR: [6, 36, 10, 50, 12, 58],
+        handL: [-12, 60], handR: [12, 58],
+        footL: [-12, 80], footR: [8, 80],
+        lean: targetAng * 0.18, shoulderRoll: 0,
+      };
+      const coil: Pose = {
+        headOffsetY: 8, shoulderY: 28, hipY: 50,
+        legL: [-6, 50, -10, 62, -10, 78], legR: [6, 50, 10, 62, 10, 78],
+        armL: [-7, 28, -10, 40, -8, 52], armR: [7, 28, 10, 40, 8, 52],
+        handL: [-8, 52], handR: [8, 52],
+        footL: [-10, 78], footR: [10, 78],
+        lean: targetAng * 0.08, shoulderRoll: 0,
+      };
+      const smooth = (x: number) => x * x * (3 - 2 * x);
+      let out: Pose;
+      let leanOut: number;
+      switch (info.phase) {
+        case "gather": {
+          const e = smooth(info.local);
+          leanOut = targetAng * (1 - e * 0.45);
+          out = blendPose(flat, press, e, leanOut);
+          break;
+        }
+        case "press": {
+          const e = smooth(info.local);
+          leanOut = targetAng * (0.55 - e * 0.37);
+          out = blendPose(press, kneel, e, leanOut);
+          break;
+        }
+        case "kneel": {
+          leanOut = targetAng * 0.18 * (1 - info.local * 0.3);
+          out = { ...kneel, lean: leanOut };
+          break;
+        }
+        case "coil": {
+          const e = smooth(info.local);
+          leanOut = targetAng * (0.18 - e * 0.10);
+          out = blendPose(kneel, coil, e, leanOut);
+          break;
+        }
+        case "drive": {
+          const e = 1 - Math.pow(1 - info.local, 4);
+          leanOut = targetAng * 0.08 * (1 - e);
+          out = blendPose(coil, stand, e, leanOut);
+          break;
+        }
+        default: {
+          const breath = Math.sin(info.local * Math.PI) * 0.6;
+          out = { ...stand, shoulderY: stand.shoulderY + breath, lean: 0 };
+          break;
+        }
       }
+      return out;
     }
     // Use the rendered facing (sign of facingT) so pose direction stays in sync
     // with the yaw scale we apply at draw time. Both flip at the same instant
