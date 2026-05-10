@@ -2616,7 +2616,19 @@ export class GameEngine {
       }
     }
 
-    // ---- Universal basic punch + 3-tap combo (punch → high-kick → knee) ----
+    // ---- Air-juggle bookkeeping ----
+    // Once the fighter is grounded & stable, the juggle counter unwinds.
+    if (f.juggleFlash > 0) f.juggleFlash = Math.max(0, f.juggleFlash - dt * 1.6);
+    if (f.juggleHits > 0) {
+      const stable = f.onGround && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0;
+      if (stable) {
+        f.juggleResetT -= dt;
+        if (f.juggleResetT <= 0) f.juggleHits = 0;
+      } else {
+        f.juggleResetT = 0.45; // grace period after landing before reset
+      }
+    }
+
     f.punchCd = Math.max(0, f.punchCd - dt);
     if (f.recoverT > 0) f.recoverT = Math.max(0, f.recoverT - dt);
     if (f.comboWindowT > 0) {
