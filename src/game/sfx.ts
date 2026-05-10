@@ -19,6 +19,14 @@ class SfxEngine {
   private musicNodes: AudioNode[] = [];
   private musicPlaying = false;
   private samples: Partial<Record<SfxName, AudioBuffer>> = {};
+  // Adaptive music: 0 = calm pad, 1 = high-intensity (bright filter, fast LFO,
+  // percussive pulse). Smoothed toward target each frame.
+  private musicIntensity = 0;
+  private musicIntensityTarget = 0;
+  private musicFilters: BiquadFilterNode[] = [];
+  private musicLfos: OscillatorNode[] = [];
+  private pulseGain: GainNode | null = null;
+  private pulseOsc: OscillatorNode | null = null;
   muted = false;
   sfxVolume = 0.8;
   musicVolume = 0.35;
