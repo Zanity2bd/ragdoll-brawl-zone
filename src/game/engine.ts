@@ -2806,9 +2806,11 @@ export class GameEngine {
           if (this.meleeBlockedByProp(f, PUNCH_RANGE, PUNCH_DMG)) {
             f.punchHit = true;
             f.cancelOK = true;
+            this.shake = Math.max(this.shake, 3);
             Sfx.play("thud", 0.35);
           } else if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
             f.punchHit = true;
+            f.cancelOK = true;
             target.hp = Math.max(0, target.hp - PUNCH_DMG);
             target.hitFlash = 0.22;
             target.vx += f.facing * 90;
