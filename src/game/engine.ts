@@ -128,6 +128,11 @@ interface Fighter {
   jumpBufferT: number;
   jumpHeldT: number;       // remaining time variable-height boost is active
   airJumps: number;        // remaining mid-air jumps
+  preJumpT: number;        // crouch anticipation before launch
+  landSquashT: number;     // post-landing recovery (movement-locked, attack-cancel ok)
+  landImpact: number;      // 0..1 cached at landing (drives squash depth + frame hold)
+  // ragdoll secondary motion
+  ragdollWobble: number;   // secondary floppy angle overlay (rad, decays with energy)
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
@@ -286,17 +291,19 @@ export interface Intents {
 const W = 1280;
 const H = 720;
 const GROUND_Y = 600;
-const GRAVITY = 1500;
-const FALL_GRAVITY_MUL = 1.55;     // heavier on the way down → snappy arc
-const LOW_JUMP_GRAVITY_MUL = 1.9;  // stop boosting when jump released early
+const GRAVITY = 1750;              // base — heavier than vanilla for committed arcs
+const FALL_GRAVITY_MUL = 1.85;     // heavier on the way down → snappy fall
+const LOW_JUMP_GRAVITY_MUL = 2.2;  // jump released early → kill ascent fast
+const APEX_GRAVITY_MUL = 0.55;     // softens the very top of the arc (hang-time pop)
 const MOVE_SPEED = 210;
 const ACCEL = 1400;
 const FRICTION = 1600;
 const AIR_CONTROL = 0.55;          // accel multiplier in air
-const JUMP_V = 640;
-const JUMP_HOLD_T = 0.18;          // window during which holding jump keeps gravity light
-const COYOTE_T = 0.10;             // post-leave grace
-const JUMP_BUFFER_T = 0.13;        // press buffer
+const JUMP_V = 690;                // bumped to compensate for stronger gravity
+const JUMP_HOLD_T = 0.20;          // window during which holding jump keeps gravity light
+const PRE_JUMP_T = 0.07;           // anticipation crouch before launch
+const COYOTE_T = 0.09;             // post-leave grace
+const JUMP_BUFFER_T = 0.11;        // press buffer
 const MAX_AIR_JUMPS = 1;            // double-jump for non-flyers
 const FIGHTER_H = 90;
 // Universal basic punch — sprite-driven (frames 11–14 + recovery 15).
@@ -926,6 +933,7 @@ export class GameEngine {
       prevFacing: 1, prevHitFlash: 0,
       dropT: 0, ledgeFlash: 0,
       coyoteT: 0, jumpBufferT: 0, jumpHeldT: 0, airJumps: 0,
+      preJumpT: 0, landSquashT: 0, landImpact: 0, ragdollWobble: 0,
       wobble: createWobble(),
       dash: null,
       frenzy: null,
@@ -2971,7 +2979,9 @@ export class GameEngine {
       }
       // Soft control penalty during stagger (partial-ragdoll window)
       const staggered = f.wobble.staggerT > 0;
-      const moveMul = staggered ? 0.65 : 1;
+      // Anticipation crouch + landing recovery hard-lock movement (attacks still pass).
+      const moveLocked = f.preJumpT > 0 || f.landSquashT > 0;
+      const moveMul = (staggered ? 0.65 : 1) * (moveLocked ? 0 : 1);
       const accelMul = staggered ? 0.7 : 1;
       // Air control: reduced accel & friction when airborne for natural arcs
       const airMul = f.onGround ? 1 : AIR_CONTROL;
@@ -2988,43 +2998,68 @@ export class GameEngine {
         else if (f.vx < 0) f.vx = Math.min(0, f.vx + fr);
       }
 
-      // ---- Jump feel: coyote time + buffered press + variable height + 1 air-jump ----
+      // ---- Jump feel: anticipation + coyote + buffered press + variable height + 1 air-jump ----
       if (f.onGround) { f.coyoteT = COYOTE_T; f.airJumps = MAX_AIR_JUMPS; }
       else f.coyoteT = Math.max(0, f.coyoteT - ldt);
       if (f.jumpBufferT > 0) f.jumpBufferT = Math.max(0, f.jumpBufferT - ldt);
       if (f.jumpHeldT > 0) f.jumpHeldT = Math.max(0, f.jumpHeldT - ldt);
+      if (f.landSquashT > 0) f.landSquashT = Math.max(0, f.landSquashT - ldt);
 
       const wantsDrop = !locked && intent.jump && intent.ay > 0.5 && f.onGround;
-      if (wantsDrop) {
+
+      // Anticipation crouch tick — when expires, fire the actual launch.
+      if (f.preJumpT > 0) {
+        f.preJumpT -= ldt;
+        // Lock horizontal during crouch so the launch reads as decisive.
+        f.vx *= Math.pow(0.25, ldt * 60);
+        if (f.preJumpT <= 0) {
+          f.preJumpT = 0;
+          // Apply launch
+          f.vy = -JUMP_V;
+          f.onGround = false;
+          f.coyoteT = 0;
+          f.jumpHeldT = JUMP_HOLD_T;
+          // Strong stretch springing out of crouch
+          f.wobble.squashV -= 9;
+          f.wobble.bvy -= 30;
+          if (!this.lowPower) {
+            for (let i = 0; i < 7; i++) {
+              this.particles.push({
+                x: f.x + (Math.random() - 0.5) * 22,
+                y: f.y + FIGHTER_H - 2,
+                vx: (Math.random() - 0.5) * 130,
+                vy: -18 - Math.random() * 40,
+                life: 0.36, maxLife: 0.36,
+                color: "oklch(0.8 0.03 230)",
+                size: 1.6 + Math.random() * 1.6,
+              });
+            }
+          }
+          Sfx.play("whoosh", 0.18);
+        }
+      } else if (wantsDrop) {
         f.dropT = 0.18;
         f.onGround = false;
         f.y += 2;
         f.jumpBufferT = 0;
-      } else if (!locked && f.jumpBufferT > 0 && (f.onGround || f.coyoteT > 0)) {
-        // Ground / coyote jump
-        f.vy = -JUMP_V;
-        f.onGround = false;
-        f.coyoteT = 0;
-        f.jumpBufferT = 0;
-        f.jumpHeldT = JUMP_HOLD_T;
-        // Launch squash: compress slightly, springs into stretch
-        f.wobble.squashV -= 5;
-        // Dust puff
-        if (!this.lowPower) {
-          for (let i = 0; i < 5; i++) {
-            this.particles.push({
-              x: f.x + (Math.random() - 0.5) * 18,
-              y: f.y + FIGHTER_H - 2,
-              vx: (Math.random() - 0.5) * 90,
-              vy: -10 - Math.random() * 30,
-              life: 0.32, maxLife: 0.32,
-              color: "oklch(0.8 0.04 230)",
-              size: 1.5 + Math.random() * 1.4,
-            });
-          }
+      } else if (!locked && f.jumpBufferT > 0 && (f.onGround || f.coyoteT > 0) && f.landSquashT <= 0.04) {
+        // Ground / coyote jump → enter anticipation crouch first.
+        // Skip preJump if airborne via coyote (no time to crouch in air).
+        if (f.onGround) {
+          f.preJumpT = PRE_JUMP_T;
+          // Visible knee-bend dip
+          f.wobble.bvy += 22;
+          f.wobble.squashV += 4;
+        } else {
+          // Coyote: launch immediately
+          f.vy = -JUMP_V;
+          f.coyoteT = 0;
+          f.jumpHeldT = JUMP_HOLD_T;
+          f.wobble.squashV -= 6;
         }
+        f.jumpBufferT = 0;
       } else if (!locked && f.jumpBufferT > 0 && f.airJumps > 0 && !f.onGround) {
-        // Mid-air double jump
+        // Mid-air double jump — instant, no anticipation
         f.airJumps--;
         f.vy = -JUMP_V * 0.85;
         f.jumpBufferT = 0;
@@ -3046,8 +3081,9 @@ export class GameEngine {
         }
       }
 
-      // Variable-height: if jump released early during ascent, kill upward velocity faster
+      // Variable-height: jump released early during ascent → cut upward velocity hard.
       if (!intent.jump && f.vy < 0 && f.jumpHeldT > 0) {
+        f.vy *= 0.45;
         f.jumpHeldT = 0;
       }
 
@@ -3098,16 +3134,23 @@ export class GameEngine {
       }
 
       const prevY = f.y;
-      // Variable gravity: lighter while jump held & ascending, heavier on the way down
-      let gMul = 1;
+      // Variable gravity:
+      //  - Ascending + jump held + within hold window → very light (boost arc)
+      //  - Near apex (|vy| < 90)                       → softened hang for that "snap" pop
+      //  - Ascending + jump released                   → heavy (kills early-release height)
+      //  - Falling                                     → heaviest (decisive descent)
+      let gMul: number;
       if (f.vy < 0) {
-        gMul = (intent.jump && f.jumpHeldT > 0) ? 0.6 : LOW_JUMP_GRAVITY_MUL;
+        if (intent.jump && f.jumpHeldT > 0) gMul = 0.55;
+        else gMul = LOW_JUMP_GRAVITY_MUL;
+      } else if (f.vy < 90) {
+        gMul = APEX_GRAVITY_MUL;
       } else {
         gMul = FALL_GRAVITY_MUL;
       }
       f.vy += GRAVITY * gMul * ldt;
       // Terminal velocity
-      if (f.vy > 1400) f.vy = 1400;
+      if (f.vy > 1500) f.vy = 1500;
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
 
@@ -3204,11 +3247,16 @@ export class GameEngine {
       // Decay landing-squash sprite timer every frame
       f.justLandedT = Math.max(0, f.justLandedT - dt);
       if (landedOn && wasAirborne) {
-        f.justLandedT = 0.10;
         const impact = Math.max(0, Math.min(1, landingVy / 800));
-        f.wobble.squashV -= 4 + impact * 7;     // squash on land
-        f.wobble.bvy += 80 * impact;             // body dips
-        if (impact > 0.25) this.shake = Math.max(this.shake, 4 + impact * 6);
+        f.justLandedT = 0.10 + impact * 0.06;
+        // Movement-locked recovery scaled by impact (cancellable into attack).
+        f.landSquashT = 0.08 + impact * 0.16;
+        f.landImpact = impact;
+        f.wobble.squashV -= 4 + impact * 9;     // squash on land
+        f.wobble.bvy += 100 * impact;            // body dips
+        // Kill residual horizontal velocity proportional to impact (heavy thud feel).
+        f.vx *= (1 - 0.55 * impact);
+        if (impact > 0.2) this.shake = Math.max(this.shake, 4 + impact * 8);
         if (!this.lowPower) {
           const n = Math.round(4 + impact * 8);
           for (let i = 0; i < n; i++) {
@@ -5852,16 +5900,18 @@ export class GameEngine {
         return;
       }
 
+      // ---- Anticipation crouch (pre-jump) ----
+      if (f.preJumpT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
+
       // ---- Airborne (jump/fall) ----
       if (!f.onGround) {
         if (f.vy < -120) drawFrame(JUMP_RISE_FRAME);
-        else if (f.vy < 60) drawFrame(JUMP_APEX_FRAME);
         else drawFrame(JUMP_APEX_FRAME);
         return;
       }
 
-      // ---- Just landed (squash) ----
-      if (f.justLandedT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
+      // ---- Just landed (squash + recovery hold) ----
+      if (f.justLandedT > 0 || f.landSquashT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
 
       // ---- Combo swing (high kick / knee finisher) ----
       if (f.comboKind && f.comboT > 0) {
