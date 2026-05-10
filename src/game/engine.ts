@@ -1729,6 +1729,8 @@ export class GameEngine {
     this.particles = this.particles.filter(p => p.life > 0);
     for (const d of this.groundDecals) d.life -= dt;
     this.groundDecals = this.groundDecals.filter(d => d.life > 0);
+    for (const c of this.cracks) c.life -= dt;
+    this.cracks = this.cracks.filter(c => c.life > 0);
 
     // Smoke clouds — drift, expand, swirl, fade
     for (const sc of this.smokeClouds) {
