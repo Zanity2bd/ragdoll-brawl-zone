@@ -114,3 +114,4 @@ export const MOVES: Record<SkinId, MoveSpec> = {
     hitstop: 0.2, slowmoT: 0.4, shake: 18, ragdollT: 0.6,
     windupSfx: "whoosh", hitSfx: "punch",
   },
+};
