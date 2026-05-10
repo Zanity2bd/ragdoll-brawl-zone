@@ -3245,11 +3245,16 @@ export class GameEngine {
       // Decay landing-squash sprite timer every frame
       f.justLandedT = Math.max(0, f.justLandedT - dt);
       if (landedOn && wasAirborne) {
-        f.justLandedT = 0.10;
         const impact = Math.max(0, Math.min(1, landingVy / 800));
-        f.wobble.squashV -= 4 + impact * 7;     // squash on land
-        f.wobble.bvy += 80 * impact;             // body dips
-        if (impact > 0.25) this.shake = Math.max(this.shake, 4 + impact * 6);
+        f.justLandedT = 0.10 + impact * 0.06;
+        // Movement-locked recovery scaled by impact (cancellable into attack).
+        f.landSquashT = 0.08 + impact * 0.16;
+        f.landImpact = impact;
+        f.wobble.squashV -= 4 + impact * 9;     // squash on land
+        f.wobble.bvy += 100 * impact;            // body dips
+        // Kill residual horizontal velocity proportional to impact (heavy thud feel).
+        f.vx *= (1 - 0.55 * impact);
+        if (impact > 0.2) this.shake = Math.max(this.shake, 4 + impact * 8);
         if (!this.lowPower) {
           const n = Math.round(4 + impact * 8);
           for (let i = 0; i < n; i++) {
