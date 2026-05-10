@@ -5221,6 +5221,15 @@ export class GameEngine {
 
     // Hide attacker (and target) during frenzy — replaced by video clip below.
     const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
+    // Sample weapon trails using current pose so the ribbon tracks the limb
+    // exactly. Drawn UNDER the fighter sprite so the body stays the focal point.
+    for (const f of [this.p1, this.p2]) {
+      if (f.weaponTrail.active <= 0 && f.weaponTrail.samples.length === 0) continue;
+      const pose = this.poseFor(f);
+      const lp = pose[f.weaponTrail.limb];
+      sampleTrail(f.weaponTrail, f.x + lp[0], f.y + lp[1]);
+      drawTrail(ctx, f.weaponTrail);
+    }
     if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
     // Sprite-based attack FX overlays (charge ring, slash arc, impact star, shockwave).
