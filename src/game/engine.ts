@@ -183,6 +183,11 @@ interface Fighter {
   comboDur: number;     // duration of current combo swing
   comboKind: "kick" | "knee" | null;
   comboHit: boolean;
+  // Air juggle: hits stacked while target is airborne. Scales damage/KB
+  // down with diminishing returns so launches stay cinematic but not abusive.
+  juggleHits: number;
+  juggleResetT: number;     // resets when target lands & stays grounded
+  juggleFlash: number;      // 0..1 cosmetic pulse for floating combo counter
 }
 
 interface SmokeCloud {
@@ -920,6 +925,7 @@ export class GameEngine {
       swing: null,
       punchT: 0, punchCd: 0, punchHit: false, recoverT: 0, justLandedT: 0,
       comboStep: 0, comboWindowT: 0, comboT: 0, comboDur: 0, comboKind: null, comboHit: false,
+      juggleHits: 0, juggleResetT: 0, juggleFlash: 0,
     };
   }
 
@@ -2610,6 +2616,19 @@ export class GameEngine {
       }
     }
 
+    // ---- Air-juggle bookkeeping ----
+    // Once the fighter is grounded & stable, the juggle counter unwinds.
+    if (f.juggleFlash > 0) f.juggleFlash = Math.max(0, f.juggleFlash - dt * 1.6);
+    if (f.juggleHits > 0) {
+      const stable = f.onGround && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0;
+      if (stable) {
+        f.juggleResetT -= dt;
+        if (f.juggleResetT <= 0) f.juggleHits = 0;
+      } else {
+        f.juggleResetT = 0.45; // grace period after landing before reset
+      }
+    }
+
     // ---- Universal basic punch + 3-tap combo (punch → high-kick → knee) ----
     f.punchCd = Math.max(0, f.punchCd - dt);
     if (f.recoverT > 0) f.recoverT = Math.max(0, f.recoverT - dt);
@@ -3661,10 +3680,24 @@ export class GameEngine {
     if (target.downedT > 0 || target.getUpT > 0) return;
     target.hp = Math.max(0, target.hp - m.damage);
     target.hitFlash = 0.35;
+    // Air-juggle: if target is airborne (or already in a juggle), tally
+    // hits with diminishing returns. 1.0 → 0.85 → 0.7 → 0.55 → 0.45 → 0.4
+    const wasAirborne = !target.onGround || target.ragdollT > 0;
+    if (wasAirborne) {
+      target.juggleHits = Math.min(target.juggleHits + 1, 8);
+      target.juggleFlash = 1;
+    }
+    const juggleScale = target.juggleHits > 1
+      ? Math.max(0.4, 1 - (target.juggleHits - 1) * 0.15)
+      : 1;
     // Anti-chain: reduced knockback if recently ragdolled
-    const kbScale = target.ragdollImmuneT > 0 ? 0.45 : 1;
+    const kbScale = (target.ragdollImmuneT > 0 ? 0.45 : 1) * juggleScale;
     target.vx = f.facing * m.knockbackX * kbScale;
-    target.vy = m.knockbackY * kbScale;
+    // Mid-juggle: bias upward keep-up so combos read like a launch chain.
+    const kbY = wasAirborne && target.juggleHits > 1
+      ? Math.min(m.knockbackY * juggleScale, -180)
+      : m.knockbackY * kbScale;
+    target.vy = kbY;
     target.onGround = false;
     // Only ragdoll if not in chain-immune window
     if (m.ragdollT > 0 && target.ragdollImmuneT <= 0) {
@@ -5261,6 +5294,31 @@ export class GameEngine {
     const pose = this.poseFor(f);
     this.drawFighterAt(f, f.x, f.y, pose, false);
     this.drawDamageOverlay(f);
+    this.drawJuggleCounter(f);
+  }
+
+  /** Floating "xN HIT" tag above an actively juggled fighter. */
+  private drawJuggleCounter(f: Fighter) {
+    if (f.juggleHits < 2 || f.juggleFlash <= 0) return;
+    const ctx = this.ctx;
+    const a = Math.min(1, f.juggleFlash);
+    const pop = 1 + (1 - a) * 0.35;
+    const y = f.y - 18 - (1 - a) * 14;
+    ctx.save();
+    ctx.translate(f.x, y);
+    ctx.scale(pop, pop);
+    ctx.font = "700 14px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = `oklch(0.18 0.04 30 / ${0.85 * a})`;
+    ctx.fillStyle = f.juggleHits >= 5
+      ? `oklch(0.78 0.22 30 / ${a})`
+      : `oklch(0.92 0.16 80 / ${a})`;
+    const txt = `×${f.juggleHits} HIT`;
+    ctx.strokeText(txt, 0, 0);
+    ctx.fillText(txt, 0, 0);
+    ctx.restore();
   }
 
   /**
