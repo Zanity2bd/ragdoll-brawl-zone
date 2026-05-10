@@ -2469,6 +2469,14 @@ export class GameEngine {
           f.vy = -impact * 0.32;
           f.vx *= 0.55;
           f.ragdollAV *= 0.4;
+          // Impact pulse: body rolls in travel direction, scaled by impact.
+          const pulseDir = Math.sign(f.vx) || (f.facing as number);
+          f.ragdollAV += pulseDir * impact * 0.012;
+          // Limbs jolt on impact too — flesh-on-floor flop.
+          f.armLagL += pulseDir * impact * 0.006;
+          f.armLagR += pulseDir * impact * 0.005;
+          f.legLag  += pulseDir * impact * 0.004;
+          f.headLag += pulseDir * impact * 0.003;
           f.ragdollEnergy = Math.max(0, f.ragdollEnergy - 0.25);
           this.shake = Math.max(this.shake, Math.min(14, impact * 0.05));
           Sfx.play("thud", Math.min(0.6, impact / 600));
