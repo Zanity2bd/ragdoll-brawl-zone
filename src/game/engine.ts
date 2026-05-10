@@ -925,6 +925,7 @@ export class GameEngine {
       swing: null,
       punchT: 0, punchCd: 0, punchHit: false, recoverT: 0, justLandedT: 0,
       comboStep: 0, comboWindowT: 0, comboT: 0, comboDur: 0, comboKind: null, comboHit: false,
+      juggleHits: 0, juggleResetT: 0, juggleFlash: 0,
     };
   }
 
