@@ -514,6 +514,15 @@ interface GroundDecal {
   color: string;
 }
 
+/** Jagged ground crack from heavy slams (Hulk, Magma, finishers). */
+interface Crack {
+  x: number;          // impact x at GROUND_Y
+  rays: Array<{ ang: number; len: number; jitter: number[] }>;
+  life: number;
+  maxLife: number;
+  intensity: number;  // 0..1 — scales width/length
+}
+
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
@@ -534,6 +543,7 @@ export class GameEngine {
   private projectiles: Projectile[] = [];
   private particles: Particle[] = [];
   private groundDecals: GroundDecal[] = [];
+  private cracks: Crack[] = [];
   private shockwaves: Shockwave[] = [];
   private attackFx: ActiveFx[] = [];
   private beams: Beam[] = [];
@@ -802,6 +812,8 @@ export class GameEngine {
     this.magmas = [];
     this.smokeClouds = [];
     this.debris = [];
+    this.cracks = [];
+    this.groundDecals = [];
     this.homelanderVoPlayed = false;
     this.beamWasActive = { p1: false, p2: false };
     // Restore any platforms destroyed by overload from a previous round
@@ -1719,6 +1731,8 @@ export class GameEngine {
     this.particles = this.particles.filter(p => p.life > 0);
     for (const d of this.groundDecals) d.life -= dt;
     this.groundDecals = this.groundDecals.filter(d => d.life > 0);
+    for (const c of this.cracks) c.life -= dt;
+    this.cracks = this.cracks.filter(c => c.life > 0);
 
     // Smoke clouds — drift, expand, swirl, fade
     for (const sc of this.smokeClouds) {
@@ -2206,6 +2220,7 @@ export class GameEngine {
             });
           }
           this.shake = Math.max(this.shake, 32);
+          this.spawnCrack(ex, 1);
           this.impactFlash = Math.max(this.impactFlash, 0.95);
           this.hitstopT = Math.max(this.hitstopT, 0.14);
           Sfx.play("boom", 1.0); Sfx.play("heavy", 0.85); Sfx.play("thud", 0.7); Sfx.play("shock", 0.4);
@@ -2317,6 +2332,8 @@ export class GameEngine {
         this.slowmoMode = "impact";
         this.impactFlash = 1;
         this.shockwaves.push({ x: target.x, y: target.y + 40, r: 10, rMax: 320, life: 0.7, maxLife: 0.7, color: "oklch(0.7 0.18 25)" });
+        this.spawnCrack(target.x, 1);
+        this.spawnCrack(f.x, 0.7);
         Sfx.play("boom", 1);
         f.frenzy = null;
       }
@@ -3235,6 +3252,49 @@ export class GameEngine {
     } else if (f.trail.length > 0) {
       f.trail.shift();
     }
+
+    // ---- Per-skin signature ambient FX ----
+    if (!this.lowPower && this.particles.length < 220) {
+      // Spider-Man: faint web string trails when airborne and moving fast.
+      if (f.skin.id === "spiderman" && !f.onGround && Math.abs(f.vx) > 220) {
+        if (Math.random() < 0.55) {
+          this.particles.push({
+            x: f.x - f.facing * 6,
+            y: f.y + 30 + (Math.random() - 0.5) * 18,
+            vx: -f.vx * 0.08 + (Math.random() - 0.5) * 30,
+            vy: -f.vy * 0.05 + 10 + Math.random() * 20,
+            life: 0.45, maxLife: 0.45,
+            color: "oklch(0.96 0.02 240)",
+            size: 1.2 + Math.random() * 1.2,
+          });
+        }
+      }
+      // Superman: cool ice-breath puffs when standing still on ground (idle exhale).
+      if (
+        f.skin.id === "superman" && f.onGround && !f.flying &&
+        Math.abs(f.vx) < 30 && !f.meleeKind && f.heatVisionT <= 0 &&
+        f.stunT <= 0 && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0
+      ) {
+        // Exhale every ~2.6s, gated on a noisy phase derived from elapsed.
+        const phase = (this.elapsed + (f.id === "p1" ? 0 : 1.3)) % 2.6;
+        if (phase < 0.65) {
+          // Within the breath window, emit a small puff each frame at a low rate.
+          if (Math.random() < 0.35) {
+            const headX = f.x + f.facing * 10;
+            const headY = f.y + 14;
+            this.particles.push({
+              x: headX + f.facing * (4 + Math.random() * 6),
+              y: headY + (Math.random() - 0.5) * 3,
+              vx: f.facing * (35 + Math.random() * 30),
+              vy: -8 - Math.random() * 14,
+              life: 0.55 + Math.random() * 0.25, maxLife: 0.8,
+              color: Math.random() < 0.5 ? "oklch(0.96 0.03 220)" : "oklch(0.92 0.05 230)",
+              size: 2.5 + Math.random() * 2.5,
+            });
+          }
+        }
+      }
+    }
   }
 
   private startMelee(f: Fighter) {
@@ -3354,6 +3414,8 @@ export class GameEngine {
             spawnFx(this.attackFx, "impactStar", cx, cy - 8, {
               size: 44, life: 0.32, grow: 80,
             });
+            // Hulk signature: ground crack at slam point.
+            this.spawnCrack(cx, 0.85);
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dist = Math.abs(target.x - cx);
             if (dist < m.range * 1.4) {
@@ -3892,6 +3954,33 @@ export class GameEngine {
         life: 0.6, maxLife: 0.6, color, size: 2 + Math.random() * 2,
       });
     }
+  }
+
+  /**
+   * Hulk-style ground crack decal: 4–7 jagged rays radiating from impact x at
+   * GROUND_Y. Persists ~5s, fades. Capped at 16 active so the floor doesn't
+   * become a solid black mat on long matches.
+   */
+  private spawnCrack(x: number, intensity: number) {
+    if (this.lowPower && intensity < 0.7) return;
+    if (this.cracks.length > 16) this.cracks.shift();
+    const it = Math.max(0.3, Math.min(1, intensity));
+    const rayN = 4 + Math.floor(Math.random() * 4);
+    const rays: Crack["rays"] = [];
+    for (let i = 0; i < rayN; i++) {
+      const ang = -Math.PI + (i / rayN) * Math.PI + (Math.random() - 0.5) * 0.4;
+      const len = (28 + Math.random() * 38) * it;
+      // 3-segment polyline jitter offsets (perpendicular wiggle)
+      const jitter = [
+        (Math.random() - 0.5) * 6,
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 5,
+      ];
+      rays.push({ ang, len, jitter });
+    }
+    this.cracks.push({
+      x, rays, life: 5, maxLife: 5, intensity: it,
+    });
   }
 
   /**
@@ -4897,7 +4986,57 @@ export class GameEngine {
       ctx.restore();
     }
 
-    // Afterimage ghosts (drawn under main fighters)
+    // Ground cracks — jagged radial fractures from heavy slams.
+    if (this.cracks.length > 0) {
+      ctx.save();
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (const c of this.cracks) {
+        const a = Math.max(0, c.life / c.maxLife);
+        // Dark crack body
+        ctx.globalAlpha = a * 0.85;
+        ctx.strokeStyle = "oklch(0.10 0.02 40)";
+        ctx.lineWidth = 2.2 * c.intensity + 0.6;
+        for (const r of c.rays) {
+          const cx = Math.cos(r.ang), cy = Math.sin(r.ang) * 0.35; // flatten to floor plane
+          const nx = -Math.sin(r.ang), ny = Math.cos(r.ang) * 0.35;
+          const x0 = c.x, y0 = GROUND_Y - 0.5;
+          const x1 = x0 + cx * r.len * 0.33 + nx * r.jitter[0];
+          const y1 = y0 + cy * r.len * 0.33 + ny * r.jitter[0];
+          const x2 = x0 + cx * r.len * 0.66 + nx * r.jitter[1];
+          const y2 = y0 + cy * r.len * 0.66 + ny * r.jitter[1];
+          const x3 = x0 + cx * r.len + nx * r.jitter[2];
+          const y3 = y0 + cy * r.len + ny * r.jitter[2];
+          ctx.beginPath();
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.lineTo(x3, y3);
+          ctx.stroke();
+        }
+        // Inner highlight (lighter rim) for depth
+        ctx.globalAlpha = a * 0.35;
+        ctx.strokeStyle = "oklch(0.55 0.04 40)";
+        ctx.lineWidth = 0.8;
+        for (const r of c.rays) {
+          const cx = Math.cos(r.ang), cy = Math.sin(r.ang) * 0.35;
+          const x3 = c.x + cx * r.len;
+          const y3 = GROUND_Y - 0.5 + cy * r.len;
+          ctx.beginPath();
+          ctx.moveTo(c.x, GROUND_Y - 0.5);
+          ctx.lineTo(x3, y3);
+          ctx.stroke();
+        }
+        // Central impact dot
+        ctx.globalAlpha = a * 0.6;
+        ctx.fillStyle = "oklch(0.08 0.02 40)";
+        ctx.beginPath();
+        ctx.ellipse(c.x, GROUND_Y - 0.5, 4 * c.intensity + 1.5, 1.5 * c.intensity + 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
     for (const f of [this.p1, this.p2]) {
       if (f.trail.length === 0) continue;
       const bamf = f.meleeKind === "bamfPunch" || f.meleeKind === "bamfKick";
