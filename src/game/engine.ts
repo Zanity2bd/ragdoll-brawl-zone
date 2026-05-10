@@ -4462,8 +4462,19 @@ export class GameEngine {
 
   private render() {
     const ctx = this.ctx;
+    // Legacy omni-shake (random jitter both axes)
     const shx = (Math.random() - 0.5) * this.shake;
     const shy = (Math.random() - 0.5) * this.shake;
+    // Directional kick — eased pulse along the strike vector. Peaks at
+    // ~30% of the duration then settles, reading as a real punch land.
+    let dirShx = 0, dirShy = 0;
+    if (this.shakeDirT > 0 && this.shakeDirDur > 0) {
+      const u = 1 - this.shakeDirT / this.shakeDirDur; // 0→1
+      // pulse: fast rise, slower fall — sin(πu)^0.6 with bias
+      const pulse = Math.pow(Math.sin(Math.PI * u), 0.7) * (1 - u * 0.4);
+      dirShx = this.shakeDirX * pulse;
+      dirShy = this.shakeDirY * pulse;
+    }
 
     const cw = this.canvas.width, ch = this.canvas.height;
 
@@ -4482,7 +4493,14 @@ export class GameEngine {
       targetZoom = 2.6;
     }
     this.camZoom += (targetZoom - this.camZoom) * (koActive ? 0.18 : 0.08);
-    const worldScale = baseScale * this.camZoom;
+    // Multiplicative zoom-punch overlay — bell curve that fades to 0.
+    let zoomMul = 1;
+    if (this.zoomPunchT > 0 && this.zoomPunchDur > 0) {
+      const u = 1 - this.zoomPunchT / this.zoomPunchDur;
+      const bell = Math.sin(Math.PI * u);
+      zoomMul = 1 + this.zoomPunch * bell;
+    }
+    const worldScale = baseScale * this.camZoom * zoomMul;
 
     // Visible world half-extents (in world units)
     const vw = cw / worldScale, vh = ch / worldScale;
@@ -4502,8 +4520,8 @@ export class GameEngine {
     this.camX += (clampedTx - this.camX) * 0.12;
     this.camY += (clampedTy - this.camY) * 0.12;
 
-    const offX = cw / 2 - this.camX * worldScale + shx;
-    const offY = ch / 2 - this.camY * worldScale + shy;
+    const offX = cw / 2 - this.camX * worldScale + shx + dirShx;
+    const offY = ch / 2 - this.camY * worldScale + shy + dirShy;
 
     this.viewScale = worldScale;
     this.viewOffX = offX;
