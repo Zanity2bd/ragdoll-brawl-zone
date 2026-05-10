@@ -5294,6 +5294,31 @@ export class GameEngine {
     const pose = this.poseFor(f);
     this.drawFighterAt(f, f.x, f.y, pose, false);
     this.drawDamageOverlay(f);
+    this.drawJuggleCounter(f);
+  }
+
+  /** Floating "xN HIT" tag above an actively juggled fighter. */
+  private drawJuggleCounter(f: Fighter) {
+    if (f.juggleHits < 2 || f.juggleFlash <= 0) return;
+    const ctx = this.ctx;
+    const a = Math.min(1, f.juggleFlash);
+    const pop = 1 + (1 - a) * 0.35;
+    const y = f.y - 18 - (1 - a) * 14;
+    ctx.save();
+    ctx.translate(f.x, y);
+    ctx.scale(pop, pop);
+    ctx.font = "700 14px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = `oklch(0.18 0.04 30 / ${0.85 * a})`;
+    ctx.fillStyle = f.juggleHits >= 5
+      ? `oklch(0.78 0.22 30 / ${a})`
+      : `oklch(0.92 0.16 80 / ${a})`;
+    const txt = `×${f.juggleHits} HIT`;
+    ctx.strokeText(txt, 0, 0);
+    ctx.fillText(txt, 0, 0);
+    ctx.restore();
   }
 
   /**
