@@ -2331,6 +2331,8 @@ export class GameEngine {
         this.slowmoMode = "impact";
         this.impactFlash = 1;
         this.shockwaves.push({ x: target.x, y: target.y + 40, r: 10, rMax: 320, life: 0.7, maxLife: 0.7, color: "oklch(0.7 0.18 25)" });
+        this.spawnCrack(target.x, 1);
+        this.spawnCrack(f.x, 0.7);
         Sfx.play("boom", 1);
         f.frenzy = null;
       }
