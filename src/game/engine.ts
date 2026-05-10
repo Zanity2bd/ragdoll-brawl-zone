@@ -870,6 +870,9 @@ export class GameEngine {
     this.slowmoT = Math.max(this.slowmoT, 1.1);
     this.slowmoMode = "impact";
     this.impactFlash = 1;
+    // KO: heaviest possible zoom punch + lateral kick toward the loser.
+    const koDir = winnerId === "p1" ? 1 : -1;
+    this.impact({ intensity: 1.0, dirX: koDir, dirY: -0.5, zoom: 0.09, flash: 0, hitstop: 0 });
     Sfx.play("boom", 0.9);
   }
 
