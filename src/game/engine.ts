@@ -3680,10 +3680,24 @@ export class GameEngine {
     if (target.downedT > 0 || target.getUpT > 0) return;
     target.hp = Math.max(0, target.hp - m.damage);
     target.hitFlash = 0.35;
+    // Air-juggle: if target is airborne (or already in a juggle), tally
+    // hits with diminishing returns. 1.0 → 0.85 → 0.7 → 0.55 → 0.45 → 0.4
+    const wasAirborne = !target.onGround || target.ragdollT > 0;
+    if (wasAirborne) {
+      target.juggleHits = Math.min(target.juggleHits + 1, 8);
+      target.juggleFlash = 1;
+    }
+    const juggleScale = target.juggleHits > 1
+      ? Math.max(0.4, 1 - (target.juggleHits - 1) * 0.15)
+      : 1;
     // Anti-chain: reduced knockback if recently ragdolled
-    const kbScale = target.ragdollImmuneT > 0 ? 0.45 : 1;
+    const kbScale = (target.ragdollImmuneT > 0 ? 0.45 : 1) * juggleScale;
     target.vx = f.facing * m.knockbackX * kbScale;
-    target.vy = m.knockbackY * kbScale;
+    // Mid-juggle: bias upward keep-up so combos read like a launch chain.
+    const kbY = wasAirborne && target.juggleHits > 1
+      ? Math.min(m.knockbackY * juggleScale, -180)
+      : m.knockbackY * kbScale;
+    target.vy = kbY;
     target.onGround = false;
     // Only ragdoll if not in chain-immune window
     if (m.ragdollT > 0 && target.ragdollImmuneT <= 0) {
