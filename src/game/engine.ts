@@ -186,8 +186,12 @@ interface Fighter {
   // Air juggle: hits stacked while target is airborne. Scales damage/KB
   // down with diminishing returns so launches stay cinematic but not abusive.
   juggleHits: number;
-  juggleResetT: number;     // resets when target lands & stays grounded
-  juggleFlash: number;      // 0..1 cosmetic pulse for floating combo counter
+  juggleResetT: number;
+  juggleFlash: number;
+  // Parry window: tap PUNCH right before an incoming hit to deflect it,
+  // stagger the attacker, and refund a chunk of super cooldown.
+  parryT: number;
+  parrySuccessT: number; // cosmetic flash after a successful parry
 }
 
 interface SmokeCloud {
