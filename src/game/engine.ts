@@ -3252,6 +3252,49 @@ export class GameEngine {
     } else if (f.trail.length > 0) {
       f.trail.shift();
     }
+
+    // ---- Per-skin signature ambient FX ----
+    if (!this.lowPower && this.particles.length < 220) {
+      // Spider-Man: faint web string trails when airborne and moving fast.
+      if (f.skin.id === "spiderman" && !f.onGround && Math.abs(f.vx) > 220) {
+        if (Math.random() < 0.55) {
+          this.particles.push({
+            x: f.x - f.facing * 6,
+            y: f.y + 30 + (Math.random() - 0.5) * 18,
+            vx: -f.vx * 0.08 + (Math.random() - 0.5) * 30,
+            vy: -f.vy * 0.05 + 10 + Math.random() * 20,
+            life: 0.45, maxLife: 0.45,
+            color: "oklch(0.96 0.02 240)",
+            size: 1.2 + Math.random() * 1.2,
+          });
+        }
+      }
+      // Superman: cool ice-breath puffs when standing still on ground (idle exhale).
+      if (
+        f.skin.id === "superman" && f.onGround && !f.flying &&
+        Math.abs(f.vx) < 30 && !f.meleeKind && f.heatVisionT <= 0 &&
+        f.stunT <= 0 && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0
+      ) {
+        // Exhale every ~2.6s, gated on a noisy phase derived from elapsed.
+        const phase = (this.elapsed + (f.id === "p1" ? 0 : 1.3)) % 2.6;
+        if (phase < 0.65) {
+          // Within the breath window, emit a small puff each frame at a low rate.
+          if (Math.random() < 0.35) {
+            const headX = f.x + f.facing * 10;
+            const headY = f.y + 14;
+            this.particles.push({
+              x: headX + f.facing * (4 + Math.random() * 6),
+              y: headY + (Math.random() - 0.5) * 3,
+              vx: f.facing * (35 + Math.random() * 30),
+              vy: -8 - Math.random() * 14,
+              life: 0.55 + Math.random() * 0.25, maxLife: 0.8,
+              color: Math.random() < 0.5 ? "oklch(0.96 0.03 220)" : "oklch(0.92 0.05 230)",
+              size: 2.5 + Math.random() * 2.5,
+            });
+          }
+        }
+      }
+    }
   }
 
   private startMelee(f: Fighter) {
