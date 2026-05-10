@@ -2623,6 +2623,8 @@ export class GameEngine {
 
     // ---- Air-juggle bookkeeping ----
     // Once the fighter is grounded & stable, the juggle counter unwinds.
+    if (f.parryT > 0) f.parryT = Math.max(0, f.parryT - dt);
+    if (f.parrySuccessT > 0) f.parrySuccessT = Math.max(0, f.parrySuccessT - dt * 1.4);
     if (f.juggleFlash > 0) f.juggleFlash = Math.max(0, f.juggleFlash - dt * 1.6);
     if (f.juggleHits > 0) {
       const stable = f.onGround && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0;
