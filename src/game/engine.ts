@@ -5345,7 +5345,28 @@ export class GameEngine {
     this.drawFighterAt(f, f.x, f.y, pose, false);
     this.drawDamageOverlay(f);
     this.drawJuggleCounter(f);
+    this.drawParryFlash(f);
   }
+
+  /** Bright "PARRY!" pop above a fighter who just deflected a hit. */
+  private drawParryFlash(f: Fighter) {
+    if (f.parrySuccessT <= 0) return;
+    const ctx = this.ctx;
+    const a = Math.min(1, f.parrySuccessT * 1.6);
+    const pop = 1 + (1 - a) * 0.45;
+    const y = f.y - 30 - (1 - a) * 18;
+    ctx.save();
+    ctx.translate(f.x, y);
+    ctx.scale(pop, pop);
+    ctx.font = "900 16px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 3.2;
+    ctx.strokeStyle = `oklch(0.18 0.06 80 / ${0.9 * a})`;
+    ctx.fillStyle = `oklch(0.95 0.20 95 / ${a})`;
+    ctx.strokeText("PARRY!", 0, 0);
+    ctx.fillText("PARRY!", 0, 0);
+    ctx.restore();
 
   /** Floating "xN HIT" tag above an actively juggled fighter. */
   private drawJuggleCounter(f: Fighter) {
