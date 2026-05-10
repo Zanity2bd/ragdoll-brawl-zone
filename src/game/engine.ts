@@ -543,6 +543,7 @@ export class GameEngine {
   private projectiles: Projectile[] = [];
   private particles: Particle[] = [];
   private groundDecals: GroundDecal[] = [];
+  private cracks: Crack[] = [];
   private shockwaves: Shockwave[] = [];
   private attackFx: ActiveFx[] = [];
   private beams: Beam[] = [];
