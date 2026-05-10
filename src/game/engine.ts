@@ -812,6 +812,8 @@ export class GameEngine {
     this.magmas = [];
     this.smokeClouds = [];
     this.debris = [];
+    this.cracks = [];
+    this.groundDecals = [];
     this.homelanderVoPlayed = false;
     this.beamWasActive = { p1: false, p2: false };
     // Restore any platforms destroyed by overload from a previous round
