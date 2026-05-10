@@ -212,7 +212,7 @@ export class CpuController {
       const dx = oppRect.x - meRect.x;
       const adx = Math.abs(dx);
       const skill = SKILLS[this.engine.getSkinIdFor(this.id)] ?? SKILLS.homelander;
-      const pref = skill.preferred;
+      const pref = skill.preferred * this.preferredScale;
       const dead = 28;
       if (adx > pref + dead) ax = Math.sign(dx);
       else if (adx < pref - dead && skill.ranged) ax = -Math.sign(dx);
