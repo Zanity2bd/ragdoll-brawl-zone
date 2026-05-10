@@ -4936,7 +4936,57 @@ export class GameEngine {
       ctx.restore();
     }
 
-    // Afterimage ghosts (drawn under main fighters)
+    // Ground cracks — jagged radial fractures from heavy slams.
+    if (this.cracks.length > 0) {
+      ctx.save();
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      for (const c of this.cracks) {
+        const a = Math.max(0, c.life / c.maxLife);
+        // Dark crack body
+        ctx.globalAlpha = a * 0.85;
+        ctx.strokeStyle = "oklch(0.10 0.02 40)";
+        ctx.lineWidth = 2.2 * c.intensity + 0.6;
+        for (const r of c.rays) {
+          const cx = Math.cos(r.ang), cy = Math.sin(r.ang) * 0.35; // flatten to floor plane
+          const nx = -Math.sin(r.ang), ny = Math.cos(r.ang) * 0.35;
+          const x0 = c.x, y0 = GROUND_Y - 0.5;
+          const x1 = x0 + cx * r.len * 0.33 + nx * r.jitter[0];
+          const y1 = y0 + cy * r.len * 0.33 + ny * r.jitter[0];
+          const x2 = x0 + cx * r.len * 0.66 + nx * r.jitter[1];
+          const y2 = y0 + cy * r.len * 0.66 + ny * r.jitter[1];
+          const x3 = x0 + cx * r.len + nx * r.jitter[2];
+          const y3 = y0 + cy * r.len + ny * r.jitter[2];
+          ctx.beginPath();
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.lineTo(x3, y3);
+          ctx.stroke();
+        }
+        // Inner highlight (lighter rim) for depth
+        ctx.globalAlpha = a * 0.35;
+        ctx.strokeStyle = "oklch(0.55 0.04 40)";
+        ctx.lineWidth = 0.8;
+        for (const r of c.rays) {
+          const cx = Math.cos(r.ang), cy = Math.sin(r.ang) * 0.35;
+          const x3 = c.x + cx * r.len;
+          const y3 = GROUND_Y - 0.5 + cy * r.len;
+          ctx.beginPath();
+          ctx.moveTo(c.x, GROUND_Y - 0.5);
+          ctx.lineTo(x3, y3);
+          ctx.stroke();
+        }
+        // Central impact dot
+        ctx.globalAlpha = a * 0.6;
+        ctx.fillStyle = "oklch(0.08 0.02 40)";
+        ctx.beginPath();
+        ctx.ellipse(c.x, GROUND_Y - 0.5, 4 * c.intensity + 1.5, 1.5 * c.intensity + 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
     for (const f of [this.p1, this.p2]) {
       if (f.trail.length === 0) continue;
       const bamf = f.meleeKind === "bamfPunch" || f.meleeKind === "bamfKick";
