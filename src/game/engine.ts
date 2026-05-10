@@ -3696,6 +3696,7 @@ export class GameEngine {
       hitstop: 0,  // already set above
     });
     this.burst(fx, fy, f.skin.glow, 28);
+    this.spawnBlood(fx, fy, f.facing as 1 | -1, intensity);
     this.shockwaves.push({ x: fx, y: fy, r: 6, rMax: 80, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.05 80)" });
     Sfx.play(m.hitSfx, 1);
     if (target.hp <= 0 && this.phase === "fight") {
