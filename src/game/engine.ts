@@ -3909,8 +3909,6 @@ export class GameEngine {
     if (target.iframeT > 0) return;
     // During downed/getup the target is on the floor — skip melee hits (mercy)
     if (target.downedT > 0 || target.getUpT > 0) return;
-    // Hit confirmed → attacker may now cancel into another move.
-    f.cancelOK = true;
     // ---- PARRY ----
     // Target tapped PUNCH within the parry window AND is facing the attacker.
     // Deflect: 0 damage, attacker staggered + brief stun, defender flashes,
@@ -3951,7 +3949,8 @@ export class GameEngine {
       Sfx.play("jab", 0.4);
       return;
     }
-    const hpBefore = target.hp;
+    // Hit confirmed (past parry) → attacker can cancel out of recovery.
+    f.cancelOK = true;
     target.hp = Math.max(0, target.hp - m.damage);
     target.hitFlash = 0.35;
     // Near-KO dramatic emphasis: when a hit takes the opponent below 25% HP
