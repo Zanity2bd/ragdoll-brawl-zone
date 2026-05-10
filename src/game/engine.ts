@@ -3951,6 +3951,7 @@ export class GameEngine {
     }
     // Hit confirmed (past parry) → attacker can cancel out of recovery.
     f.cancelOK = true;
+    const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - m.damage);
     target.hitFlash = 0.35;
     // Near-KO dramatic emphasis: when a hit takes the opponent below 25% HP
