@@ -2380,6 +2380,8 @@ export class GameEngine {
     f.hoverPhase += dt * HOVER_RATE * Math.PI * 2;
     // Weapon trail: decay every frame; sample at draw time using live pose.
     tickTrail(f.weaponTrail, dt);
+    if (f.meleeBufferT > 0) f.meleeBufferT = Math.max(0, f.meleeBufferT - dt);
+    if (f.punchBufferT > 0) f.punchBufferT = Math.max(0, f.punchBufferT - dt);
     if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) resetTrail(f.weaponTrail);
     // Decay hit-reaction overlay timer.
     if (f.hitReactT > 0) {
