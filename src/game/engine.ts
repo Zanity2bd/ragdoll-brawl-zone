@@ -2473,8 +2473,10 @@ export class GameEngine {
       f.armLagR  = lagChase(f.armLagR,  f.ragdollAV * 0.55, 8.2) * Math.pow(0.90, dt * 60);
       f.legLag   = lagChase(f.legLag,   f.ragdollAV * 0.40, 7.0) * Math.pow(0.91, dt * 60);
       // Walls — bounce with energy loss
-      if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
-      if (f.x > W - 30) { f.x = W - 30; f.vx = -Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
+      if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6);
+        f.hitReactKind = "wallBounce"; f.hitReactT = 0.22; f.hitReactDur = 0.22; f.hitReactDir = 1; f.hitReactMag = Math.min(1, Math.abs(f.vx) / 360 + 0.3); }
+      if (f.x > W - 30) { f.x = W - 30; f.vx = -Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6);
+        f.hitReactKind = "wallBounce"; f.hitReactT = 0.22; f.hitReactDur = 0.22; f.hitReactDir = -1; f.hitReactMag = Math.min(1, Math.abs(f.vx) / 360 + 0.3); }
       // Ground impact
       if (f.y + FIGHTER_H >= GROUND_Y) {
         f.y = GROUND_Y - FIGHTER_H;
@@ -2495,6 +2497,8 @@ export class GameEngine {
           f.ragdollEnergy = Math.max(0, f.ragdollEnergy - 0.25);
           this.shake = Math.max(this.shake, Math.min(14, impact * 0.05));
           Sfx.play("thud", Math.min(0.6, impact / 600));
+          f.hitReactKind = "groundBounce"; f.hitReactT = 0.18; f.hitReactDur = 0.18;
+          f.hitReactDir = (pulseDir as 1 | -1) || 1; f.hitReactMag = Math.min(1, impact / 480);
           // Dust puff
           if (!this.lowPower) {
             for (let i = 0; i < 6; i++) {
