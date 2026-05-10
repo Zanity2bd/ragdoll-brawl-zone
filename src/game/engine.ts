@@ -3497,6 +3497,41 @@ export class GameEngine {
       f.facing = t.facing === 1 ? -1 : 1;
       this.burst(f.x, f.y + 40, f.skin.glow, 16);
     }
+    // Strong AI windup telegraph on Hard / Extreme — gives the player a fair
+    // read on incoming specials: charge ring + colored glow + brief slow-mo + flash.
+    if (
+      this.cpuEnabled &&
+      f.id === "p2" &&
+      (this.cpuDifficulty === "hard" || this.cpuDifficulty === "extreme") &&
+      m.windup > 0.05
+    ) {
+      const cy = f.y + 36;
+      const glow = f.skin.glow || "255,220,120";
+      // Big outer charge ring
+      spawnFx(this.attackFx, "chargeRing", f.x + f.facing * 6, cy, {
+        size: 44,
+        life: m.windup,
+        spin: 7,
+        grow: 26,
+        blend: "lighter",
+        facing: f.facing as 1 | -1,
+      });
+      // Inner flash ring slightly delayed for a layered "ramp" feel
+      spawnFx(this.attackFx, "chargeRing", f.x + f.facing * 6, cy, {
+        size: 22,
+        life: Math.max(0.12, m.windup * 0.7),
+        spin: -9,
+        grow: 14,
+        blend: "lighter",
+        facing: f.facing as 1 | -1,
+      });
+      // Body glow flash on the AI fighter itself
+      f.hitFlash = Math.max(f.hitFlash, 0.35);
+      // Brief slow-mo so the player can react to the windup
+      this.slowmoT = Math.max(this.slowmoT, Math.min(0.22, m.windup));
+      this.slowmoMode = "impact";
+      Sfx.play("whoosh", 0.45);
+    }
     if (m.kind === "batCombo") {
       // Throw batarang immediately
       this.projectiles.push({
