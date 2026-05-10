@@ -343,7 +343,7 @@ export class CpuController {
     // === Soft positioning ===
     if (this.commitT <= 0) {
       const dead = 28;
-      const pref = skill.preferred;
+      const pref = skill.preferred * this.preferredScale;
       const lowHp = me.hp < 35;
       const desired = lowHp ? pref + 60 : pref;
 
