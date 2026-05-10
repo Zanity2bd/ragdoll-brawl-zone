@@ -1678,7 +1678,30 @@ export class GameEngine {
     }
     this.projectiles = this.projectiles.filter(p => p.life > 0 && p.x > -50 && p.x < W + 50);
 
-    for (const p of this.particles) { p.x += p.vx * sdt; p.y += p.vy * sdt; p.life -= dt; }
+    for (const p of this.particles) {
+      p.x += p.vx * sdt;
+      p.y += p.vy * sdt;
+      // Optional gravity (blood droplets, debris-like sparks)
+      if (p.grav) {
+        p.vy += 1400 * p.grav * sdt;
+        p.vx *= Math.pow(0.86, dt * 60);
+      }
+      p.life -= dt;
+      // Blood droplets that hit the ground stamp a pooling decal then die.
+      if (p.blood && p.y >= GROUND_Y - 1) {
+        if (this.groundDecals.length < 80) {
+          const r = 4 + Math.random() * 6 + p.size * 0.8;
+          this.groundDecals.push({
+            x: p.x,
+            w: r,
+            life: 6 + Math.random() * 3,
+            maxLife: 9,
+            color: "oklch(0.32 0.18 25)",
+          });
+        }
+        p.life = 0;
+      }
+    }
     this.particles = this.particles.filter(p => p.life > 0);
     for (const d of this.groundDecals) d.life -= dt;
     this.groundDecals = this.groundDecals.filter(d => d.life > 0);
