@@ -375,7 +375,7 @@ export class CpuController {
       this.wantJump = true;
     }
     // Hop occasionally when closing distance to look alive & dodge low projectiles
-    if (meR.onGround && adx > skill.preferred + 60 && Math.random() < 0.04) {
+    if (meR.onGround && adx > skill.preferred + 60 && Math.random() < 0.04 + this.jumpinessBoost * 0.5) {
       this.wantJump = true;
     }
 
