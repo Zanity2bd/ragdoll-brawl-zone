@@ -128,6 +128,11 @@ interface Fighter {
   jumpBufferT: number;
   jumpHeldT: number;       // remaining time variable-height boost is active
   airJumps: number;        // remaining mid-air jumps
+  preJumpT: number;        // crouch anticipation before launch
+  landSquashT: number;     // post-landing recovery (movement-locked, attack-cancel ok)
+  landImpact: number;      // 0..1 cached at landing (drives squash depth + frame hold)
+  // ragdoll secondary motion
+  ragdollWobble: number;   // secondary floppy angle overlay (rad, decays with energy)
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
