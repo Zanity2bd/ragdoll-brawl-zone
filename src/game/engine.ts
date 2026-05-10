@@ -3790,6 +3790,57 @@ export class GameEngine {
     }
   }
 
+  /**
+   * Anger-of-Stick blood spray.
+   * Emits an arterial cone of droplets in `dir` direction with gravity, plus a
+   * fine mist back-spray. Droplets stamp ground decals on landing. Hard-capped
+   * so heavy combos don't tank mobile framerate.
+   *
+   * intensity: 0–1. KO/super = 1, light jab = ~0.25.
+   */
+  private spawnBlood(x: number, y: number, dir: 1 | -1, intensity: number) {
+    if (this.lowPower && intensity < 0.6) return; // skip cheap hits on low-end
+    const cap = this.lowPower ? 160 : 260;
+    if (this.particles.length > cap) return;
+    const i = Math.max(0, Math.min(1, intensity));
+    // Deep arterial red → bright crimson highlights
+    const deep = "oklch(0.38 0.20 25)";
+    const bright = "oklch(0.55 0.24 28)";
+    // Main arterial spray (forward cone in strike direction)
+    const n = Math.round(6 + i * 22);
+    for (let k = 0; k < n; k++) {
+      const spread = (Math.random() - 0.5) * 1.1;
+      const ang = -Math.PI * 0.18 + spread + (dir === 1 ? 0 : Math.PI);
+      const sp = 180 + Math.random() * (220 + i * 360);
+      this.particles.push({
+        x, y,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - 60 * i,
+        life: 0.55 + Math.random() * 0.55,
+        maxLife: 1.1,
+        color: Math.random() < 0.65 ? deep : bright,
+        size: 1.5 + Math.random() * (2 + i * 2.5),
+        grav: 1,
+        blood: true,
+      });
+    }
+    // Back-spatter mist (no gravity, fast fade)
+    const m = Math.round(4 + i * 10);
+    for (let k = 0; k < m; k++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 60 + Math.random() * 180;
+      this.particles.push({
+        x, y,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - 30,
+        life: 0.18 + Math.random() * 0.22,
+        maxLife: 0.4,
+        color: deep,
+        size: 1 + Math.random() * 1.6,
+      });
+    }
+  }
+
   /** Liang-Barsky segment-vs-AABB test. */
   private segmentIntersectsRect(x1: number, y1: number, x2: number, y2: number, rx: number, ry: number, rw: number, rh: number): boolean {
     const dx = x2 - x1, dy = y2 - y1;
