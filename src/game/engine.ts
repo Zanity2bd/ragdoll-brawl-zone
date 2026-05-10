@@ -2220,6 +2220,7 @@ export class GameEngine {
             });
           }
           this.shake = Math.max(this.shake, 32);
+          this.spawnCrack(ex, 1);
           this.impactFlash = Math.max(this.impactFlash, 0.95);
           this.hitstopT = Math.max(this.hitstopT, 0.14);
           Sfx.play("boom", 1.0); Sfx.play("heavy", 0.85); Sfx.play("thud", 0.7); Sfx.play("shock", 0.4);
