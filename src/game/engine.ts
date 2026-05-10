@@ -142,6 +142,13 @@ interface Fighter {
   legLag: number;
   // Per-strike weapon/limb motion-trail ribbon (presentation only)
   weaponTrail: TrailState;
+  // Hit-reaction library — distinct flinch profiles applied as canvas
+  // transforms over the body sprite. Pure presentation; combat math unchanged.
+  hitReactKind: "light" | "heavy" | "juggle" | "wallBounce" | "groundBounce" | null;
+  hitReactT: number;
+  hitReactDur: number;
+  hitReactDir: 1 | -1;
+  hitReactMag: number; // 0..1
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
@@ -945,6 +952,7 @@ export class GameEngine {
       preJumpT: 0, landSquashT: 0, landImpact: 0, ragdollWobble: 0,
       headLag: 0, armLagL: 0, armLagR: 0, legLag: 0,
       weaponTrail: createTrail(),
+      hitReactKind: null, hitReactT: 0, hitReactDur: 0, hitReactDir: 1, hitReactMag: 0,
       wobble: createWobble(),
       dash: null,
       frenzy: null,
