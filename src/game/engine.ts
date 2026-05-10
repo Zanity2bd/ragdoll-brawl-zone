@@ -564,6 +564,17 @@ export class GameEngine {
   private impactFlash = 0;
 
   private shake = 0;
+  // Directional shake: punches the camera *toward* the strike direction
+  // before settling, on top of the legacy omnidirectional random shake.
+  private shakeDirX = 0;
+  private shakeDirY = 0;
+  private shakeDirT = 0;
+  private shakeDirDur = 0;
+  // Zoom-punch: short multiplicative zoom kick on big hits.
+  // 0 = no effect; positive values briefly multiply camZoom.
+  private zoomPunch = 0;
+  private zoomPunchT = 0;
+  private zoomPunchDur = 0;
   private introT = 1.5;
   private phase: "intro" | "fight" | "ko" = "intro";
   private winner: PlayerId | null = null;
