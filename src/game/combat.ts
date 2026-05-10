@@ -36,9 +36,9 @@ export interface MoveSpec {
 export const MOVES: Record<SkinId, MoveSpec> = {
   superman: {
     kind: "heatPunch", name: "Heat-Punch",
-    windup: 0.55, active: 0.18, recover: 0.4, cooldown: 1.6,
-    range: 70, damage: 22, knockbackX: 640, knockbackY: -280,
-    hitstop: 0.2, slowmoT: 0.4, shake: 24, ragdollT: 0.7,
+    windup: 0.5, active: 0.2, recover: 0.38, cooldown: 1.5,
+    range: 78, damage: 26, knockbackX: 760, knockbackY: -320,
+    hitstop: 0.24, slowmoT: 0.45, shake: 28, ragdollT: 0.85,
     windupSfx: "whoosh", hitSfx: "heavy",
   },
   homelander: {
