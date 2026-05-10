@@ -3695,6 +3695,8 @@ export class GameEngine {
     this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
     this.slowmoMode = "impact";
     this.impactFlash = 1;
+    // Super: max-intensity directional impact + heavy zoom punch.
+    this.impact({ intensity: 1.0, dirX: dir, dirY: -0.4, zoom: 0.07, flash: 0, hitstop: 0 });
     // Cinematic glow burst — multi-ring shockwaves + dense particle explosion
     const cx = t.x, cy = t.y + FIGHTER_H * 0.5;
     this.burst(cx, cy, attacker.skin.glow, 64);
