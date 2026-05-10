@@ -3750,6 +3750,24 @@ export class GameEngine {
             if (Math.abs(target.x - f.x) < m.range + 20) {
               this.applyMeleeHit(f, target, m, target.x, target.y + 30);
               f.meleeHitMask.add(1);
+              // Phase signature: bright crit star + outward shock + lightning sparks
+              spawnFx(this.attackFx, "impactStar", target.x, target.y + 30, {
+                size: 38, life: 0.3, grow: 90, spin: 6,
+              });
+              spawnFx(this.attackFx, "shockRing", target.x, target.y + 30, {
+                size: 18, life: 0.28, grow: 110, blend: "lighter",
+              });
+              for (let i = 0; i < 12; i++) {
+                const a = Math.random() * Math.PI * 2;
+                const s = 200 + Math.random() * 260;
+                this.particles.push({
+                  x: target.x, y: target.y + 30,
+                  vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+                  life: 0.32, maxLife: 0.32,
+                  color: f.skin.id === "nightcrawler" ? "oklch(0.7 0.22 300)" : "oklch(0.95 0.18 95)",
+                  size: 1.4 + Math.random() * 1.6,
+                });
+              }
             }
           }
           break;
