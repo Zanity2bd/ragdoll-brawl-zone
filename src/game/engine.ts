@@ -800,6 +800,8 @@ export class GameEngine {
     this.slowmoT = 0; this.slowmoMode = null;
     this.hitstopT = 0; this.impactFlash = 0;
     this.shake = 0;
+    this.shakeDirX = 0; this.shakeDirY = 0; this.shakeDirT = 0; this.shakeDirDur = 0;
+    this.zoomPunch = 0; this.zoomPunchT = 0; this.zoomPunchDur = 0;
     this.introT = 1.2;
     this.phase = "intro";
     this.winner = null;
