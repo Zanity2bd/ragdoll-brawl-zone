@@ -3476,15 +3476,36 @@ export class GameEngine {
       else if (k === "speedFlurry") { rgb = "255,250,200"; width = 7; }
       armTrail(f.weaponTrail, m.windup + m.active + 0.05, { limb, rgb, width });
     }
-    // Charge-ring telegraph for the new sprite-driven specials.
-    if (m.kind === "heatPunch" || m.kind === "crowbar" || m.kind === "repulsor" || m.kind === "groundSmash") {
-      const cy = m.kind === "groundSmash" ? f.y + FIGHTER_H - 6 : f.y + 36;
-      const col: GlobalCompositeOperation = "lighter";
-      spawnFx(this.attackFx, "chargeRing", f.x + f.facing * 8, cy, {
-        size: m.kind === "groundSmash" ? 38 : 28,
-        life: Math.max(0.18, m.windup),
-        spin: 6, grow: 18, blend: col, facing: f.facing as 1 | -1,
+    // Per-kind layered telegraph: every special gets a signature charge stack
+    // (outer ring + inner counter-spin ring) tinted to the move's element so
+    // the windup reads at a glance, even on small mobile screens.
+    {
+      const kk = m.kind as string;
+      const cy = kk === "groundSmash" ? f.y + FIGHTER_H - 6 : f.y + 36;
+      const cx = f.x + f.facing * 8;
+      let ringTint: GlobalCompositeOperation = "lighter";
+      let outer = 30, grow = 22, spin = 6;
+      if (kk === "heatPunch")        { outer = 40; grow = 28; spin = 8; }
+      else if (kk === "groundSmash") { outer = 46; grow = 30; spin = 5; }
+      else if (kk === "crowbar")     { outer = 28; grow = 16; spin = 9; }
+      else if (kk === "repulsor")    { outer = 34; grow = 24; spin = 10; }
+      else if (kk === "phaseStrike") { outer = 26; grow = 38; spin = 14; }
+      else if (kk === "speedFlurry") { outer = 30; grow = 18; spin = 16; }
+      else if (kk === "webYank")     { outer = 32; grow = 20; spin = 7; }
+      else if (kk === "batCombo")    { outer = 30; grow = 18; spin = 8; }
+      else if (kk === "laserSweep")  { outer = 36; grow = 22; spin = 11; }
+      const life = Math.max(0.18, m.windup);
+      // Outer expanding ring
+      spawnFx(this.attackFx, "chargeRing", cx, cy, {
+        size: outer, life, spin, grow, blend: ringTint, facing: f.facing as 1 | -1,
       });
+      // Inner counter-spinning ring for layered "ramp" energy
+      spawnFx(this.attackFx, "chargeRing", cx, cy, {
+        size: outer * 0.55, life: life * 0.85, spin: -spin * 1.4,
+        grow: grow * 0.6, blend: ringTint, facing: f.facing as 1 | -1,
+      });
+      // Tint fighter body briefly so the charge reads on the silhouette too
+      f.hitFlash = Math.max(f.hitFlash, kk === "speedFlurry" ? 0.18 : 0.28);
     }
     // (Homelander laser SFX is played on every beam start via the beam edge-trigger
     //  in update(), so it plays for any laser/heat-vision/unibeam in any match.)
