@@ -3506,7 +3506,6 @@ export class GameEngine {
       m.windup > 0.05
     ) {
       const cy = f.y + 36;
-      const glow = f.skin.glow || "255,220,120";
       // Big outer charge ring
       spawnFx(this.attackFx, "chargeRing", f.x + f.facing * 6, cy, {
         size: 44,
