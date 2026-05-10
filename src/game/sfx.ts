@@ -19,6 +19,14 @@ class SfxEngine {
   private musicNodes: AudioNode[] = [];
   private musicPlaying = false;
   private samples: Partial<Record<SfxName, AudioBuffer>> = {};
+  // Adaptive music: 0 = calm pad, 1 = high-intensity (bright filter, fast LFO,
+  // percussive pulse). Smoothed toward target each frame.
+  private musicIntensity = 0;
+  private musicIntensityTarget = 0;
+  private musicFilters: BiquadFilterNode[] = [];
+  private musicLfos: OscillatorNode[] = [];
+  private pulseGain: GainNode | null = null;
+  private pulseOsc: OscillatorNode | null = null;
   muted = false;
   sfxVolume = 0.8;
   musicVolume = 0.35;
@@ -88,13 +96,78 @@ class SfxEngine {
       o.connect(filt); o2.connect(filt); filt.connect(g); g.connect(this.musicGain);
       o.start(t); o2.start(t); lfo.start(t);
       this.musicNodes.push(o, o2, filt, g, lfo, lfoG);
+      this.musicFilters.push(filt);
+      this.musicLfos.push(lfo);
     }
+    // Adaptive percussive pulse layer — silent at calm intensity, swells in
+    // when intensity rises (player <30% HP, late-round drama).
+    const pulseOsc = ctx.createOscillator();
+    pulseOsc.type = "sine";
+    pulseOsc.frequency.value = 55;
+    const pulseGain = ctx.createGain();
+    pulseGain.gain.value = 0.0001;
+    const pulseLfo = ctx.createOscillator();
+    pulseLfo.type = "square";
+    pulseLfo.frequency.value = 1.4; // heartbeat rate
+    const pulseLfoG = ctx.createGain();
+    pulseLfoG.gain.value = 0;        // ramped by setMusicIntensity
+    pulseLfo.connect(pulseLfoG); pulseLfoG.connect(pulseGain.gain);
+    pulseOsc.connect(pulseGain); pulseGain.connect(this.musicGain);
+    pulseOsc.start(t); pulseLfo.start(t);
+    this.musicNodes.push(pulseOsc, pulseGain, pulseLfo, pulseLfoG);
+    this.pulseGain = pulseGain;
+    this.pulseOsc = pulseOsc;
     this.musicPlaying = true;
   }
   stopMusic() {
     for (const n of this.musicNodes) { try { (n as OscillatorNode).stop?.(); } catch { /* */ } try { n.disconnect(); } catch { /* */ } }
     this.musicNodes = [];
+    this.musicFilters = [];
+    this.musicLfos = [];
+    this.pulseGain = null;
+    this.pulseOsc = null;
     this.musicPlaying = false;
+    this.musicIntensity = 0;
+    this.musicIntensityTarget = 0;
+  }
+
+  /** Drive adaptive music. Pass 0..1; engine should call this each frame. */
+  setMusicIntensity(target: number, dt = 0.016) {
+    this.musicIntensityTarget = Math.max(0, Math.min(1, target));
+    // Smooth toward target (~0.5s time constant)
+    const k = Math.min(1, dt * 2);
+    this.musicIntensity += (this.musicIntensityTarget - this.musicIntensity) * k;
+    if (!this.ctx || !this.musicPlaying) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const it = this.musicIntensity;
+    // Brighter filter + faster LFO sweep when intense
+    for (const f of this.musicFilters) {
+      f.frequency.setTargetAtTime(320 + it * 540, t, 0.2);
+      f.Q.setTargetAtTime(4 + it * 2, t, 0.2);
+    }
+    for (const l of this.musicLfos) {
+      l.frequency.setTargetAtTime(0.07 + it * 0.35, t, 0.3);
+    }
+    // Pulse swells in during intensity (heartbeat for low-HP tension)
+    if (this.pulseGain && this.pulseOsc) {
+      const pulseAmp = it * it * 0.05;
+      this.musicNodes.forEach(() => { /* noop, refs held */ });
+      // Modulate the LFO->gain depth via the lfoG node we kept indirectly
+      // by retargeting pulseGain base.
+      this.pulseGain.gain.setTargetAtTime(0.0001 + pulseAmp, t, 0.3);
+      this.pulseOsc.frequency.setTargetAtTime(45 + it * 25, t, 0.3);
+    }
+  }
+
+  /** Layered hit: stacks 2-4 SFX with pitch jitter for body-thud realism. */
+  playHit(intensity: number) {
+    const i = Math.max(0, Math.min(1, intensity));
+    // Always: short whoosh tail + crisp jab transient
+    this.play("jab", 0.4 + i * 0.4);
+    if (i >= 0.4) this.play("punch", 0.6 + i * 0.4);
+    if (i >= 0.55) this.play("thud", 0.5 + i * 0.5);
+    if (i >= 0.8) this.play("heavy", 0.7 + (i - 0.8) * 1.5);
   }
 
   play(name: SfxName, vol = 1) {

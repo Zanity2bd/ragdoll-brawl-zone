@@ -2219,6 +2219,19 @@ export class GameEngine {
 
     this.shake = Math.max(0, this.shake - dt * 40);
 
+    // ---- Adaptive music intensity ----
+    // Ramp up when either fighter is critical, near-KO, or actively trading
+    // hits. Hit-stop / shake also bumps intensity briefly.
+    if (this.phase === "fight") {
+      const lowHp = Math.min(this.p1.hp, this.p2.hp);
+      const hpDanger = lowHp < 30 ? (30 - lowHp) / 30 : 0;
+      const heat = Math.min(1, this.shake / 30);
+      const intensity = Math.max(hpDanger * 0.85 + heat * 0.4, hpDanger);
+      Sfx.setMusicIntensity(Math.min(1, intensity), dt);
+    } else {
+      Sfx.setMusicIntensity(0, dt);
+    }
+
     this.snapAccum += dt;
     if (this.snapAccum >= 0.1 || this.phase !== "fight") {
       this.snapAccum = 0;
@@ -3785,6 +3798,8 @@ export class GameEngine {
     this.spawnBlood(fx, fy, f.facing as 1 | -1, intensity);
     this.shockwaves.push({ x: fx, y: fy, r: 6, rMax: 80, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.05 80)" });
     Sfx.play(m.hitSfx, 1);
+    // Layered impact stack — adds whoosh + body thud + heavy boom on big hits
+    Sfx.playHit(intensity);
     if (target.hp <= 0 && this.phase === "fight") {
       this.triggerKo(f.id);
     }

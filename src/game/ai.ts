@@ -70,6 +70,44 @@ const SKILLS: Record<SkinId, SkillCfg> = {
   butcher:      { preferred: 50,  specialMin: 0,   specialMax: 70,  bruiser: true },
 };
 
+// ---- Personality profiles ----
+// Each skin has a temperament that biases the existing decision weights.
+// aggressive → more specials, less kiting, closes distance
+// defensive  → more kiting, fewer specials, prefers cover
+// zoner      → keeps mid-range, leans on power abilities
+// grappler   → rushes in, hunts grabs/heavies at point-blank
+type Personality = "aggressive" | "defensive" | "zoner" | "grappler";
+
+interface PersonalityCfg {
+  specialMul: number;    // multiplies cfg.specialChance
+  powerMul: number;      // multiplies cfg.powerChance
+  kiteMul: number;       // multiplies cfg.kiteChance
+  preferredMul: number;  // scales preferred engagement distance
+  reactBoost: number;    // subtracts from reactMs (faster = harder)
+  jumpinessBoost: number; // adds to anti-stand-still hop chance
+}
+
+const PERSONA: Record<Personality, PersonalityCfg> = {
+  aggressive: { specialMul: 1.25, powerMul: 1.20, kiteMul: 0.45, preferredMul: 0.75, reactBoost: 30, jumpinessBoost: 0.15 },
+  defensive:  { specialMul: 0.80, powerMul: 1.05, kiteMul: 1.55, preferredMul: 1.30, reactBoost: 0,  jumpinessBoost: 0.05 },
+  zoner:      { specialMul: 0.95, powerMul: 1.45, kiteMul: 1.20, preferredMul: 1.20, reactBoost: 10, jumpinessBoost: 0    },
+  grappler:   { specialMul: 1.30, powerMul: 0.90, kiteMul: 0.30, preferredMul: 0.55, reactBoost: 20, jumpinessBoost: 0.20 },
+};
+
+const SKIN_PERSONA: Record<SkinId, Personality> = {
+  superman:     "aggressive",
+  hulk:         "grappler",
+  butcher:      "grappler",
+  atrain:       "aggressive",
+  flash:        "aggressive",
+  nightcrawler: "aggressive",
+  spiderman:    "zoner",
+  ironman:      "zoner",
+  homelander:   "zoner",
+  heatwave:     "zoner",
+  batman:       "defensive",
+};
+
 type RectInfo = ReturnType<GameEngine["getFighterRect"]> & {};
 
 export class CpuController {
@@ -96,6 +134,8 @@ export class CpuController {
   private nextPowerT = 0;
   // anti-stand-still timer — forces a small movement / jump when idle too long
   private idleT = 0;
+  private preferredScale = 1;
+  private jumpinessBoost = 0;
 
   constructor(engine: GameEngine, id: PlayerId = "p2", diff: Difficulty = "hard") {
     this.engine = engine;
@@ -109,12 +149,24 @@ export class CpuController {
     if (snap.phase !== "fight") return;
     if (snap.teleTargeting) return;
 
-    const cfg = DIFF[this.diff];
+    const baseCfg = DIFF[this.diff];
+    const persona = PERSONA[SKIN_PERSONA[this.engine.getSkinIdFor(this.id)] ?? "aggressive"];
+    // Personality-modulated copy used by the rest of decide()
+    const cfg: DiffCfg = {
+      ...baseCfg,
+      specialChance: Math.min(1, baseCfg.specialChance * persona.specialMul),
+      powerChance:   Math.min(1, baseCfg.powerChance   * persona.powerMul),
+      kiteChance:    Math.min(1, baseCfg.kiteChance    * persona.kiteMul),
+      reactMs:       Math.max(40, baseCfg.reactMs - persona.reactBoost),
+    };
     const me = this.id === "p1" ? snap.p1 : snap.p2;
     const opp = this.id === "p1" ? snap.p2 : snap.p1;
     const meRect = this.engine.getFighterRect(this.id) as RectInfo | null;
     const oppRect = this.engine.getFighterRect(this.id === "p1" ? "p2" : "p1") as RectInfo | null;
     if (!meRect || !oppRect) return;
+    // Personality also rescales preferred engagement distance.
+    this.preferredScale = persona.preferredMul;
+    this.jumpinessBoost = persona.jumpinessBoost;
 
     this.reactT -= dt;
     this.feintT -= dt;
@@ -160,7 +212,7 @@ export class CpuController {
       const dx = oppRect.x - meRect.x;
       const adx = Math.abs(dx);
       const skill = SKILLS[this.engine.getSkinIdFor(this.id)] ?? SKILLS.homelander;
-      const pref = skill.preferred;
+      const pref = skill.preferred * this.preferredScale;
       const dead = 28;
       if (adx > pref + dead) ax = Math.sign(dx);
       else if (adx < pref - dead && skill.ranged) ax = -Math.sign(dx);
@@ -291,7 +343,7 @@ export class CpuController {
     // === Soft positioning ===
     if (this.commitT <= 0) {
       const dead = 28;
-      const pref = skill.preferred;
+      const pref = skill.preferred * this.preferredScale;
       const lowHp = me.hp < 35;
       const desired = lowHp ? pref + 60 : pref;
 
@@ -323,7 +375,7 @@ export class CpuController {
       this.wantJump = true;
     }
     // Hop occasionally when closing distance to look alive & dodge low projectiles
-    if (meR.onGround && adx > skill.preferred + 60 && Math.random() < 0.04) {
+    if (meR.onGround && adx > skill.preferred + 60 && Math.random() < 0.04 + this.jumpinessBoost * 0.5) {
       this.wantJump = true;
     }
 
