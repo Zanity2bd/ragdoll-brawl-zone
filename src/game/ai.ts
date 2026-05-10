@@ -134,6 +134,8 @@ export class CpuController {
   private nextPowerT = 0;
   // anti-stand-still timer — forces a small movement / jump when idle too long
   private idleT = 0;
+  private preferredScale = 1;
+  private jumpinessBoost = 0;
 
   constructor(engine: GameEngine, id: PlayerId = "p2", diff: Difficulty = "hard") {
     this.engine = engine;
