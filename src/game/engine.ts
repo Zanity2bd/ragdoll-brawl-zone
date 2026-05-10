@@ -4720,8 +4720,30 @@ export class GameEngine {
   private poseFor(f: Fighter): Pose {
     if (f.ragdollT > 0) {
       const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H, f.ragdollAng);
-      // Override lean with physical body angle for stable visual
-      return { ...p, lean: f.ragdollAng };
+      // Per-limb rotational lag — limbs trail the body so it reads as flesh,
+      // not a rigid plank. Lag values are in radians; convert to small XY swings.
+      const sw = (lag: number, r: number): [number, number] => {
+        const a = Math.max(-1.4, Math.min(1.4, lag));
+        return [Math.sin(a) * r, (1 - Math.cos(a)) * r * 0.6];
+      };
+      const [hx, hy] = sw(f.headLag, 4);
+      const [aLx, aLy] = sw(f.armLagL, 7);
+      const [aRx, aRy] = sw(f.armLagR, 7);
+      const [lx, ly] = sw(f.legLag, 5);
+      return {
+        ...p,
+        headOffsetY: p.headOffsetY + hy,
+        handL: [p.handL[0] + aLx, p.handL[1] + aLy],
+        handR: [p.handR[0] + aRx, p.handR[1] + aRy],
+        armL: [p.armL[0], p.armL[1], p.armL[2] + aLx * 0.5, p.armL[3] + aLy * 0.5, p.armL[4] + aLx, p.armL[5] + aLy],
+        armR: [p.armR[0], p.armR[1], p.armR[2] + aRx * 0.5, p.armR[3] + aRy * 0.5, p.armR[4] + aRx, p.armR[5] + aRy],
+        footL: [p.footL[0] + lx, p.footL[1] + ly],
+        footR: [p.footR[0] + lx, p.footR[1] + ly],
+        legL: [p.legL[0], p.legL[1], p.legL[2] + lx * 0.5, p.legL[3] + ly * 0.5, p.legL[4] + lx, p.legL[5] + ly],
+        legR: [p.legR[0], p.legR[1], p.legR[2] + lx * 0.5, p.legR[3] + ly * 0.5, p.legR[4] + lx, p.legR[5] + ly],
+        // Override lean with physical body angle for stable visual; add tiny head bias.
+        lean: f.ragdollAng + hx * 0.01,
+      };
     }
     if (f.downedT > 0) {
       const targetAng = f.ragdollAng >= 0 ? Math.PI / 2 : -Math.PI / 2;
