@@ -5900,16 +5900,18 @@ export class GameEngine {
         return;
       }
 
+      // ---- Anticipation crouch (pre-jump) ----
+      if (f.preJumpT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
+
       // ---- Airborne (jump/fall) ----
       if (!f.onGround) {
         if (f.vy < -120) drawFrame(JUMP_RISE_FRAME);
-        else if (f.vy < 60) drawFrame(JUMP_APEX_FRAME);
         else drawFrame(JUMP_APEX_FRAME);
         return;
       }
 
-      // ---- Just landed (squash) ----
-      if (f.justLandedT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
+      // ---- Just landed (squash + recovery hold) ----
+      if (f.justLandedT > 0 || f.landSquashT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
 
       // ---- Combo swing (high kick / knee finisher) ----
       if (f.comboKind && f.comboT > 0) {
