@@ -3727,6 +3727,17 @@ export class GameEngine {
               this.impactFlash = Math.max(this.impactFlash, 0.3);
               this.hitstopT = Math.max(this.hitstopT, 0.04);
               this.burst(target.x, target.y + 40, f.skin.glow, 6);
+              // Speed lines streaking off the target
+              for (let i = 0; i < 4; i++) {
+                this.particles.push({
+                  x: target.x + (Math.random() - 0.5) * 18,
+                  y: target.y + 24 + Math.random() * 30,
+                  vx: -f.facing * (220 + Math.random() * 260),
+                  vy: (Math.random() - 0.5) * 30,
+                  life: 0.22, maxLife: 0.22,
+                  color: "oklch(0.96 0.05 90)", size: 1 + Math.random() * 1.4,
+                });
+              }
               Sfx.play("jab", 0.5);
               if (target.hp <= 0) { this.triggerKo(f.id); }
             }
