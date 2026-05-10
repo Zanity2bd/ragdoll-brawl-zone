@@ -3970,6 +3970,17 @@ export class GameEngine {
       target.wobble.staggerMag = mag;
       applyImpulse(target.wobble, f.facing, -0.45, mag);
     }
+    // Hit-reaction profile: pick light/heavy/juggle based on context. Ragdoll
+    // hits get no overlay (ragdoll renderer owns the body during that window).
+    if (target.ragdollT <= 0) {
+      const dmgN = Math.min(1, m.damage / 22);
+      const isJuggle = wasAirborne && target.juggleHits >= 2;
+      target.hitReactKind = isJuggle ? "juggle" : (m.damage >= 12 ? "heavy" : "light");
+      target.hitReactT = isJuggle ? 0.30 : (m.damage >= 12 ? 0.26 : 0.18);
+      target.hitReactDur = target.hitReactT;
+      target.hitReactDir = f.facing as 1 | -1;
+      target.hitReactMag = Math.max(0.3, dmgN);
+    }
     this.shake = Math.max(this.shake, m.shake);
     this.hitstopT = Math.max(this.hitstopT, Math.max(m.hitstop, 0.025)); // 1–2 frame hit-freeze min
     if (m.slowmoT > 0) { this.slowmoT = Math.max(this.slowmoT, m.slowmoT); this.slowmoMode = "impact"; }
