@@ -5698,7 +5698,56 @@ export class GameEngine {
 
   private drawFighter(f: Fighter) {
     const pose = this.poseFor(f);
-    this.drawFighterAt(f, f.x, f.y, pose, false);
+    const ctx = this.ctx;
+    // Hit-reaction transform — distinct profile per flinch kind. Pure
+    // canvas-space transform applied around the body so the sprite stays
+    // unchanged but the silhouette reads as "hit".
+    const hr = f.hitReactKind;
+    if (hr && f.hitReactT > 0 && f.ragdollT <= 0) {
+      const u = f.hitReactT / Math.max(0.0001, f.hitReactDur);   // 1 → 0
+      // Ease-out so the snap is on impact and recovery is smooth
+      const e = u * u;
+      const dir = f.hitReactDir;
+      const mag = f.hitReactMag;
+      let dx = 0, dy = 0, rot = 0, sx = 1, sy = 1;
+      switch (hr) {
+        case "light":
+          dx = dir * 4 * mag * e;
+          rot = -dir * 0.05 * mag * e;
+          break;
+        case "heavy":
+          dx = dir * 9 * mag * e;
+          dy = -3 * mag * e;
+          rot = -dir * 0.13 * mag * e;
+          sy = 1 - 0.07 * mag * e; sx = 1 + 0.05 * mag * e; // squash
+          break;
+        case "juggle":
+          // Spin tilt for chained air hits — rotates more on each flinch.
+          dx = dir * 5 * mag * e;
+          dy = -6 * mag * e;
+          rot = -dir * (0.18 + Math.min(0.18, f.juggleHits * 0.025)) * mag * e;
+          break;
+        case "wallBounce":
+          dx = dir * 7 * mag * e;
+          rot = dir * 0.16 * mag * e;
+          sx = 1 - 0.08 * mag * e; sy = 1 + 0.06 * mag * e; // sideways squash
+          break;
+        case "groundBounce":
+          dy = -4 * mag * e;
+          sx = 1 + 0.10 * mag * e; sy = 1 - 0.10 * mag * e; // pancake
+          rot = dir * 0.06 * mag * e;
+          break;
+      }
+      ctx.save();
+      ctx.translate(f.x + dx, f.y + FIGHTER_H + dy);
+      ctx.rotate(rot);
+      ctx.scale(sx, sy);
+      ctx.translate(-(f.x), -(f.y + FIGHTER_H));
+      this.drawFighterAt(f, f.x, f.y, pose, false);
+      ctx.restore();
+    } else {
+      this.drawFighterAt(f, f.x, f.y, pose, false);
+    }
     this.drawDamageOverlay(f);
     this.drawJuggleCounter(f);
     this.drawParryFlash(f);
