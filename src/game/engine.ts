@@ -2771,6 +2771,7 @@ export class GameEngine {
         if (dx > -10 && dx < range && Math.abs(target.y - f.y) < FIGHTER_H) {
           if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
             f.comboHit = true;
+            f.cancelOK = true;
             target.hp = Math.max(0, target.hp - dmg);
             target.hitFlash = 0.28;
             target.vx += f.facing * (f.comboKind === "kick" ? 220 : 180);
@@ -2804,7 +2805,7 @@ export class GameEngine {
         if (dx > -10 && dx < PUNCH_RANGE && Math.abs(target.y - f.y) < FIGHTER_H) {
           if (this.meleeBlockedByProp(f, PUNCH_RANGE, PUNCH_DMG)) {
             f.punchHit = true;
-            this.shake = Math.max(this.shake, 3);
+            f.cancelOK = true;
             Sfx.play("thud", 0.35);
           } else if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
             f.punchHit = true;
