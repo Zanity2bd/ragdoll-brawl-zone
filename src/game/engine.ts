@@ -811,6 +811,49 @@ export class GameEngine {
   }
 
   /**
+   * Centralized "this hit feels heavy" funnel. Layers directional shake,
+   * zoom-punch, hit-stop, and white-flash from a single intensity value.
+   * Additive on top of legacy `this.shake` / `this.hitstopT` calls — safe
+   * to sprinkle next to existing impact code without removing the old lines.
+   *
+   * intensity: 0..1 (0.4 = light hit, 0.7 = heavy, 1.0 = super/finisher)
+   * dirX/dirY: world-space direction the strike is travelling. Camera
+   *            kicks ALONG this vector so the player feels the punch land.
+   */
+  private impact(opts: {
+    intensity: number;
+    dirX?: number;
+    dirY?: number;
+    flash?: number;
+    hitstop?: number;
+    zoom?: number;
+  }) {
+    const i = Math.max(0, Math.min(1, opts.intensity));
+    // Directional shake: decays over ~120-220ms scaled by intensity.
+    const dx = opts.dirX ?? 0;
+    const dy = opts.dirY ?? 0;
+    const len = Math.hypot(dx, dy) || 1;
+    const kickStrength = 6 + i * 18; // px at peak, in screen space
+    this.shakeDirX = (dx / len) * kickStrength;
+    this.shakeDirY = (dy / len) * kickStrength;
+    this.shakeDirDur = 0.12 + i * 0.10;
+    this.shakeDirT = this.shakeDirDur;
+    // Zoom-punch: 1.0 → 1+kick → 1.0 over ~180ms. Heavy hits punch harder.
+    const z = opts.zoom ?? (0.02 + i * 0.045);
+    this.zoomPunch = Math.max(this.zoomPunch, z);
+    this.zoomPunchDur = 0.18 + i * 0.08;
+    this.zoomPunchT = this.zoomPunchDur;
+    // Layer hit-stop and white flash on top of existing scalars (max so we
+    // never *reduce* what other code already set this frame).
+    const hs = opts.hitstop ?? (0.04 + i * 0.10);
+    this.hitstopT = Math.max(this.hitstopT, hs);
+    const fl = opts.flash ?? (0.25 + i * 0.55);
+    this.impactFlash = Math.max(this.impactFlash, fl);
+    // Background omni-shake floor scales with intensity.
+    this.shake = Math.max(this.shake, 8 + i * 28);
+  }
+
+  /**
    * Single funnel for "fight is over". Stamps cinematic state once so the UI
    * can hold off the K.O. overlay until the slow-mo + zoom + flash plays out.
    */
