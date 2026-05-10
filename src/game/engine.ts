@@ -2718,6 +2718,9 @@ export class GameEngine {
       }
     }
     if (intent.punch && f.punchT === 0 && f.comboKind == null && f.punchCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
+      // Arm a tight parry window on every punch tap. If a hit lands within
+      // the next ~140ms it'll be deflected (see applyMeleeHit).
+      f.parryT = 0.14;
       if (f.comboStep === 1 && f.comboWindowT > 0) {
         // Step 2: high kick
         f.comboKind = "kick"; f.comboT = 0.0001; f.comboDur = 0.32; f.comboHit = false;
