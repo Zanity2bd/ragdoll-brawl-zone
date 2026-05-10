@@ -2837,7 +2837,25 @@ export class GameEngine {
         f.comboWindowT = 0.45;
       }
     }
-    if (intent.punch && f.punchT === 0 && f.comboKind == null && f.punchCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
+    // Input buffer: a tap during recovery/cooldown is remembered for ~130ms
+    // so chains feel responsive even on imperfect timing.
+    if (intent.punch) f.punchBufferT = 0.13;
+    if (intent.melee) f.meleeBufferT = 0.13;
+    // Cancel pass: when an attack has landed (cancelOK) and a fresh punch is
+    // pressed/buffered, snap-clear the current attack so the new one can start.
+    const punchPressed = intent.punch || f.punchBufferT > 0;
+    if (f.cancelOK && punchPressed && (f.punchT > 0 || f.comboKind || f.meleeKind)) {
+      f.punchT = 0; f.punchHit = false; f.punchCd = 0;
+      f.comboKind = null; f.comboT = 0; f.comboHit = false;
+      // Don't fully zero combo step — preserve chain progression so cancel
+      // into next combo step still reads (jab→kick→knee).
+      if (f.meleeKind) { f.meleeKind = null; f.meleeT = 0; f.meleeDur = 0; f.meleeHitMask.clear(); }
+      f.attackAnim = 0;
+      f.recoverT = 0;
+      f.cancelOK = false;
+    }
+    if (punchPressed && f.punchT === 0 && f.comboKind == null && f.punchCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
+      f.punchBufferT = 0; // consumed
       // Arm a tight parry window on every punch tap. If a hit lands within
       // the next ~140ms it'll be deflected (see applyMeleeHit).
       f.parryT = 0.14;
