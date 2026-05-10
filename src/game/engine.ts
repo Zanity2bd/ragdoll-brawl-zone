@@ -2915,7 +2915,11 @@ export class GameEngine {
       if (!f.meleeKind) {
         const canFire = f.skin.id === "heatwave";
         if (canFire && intent.fire && f.fireCd <= 0) this.fire(f);
-        if (intent.melee && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) this.startMelee(f);
+        if ((intent.melee || f.meleeBufferT > 0) && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) {
+          if (f.cancelOK) { f.meleeCd = 0; f.meleeKind = null; f.meleeT = 0; f.attackAnim = 0; f.cancelOK = false; }
+          f.meleeBufferT = 0;
+          this.startMelee(f);
+        }
       }
       f.walkPhase += ldt * 1.4;
       f.x += f.vx * ldt;
@@ -3208,7 +3212,11 @@ export class GameEngine {
           f.vx = 0; f.vy = 0;
           this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
         }
-        if (intent.melee && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) this.startMelee(f);
+        if ((intent.melee || f.meleeBufferT > 0) && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) {
+          if (f.cancelOK) { f.meleeCd = 0; f.meleeKind = null; f.meleeT = 0; f.attackAnim = 0; f.cancelOK = false; }
+          f.meleeBufferT = 0;
+          this.startMelee(f);
+        }
       }
 
       if (f.onGround) {
