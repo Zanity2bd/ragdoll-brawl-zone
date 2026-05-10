@@ -19,6 +19,7 @@ import {
 import { getStance } from "./stances";
 import { loadV2Sheet } from "./walkCycleV2";
 import { loadAttackFx, spawnFx, tickFx, drawFxPool, type ActiveFx } from "./attackFx";
+import { createTrail, armTrail, sampleTrail, tickTrail, drawTrail, resetTrail, type TrailState } from "./weaponTrail";
 
 export type PlayerId = "p1" | "p2";
 
@@ -139,6 +140,8 @@ interface Fighter {
   armLagL: number;
   armLagR: number;
   legLag: number;
+  // Per-strike weapon/limb motion-trail ribbon (presentation only)
+  weaponTrail: TrailState;
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
@@ -941,6 +944,7 @@ export class GameEngine {
       coyoteT: 0, jumpBufferT: 0, jumpHeldT: 0, airJumps: 0,
       preJumpT: 0, landSquashT: 0, landImpact: 0, ragdollWobble: 0,
       headLag: 0, armLagL: 0, armLagR: 0, legLag: 0,
+      weaponTrail: createTrail(),
       wobble: createWobble(),
       dash: null,
       frenzy: null,
