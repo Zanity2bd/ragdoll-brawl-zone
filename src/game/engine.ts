@@ -2449,6 +2449,14 @@ export class GameEngine {
       f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 2);
       f.ragdollAV *= Math.pow(0.94, dt * 60);
       f.ragdollAng += f.ragdollAV * dt;
+      // Per-limb rotational lag — each limb chases ragdollAV with its own time
+      // constant so head/arms/legs flop with offset phase, never lockstep.
+      const lagChase = (cur: number, target: number, k: number) =>
+        cur + (target - cur) * Math.min(1, dt * k);
+      f.headLag  = lagChase(f.headLag,  f.ragdollAV * 0.35, 6.5) * Math.pow(0.92, dt * 60);
+      f.armLagL  = lagChase(f.armLagL,  f.ragdollAV * 0.55, 9.0) * Math.pow(0.90, dt * 60);
+      f.armLagR  = lagChase(f.armLagR,  f.ragdollAV * 0.55, 8.2) * Math.pow(0.90, dt * 60);
+      f.legLag   = lagChase(f.legLag,   f.ragdollAV * 0.40, 7.0) * Math.pow(0.91, dt * 60);
       // Walls — bounce with energy loss
       if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
       if (f.x > W - 30) { f.x = W - 30; f.vx = -Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
