@@ -213,6 +213,10 @@ interface Particle {
   maxLife: number;
   color: string;
   size: number;
+  /** Optional gravity multiplier (1 = full gravity). Used for blood droplets. */
+  grav?: number;
+  /** When true, on touching ground (GROUND_Y) particle stamps a ground decal. */
+  blood?: boolean;
 }
 
 interface Shockwave { x: number; y: number; r: number; rMax: number; life: number; maxLife: number; color: string; }
@@ -873,6 +877,9 @@ export class GameEngine {
     // KO: heaviest possible zoom punch + lateral kick toward the loser.
     const koDir = winnerId === "p1" ? 1 : -1;
     this.impact({ intensity: 1.0, dirX: koDir, dirY: -0.5, zoom: 0.09, flash: 0, hitstop: 0 });
+    // Finisher blood burst at the loser's torso — sells the kill.
+    this.spawnBlood(loser.x, loser.y + FIGHTER_H * 0.45, koDir as 1 | -1, 1);
+    this.spawnBlood(loser.x, loser.y + FIGHTER_H * 0.30, koDir as 1 | -1, 0.85);
     Sfx.play("boom", 0.9);
   }
 
@@ -1674,7 +1681,30 @@ export class GameEngine {
     }
     this.projectiles = this.projectiles.filter(p => p.life > 0 && p.x > -50 && p.x < W + 50);
 
-    for (const p of this.particles) { p.x += p.vx * sdt; p.y += p.vy * sdt; p.life -= dt; }
+    for (const p of this.particles) {
+      p.x += p.vx * sdt;
+      p.y += p.vy * sdt;
+      // Optional gravity (blood droplets, debris-like sparks)
+      if (p.grav) {
+        p.vy += 1400 * p.grav * sdt;
+        p.vx *= Math.pow(0.86, dt * 60);
+      }
+      p.life -= dt;
+      // Blood droplets that hit the ground stamp a pooling decal then die.
+      if (p.blood && p.y >= GROUND_Y - 1) {
+        if (this.groundDecals.length < 80) {
+          const r = 4 + Math.random() * 6 + p.size * 0.8;
+          this.groundDecals.push({
+            x: p.x,
+            w: r,
+            life: 6 + Math.random() * 3,
+            maxLife: 9,
+            color: "oklch(0.32 0.18 25)",
+          });
+        }
+        p.life = 0;
+      }
+    }
     this.particles = this.particles.filter(p => p.life > 0);
     for (const d of this.groundDecals) d.life -= dt;
     this.groundDecals = this.groundDecals.filter(d => d.life > 0);
@@ -3669,6 +3699,7 @@ export class GameEngine {
       hitstop: 0,  // already set above
     });
     this.burst(fx, fy, f.skin.glow, 28);
+    this.spawnBlood(fx, fy, f.facing as 1 | -1, intensity);
     this.shockwaves.push({ x: fx, y: fy, r: 6, rMax: 80, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.05 80)" });
     Sfx.play(m.hitSfx, 1);
     if (target.hp <= 0 && this.phase === "fight") {
@@ -3705,6 +3736,8 @@ export class GameEngine {
     this.burst(cx, cy, attacker.skin.glow, 64);
     this.burst(cx, cy, "oklch(0.98 0.10 80)", 48);
     this.burst(cx, cy, "oklch(0.92 0.18 30)", 36);
+    // Heavy arterial spray for super impact
+    this.spawnBlood(cx, cy, dir as 1 | -1, 1);
     // Radial spark streaks
     for (let i = 0; i < 28; i++) {
       const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
@@ -3759,6 +3792,57 @@ export class GameEngine {
       this.particles.push({
         x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
         life: 0.6, maxLife: 0.6, color, size: 2 + Math.random() * 2,
+      });
+    }
+  }
+
+  /**
+   * Anger-of-Stick blood spray.
+   * Emits an arterial cone of droplets in `dir` direction with gravity, plus a
+   * fine mist back-spray. Droplets stamp ground decals on landing. Hard-capped
+   * so heavy combos don't tank mobile framerate.
+   *
+   * intensity: 0–1. KO/super = 1, light jab = ~0.25.
+   */
+  private spawnBlood(x: number, y: number, dir: 1 | -1, intensity: number) {
+    if (this.lowPower && intensity < 0.6) return; // skip cheap hits on low-end
+    const cap = this.lowPower ? 160 : 260;
+    if (this.particles.length > cap) return;
+    const i = Math.max(0, Math.min(1, intensity));
+    // Deep arterial red → bright crimson highlights
+    const deep = "oklch(0.38 0.20 25)";
+    const bright = "oklch(0.55 0.24 28)";
+    // Main arterial spray (forward cone in strike direction)
+    const n = Math.round(6 + i * 22);
+    for (let k = 0; k < n; k++) {
+      const spread = (Math.random() - 0.5) * 1.1;
+      const ang = -Math.PI * 0.18 + spread + (dir === 1 ? 0 : Math.PI);
+      const sp = 180 + Math.random() * (220 + i * 360);
+      this.particles.push({
+        x, y,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - 60 * i,
+        life: 0.55 + Math.random() * 0.55,
+        maxLife: 1.1,
+        color: Math.random() < 0.65 ? deep : bright,
+        size: 1.5 + Math.random() * (2 + i * 2.5),
+        grav: 1,
+        blood: true,
+      });
+    }
+    // Back-spatter mist (no gravity, fast fade)
+    const m = Math.round(4 + i * 10);
+    for (let k = 0; k < m; k++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 60 + Math.random() * 180;
+      this.particles.push({
+        x, y,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - 30,
+        life: 0.18 + Math.random() * 0.22,
+        maxLife: 0.4,
+        color: deep,
+        size: 1 + Math.random() * 1.6,
       });
     }
   }
@@ -5176,6 +5260,57 @@ export class GameEngine {
   private drawFighter(f: Fighter) {
     const pose = this.poseFor(f);
     this.drawFighterAt(f, f.x, f.y, pose, false);
+    this.drawDamageOverlay(f);
+  }
+
+  /**
+   * Anger-of-Stick damage state: as HP drops the body shows progressive
+   * blood/bruising. Drawn AFTER the sprite so it tints whatever frame is
+   * on screen. Hidden during ragdoll/down because we want the silhouette
+   * clean during cinematic moments (the blood spray sells those instead).
+   */
+  private drawDamageOverlay(f: Fighter) {
+    if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) return;
+    const hp = Math.max(0, f.hp);
+    if (hp >= 60) return; // no visible damage above 60% HP
+    const ctx = this.ctx;
+    // Tier curve: 60→0 maps to 0→1 intensity
+    const t = Math.min(1, (60 - hp) / 60);
+    const x = f.x + f.bodyLagX;
+    const top = f.y + FIGHTER_H * 0.10;
+    const h = FIGHTER_H * 0.65;
+    const w = FIGHTER_H * 0.34;
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+    // Bruise wash — desaturated dark red, gets stronger
+    ctx.globalAlpha = 0.18 + t * 0.42;
+    ctx.fillStyle = hp < 15
+      ? "oklch(0.30 0.18 22)"          // soaked
+      : hp < 30 ? "oklch(0.42 0.15 22)" // blood streaks
+      : "oklch(0.55 0.10 25)";          // light bruise
+    ctx.beginPath();
+    ctx.ellipse(x, top + h * 0.5, w, h * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // Drip streaks (only at lower tiers)
+    if (hp < 30 && !this.lowPower) {
+      ctx.save();
+      ctx.strokeStyle = "oklch(0.32 0.18 25)";
+      ctx.lineWidth = 1.2;
+      ctx.globalAlpha = 0.55 + t * 0.3;
+      const seed = (f.id === "p1" ? 13 : 27);
+      const drips = hp < 15 ? 5 : 3;
+      for (let i = 0; i < drips; i++) {
+        const ox = ((seed * (i + 1) * 53) % 19) - 9;
+        const sy = top + (i * 8 + (seed % 7));
+        const len = 8 + ((seed * (i + 3)) % 12) + t * 10;
+        ctx.beginPath();
+        ctx.moveTo(x + ox, sy);
+        ctx.lineTo(x + ox + (i % 2 ? 1 : -1), sy + len);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
 
   private drawFighterAt(f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
