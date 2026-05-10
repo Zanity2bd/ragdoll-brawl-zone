@@ -291,17 +291,19 @@ export interface Intents {
 const W = 1280;
 const H = 720;
 const GROUND_Y = 600;
-const GRAVITY = 1500;
-const FALL_GRAVITY_MUL = 1.55;     // heavier on the way down → snappy arc
-const LOW_JUMP_GRAVITY_MUL = 1.9;  // stop boosting when jump released early
+const GRAVITY = 1750;              // base — heavier than vanilla for committed arcs
+const FALL_GRAVITY_MUL = 1.85;     // heavier on the way down → snappy fall
+const LOW_JUMP_GRAVITY_MUL = 2.2;  // jump released early → kill ascent fast
+const APEX_GRAVITY_MUL = 0.55;     // softens the very top of the arc (hang-time pop)
 const MOVE_SPEED = 210;
 const ACCEL = 1400;
 const FRICTION = 1600;
 const AIR_CONTROL = 0.55;          // accel multiplier in air
-const JUMP_V = 640;
-const JUMP_HOLD_T = 0.18;          // window during which holding jump keeps gravity light
-const COYOTE_T = 0.10;             // post-leave grace
-const JUMP_BUFFER_T = 0.13;        // press buffer
+const JUMP_V = 690;                // bumped to compensate for stronger gravity
+const JUMP_HOLD_T = 0.20;          // window during which holding jump keeps gravity light
+const PRE_JUMP_T = 0.07;           // anticipation crouch before launch
+const COYOTE_T = 0.09;             // post-leave grace
+const JUMP_BUFFER_T = 0.11;        // press buffer
 const MAX_AIR_JUMPS = 1;            // double-jump for non-flyers
 const FIGHTER_H = 90;
 // Universal basic punch — sprite-driven (frames 11–14 + recovery 15).
