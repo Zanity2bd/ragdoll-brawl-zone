@@ -877,6 +877,9 @@ export class GameEngine {
     // KO: heaviest possible zoom punch + lateral kick toward the loser.
     const koDir = winnerId === "p1" ? 1 : -1;
     this.impact({ intensity: 1.0, dirX: koDir, dirY: -0.5, zoom: 0.09, flash: 0, hitstop: 0 });
+    // Finisher blood burst at the loser's torso — sells the kill.
+    this.spawnBlood(loser.x, loser.y + FIGHTER_H * 0.45, koDir as 1 | -1, 1);
+    this.spawnBlood(loser.x, loser.y + FIGHTER_H * 0.30, koDir as 1 | -1, 0.85);
     Sfx.play("boom", 0.9);
   }
 
