@@ -3785,6 +3785,8 @@ export class GameEngine {
     this.spawnBlood(fx, fy, f.facing as 1 | -1, intensity);
     this.shockwaves.push({ x: fx, y: fy, r: 6, rMax: 80, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.05 80)" });
     Sfx.play(m.hitSfx, 1);
+    // Layered impact stack — adds whoosh + body thud + heavy boom on big hits
+    Sfx.playHit(intensity);
     if (target.hp <= 0 && this.phase === "fight") {
       this.triggerKo(f.id);
     }
