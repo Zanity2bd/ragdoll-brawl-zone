@@ -3609,9 +3609,39 @@ export class GameEngine {
               });
               if (m.kind === "repulsor") {
                 this.shockwaves.push({
-                  x: f.x + f.facing * 30, y: f.y + 40, r: 6, rMax: 70,
-                  life: 0.3, maxLife: 0.3, color: "oklch(0.85 0.14 200)",
+                  x: f.x + f.facing * 30, y: f.y + 40, r: 6, rMax: 90,
+                  life: 0.34, maxLife: 0.34, color: "oklch(0.9 0.15 220)",
                 });
+                spawnFx(this.attackFx, "shockRing", f.x + f.facing * 30, f.y + 40, {
+                  size: 22, life: 0.32, grow: 90, blend: "lighter",
+                });
+              } else if (m.kind === "heatPunch") {
+                // Sun-flare burst on contact + lingering ember particles
+                spawnFx(this.attackFx, "shockRing", target.x, iy, {
+                  size: 30, life: 0.4, grow: 120, blend: "lighter",
+                });
+                for (let i = 0; i < 14; i++) {
+                  const a = Math.random() * Math.PI * 2;
+                  const s = 120 + Math.random() * 220;
+                  this.particles.push({
+                    x: target.x, y: iy,
+                    vx: Math.cos(a) * s, vy: Math.sin(a) * s - 80,
+                    life: 0.55, maxLife: 0.55,
+                    color: Math.random() < 0.5 ? "oklch(0.85 0.24 40)" : "oklch(0.95 0.18 70)",
+                    size: 2 + Math.random() * 2.4,
+                  });
+                }
+              } else if (m.kind === "crowbar") {
+                // Heavy metal sparks: tight, sharp, dirty
+                for (let i = 0; i < 10; i++) {
+                  this.particles.push({
+                    x: target.x + (Math.random() - 0.5) * 16, y: iy + (Math.random() - 0.5) * 12,
+                    vx: -f.facing * (60 + Math.random() * 200),
+                    vy: -120 - Math.random() * 160,
+                    life: 0.45, maxLife: 0.45,
+                    color: "oklch(0.92 0.16 80)", size: 1.4 + Math.random() * 1.6,
+                  });
+                }
               }
             }
           }
