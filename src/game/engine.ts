@@ -149,6 +149,12 @@ interface Fighter {
   hitReactDur: number;
   hitReactDir: 1 | -1;
   hitReactMag: number; // 0..1
+  // Cancel system: once the current attack lands a confirmed hit, the fighter
+  // can cancel out of recovery into another attack/jump. Buffers smooth taps
+  // pressed during recovery so chains feel responsive.
+  cancelOK: boolean;
+  meleeBufferT: number;
+  punchBufferT: number;
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
@@ -953,6 +959,7 @@ export class GameEngine {
       headLag: 0, armLagL: 0, armLagR: 0, legLag: 0,
       weaponTrail: createTrail(),
       hitReactKind: null, hitReactT: 0, hitReactDur: 0, hitReactDir: 1, hitReactMag: 0,
+      cancelOK: false, meleeBufferT: 0, punchBufferT: 0,
       wobble: createWobble(),
       dash: null,
       frenzy: null,
@@ -2373,6 +2380,8 @@ export class GameEngine {
     f.hoverPhase += dt * HOVER_RATE * Math.PI * 2;
     // Weapon trail: decay every frame; sample at draw time using live pose.
     tickTrail(f.weaponTrail, dt);
+    if (f.meleeBufferT > 0) f.meleeBufferT = Math.max(0, f.meleeBufferT - dt);
+    if (f.punchBufferT > 0) f.punchBufferT = Math.max(0, f.punchBufferT - dt);
     if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) resetTrail(f.weaponTrail);
     // Decay hit-reaction overlay timer.
     if (f.hitReactT > 0) {
@@ -2762,6 +2771,7 @@ export class GameEngine {
         if (dx > -10 && dx < range && Math.abs(target.y - f.y) < FIGHTER_H) {
           if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
             f.comboHit = true;
+            f.cancelOK = true;
             target.hp = Math.max(0, target.hp - dmg);
             target.hitFlash = 0.28;
             target.vx += f.facing * (f.comboKind === "kick" ? 220 : 180);
@@ -2795,10 +2805,12 @@ export class GameEngine {
         if (dx > -10 && dx < PUNCH_RANGE && Math.abs(target.y - f.y) < FIGHTER_H) {
           if (this.meleeBlockedByProp(f, PUNCH_RANGE, PUNCH_DMG)) {
             f.punchHit = true;
+            f.cancelOK = true;
             this.shake = Math.max(this.shake, 3);
             Sfx.play("thud", 0.35);
           } else if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
             f.punchHit = true;
+            f.cancelOK = true;
             target.hp = Math.max(0, target.hp - PUNCH_DMG);
             target.hitFlash = 0.22;
             target.vx += f.facing * 90;
@@ -2825,7 +2837,25 @@ export class GameEngine {
         f.comboWindowT = 0.45;
       }
     }
-    if (intent.punch && f.punchT === 0 && f.comboKind == null && f.punchCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
+    // Input buffer: a tap during recovery/cooldown is remembered for ~130ms
+    // so chains feel responsive even on imperfect timing.
+    if (intent.punch) f.punchBufferT = 0.13;
+    if (intent.melee) f.meleeBufferT = 0.13;
+    // Cancel pass: when an attack has landed (cancelOK) and a fresh punch is
+    // pressed/buffered, snap-clear the current attack so the new one can start.
+    const punchPressed = intent.punch || f.punchBufferT > 0;
+    if (f.cancelOK && punchPressed && (f.punchT > 0 || f.comboKind || f.meleeKind)) {
+      f.punchT = 0; f.punchHit = false; f.punchCd = 0;
+      f.comboKind = null; f.comboT = 0; f.comboHit = false;
+      // Don't fully zero combo step — preserve chain progression so cancel
+      // into next combo step still reads (jab→kick→knee).
+      if (f.meleeKind) { f.meleeKind = null; f.meleeT = 0; f.meleeDur = 0; f.meleeHitMask.clear(); }
+      f.attackAnim = 0;
+      f.recoverT = 0;
+      f.cancelOK = false;
+    }
+    if (punchPressed && f.punchT === 0 && f.comboKind == null && f.punchCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
+      f.punchBufferT = 0; // consumed
       // Arm a tight parry window on every punch tap. If a hit lands within
       // the next ~140ms it'll be deflected (see applyMeleeHit).
       f.parryT = 0.14;
@@ -2835,6 +2865,7 @@ export class GameEngine {
         f.attackAnim = Math.max(f.attackAnim, 0.32);
         f.comboStep = 2; f.comboWindowT = 0.5;
         f.punchCd = PUNCH_CD;
+        f.cancelOK = false;
         Sfx.play("whoosh", 0.5);
         armTrail(f.weaponTrail, 0.32, { limb: "footR", rgb: "200,230,255", width: 8 });
       } else if (f.comboStep === 2 && f.comboWindowT > 0) {
@@ -2843,6 +2874,7 @@ export class GameEngine {
         f.attackAnim = Math.max(f.attackAnim, 0.36);
         f.comboStep = 0; f.comboWindowT = 0;
         f.punchCd = PUNCH_CD * 1.5;
+        f.cancelOK = false;
         Sfx.play("whoosh", 0.6);
         armTrail(f.weaponTrail, 0.36, { limb: "footR", rgb: "255,210,150", width: 10 });
       } else if (f.recoverT === 0) {
@@ -2850,6 +2882,7 @@ export class GameEngine {
         f.punchHit = false;
         f.punchCd = PUNCH_CD;
         f.attackAnim = Math.max(f.attackAnim, PUNCH_DUR);
+        f.cancelOK = false;
         Sfx.play("whoosh", 0.35);
         armTrail(f.weaponTrail, PUNCH_DUR, { limb: "handR", rgb: "255,235,180", width: 7 });
       }
@@ -2885,7 +2918,11 @@ export class GameEngine {
       if (!f.meleeKind) {
         const canFire = f.skin.id === "heatwave";
         if (canFire && intent.fire && f.fireCd <= 0) this.fire(f);
-        if (intent.melee && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) this.startMelee(f);
+        if ((intent.melee || f.meleeBufferT > 0) && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) {
+          if (f.cancelOK) { f.meleeCd = 0; f.meleeKind = null; f.meleeT = 0; f.attackAnim = 0; f.cancelOK = false; }
+          f.meleeBufferT = 0;
+          this.startMelee(f);
+        }
       }
       f.walkPhase += ldt * 1.4;
       f.x += f.vx * ldt;
@@ -3178,7 +3215,11 @@ export class GameEngine {
           f.vx = 0; f.vy = 0;
           this.bamfPuff(f.x, f.y + FIGHTER_H / 2, "arrive");
         }
-        if (intent.melee && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) this.startMelee(f);
+        if ((intent.melee || f.meleeBufferT > 0) && f.meleeCd <= 0 && f.wobble.staggerT < 0.18) {
+          if (f.cancelOK) { f.meleeCd = 0; f.meleeKind = null; f.meleeT = 0; f.attackAnim = 0; f.cancelOK = false; }
+          f.meleeBufferT = 0;
+          this.startMelee(f);
+        }
       }
 
       if (f.onGround) {
@@ -3417,6 +3458,7 @@ export class GameEngine {
   }
 
   private startMelee(f: Fighter) {
+    f.cancelOK = false;
     // Flash's old Phase Strike rapid-punch is disabled; Flash uses the basic kick instead.
     if (f.skin.id === "flash") return;
     const m = f.move;
@@ -3937,8 +3979,19 @@ export class GameEngine {
       Sfx.play("jab", 0.4);
       return;
     }
+    // Hit confirmed (past parry) → attacker can cancel out of recovery.
+    f.cancelOK = true;
+    const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - m.damage);
     target.hitFlash = 0.35;
+    // Near-KO dramatic emphasis: when a hit takes the opponent below 25% HP
+    // (and isn't itself the killing blow), brief slow-mo + zoom punch sells
+    // the "this could end it" moment.
+    if (hpBefore > 25 && target.hp <= 25 && target.hp > 0) {
+      this.slowmoT = Math.max(this.slowmoT, 0.32);
+      this.slowmoMode = "impact";
+      this.impact({ intensity: 0.85, dirX: f.facing, dirY: -0.2, zoom: 0.07, hitstop: 0.10, flash: 0.7 });
+    }
     // Air-juggle: if target is airborne (or already in a juggle), tally
     // hits with diminishing returns. 1.0 → 0.85 → 0.7 → 0.55 → 0.45 → 0.4
     const wasAirborne = !target.onGround || target.ragdollT > 0;
@@ -4967,12 +5020,19 @@ export class GameEngine {
     const spread = Math.hypot(dx, dy);
     // Map spread → desired zoom (close fight = 2.0x, far fight = 1.35x)
     let targetZoom = Math.max(1.35, Math.min(2.0, 520 / Math.max(220, spread)));
-    // KO cinematic: punch in hard on the loser for ~1.4s
-    const koActive = this.phase === "ko" && this.koCinematicT < 1.4;
+    // KO cinematic: two-stage punch — hard zoom-in on impact (2.95x for ~0.45s),
+    // then ease back to a held framing (2.2x) so the loser, blood, and final
+    // pose all read clearly without the camera feeling stuck.
+    const koActive = this.phase === "ko" && this.koCinematicT < 1.6;
     if (koActive) {
-      targetZoom = 2.6;
+      const t = this.koCinematicT;
+      targetZoom = t < 0.45
+        ? 2.95
+        : 2.95 - (Math.min(1, (t - 0.45) / 0.6)) * 0.75; // 2.95 → 2.2
     }
-    this.camZoom += (targetZoom - this.camZoom) * (koActive ? 0.18 : 0.08);
+    // Faster lerp during the initial KO punch-in so the snap is felt.
+    const koFastLerp = koActive && this.koCinematicT < 0.45;
+    this.camZoom += (targetZoom - this.camZoom) * (koFastLerp ? 0.32 : koActive ? 0.14 : 0.08);
     // Multiplicative zoom-punch overlay — bell curve that fades to 0.
     let zoomMul = 1;
     if (this.zoomPunchT > 0 && this.zoomPunchDur > 0) {
