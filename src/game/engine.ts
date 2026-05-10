@@ -514,6 +514,15 @@ interface GroundDecal {
   color: string;
 }
 
+/** Jagged ground crack from heavy slams (Hulk, Magma, finishers). */
+interface Crack {
+  x: number;          // impact x at GROUND_Y
+  rays: Array<{ ang: number; len: number; jitter: number[] }>;
+  life: number;
+  maxLife: number;
+  intensity: number;  // 0..1 — scales width/length
+}
+
 export class GameEngine {
   private ctx: CanvasRenderingContext2D;
   private canvas: HTMLCanvasElement;
