@@ -3733,6 +3733,8 @@ export class GameEngine {
     this.burst(cx, cy, attacker.skin.glow, 64);
     this.burst(cx, cy, "oklch(0.98 0.10 80)", 48);
     this.burst(cx, cy, "oklch(0.92 0.18 30)", 36);
+    // Heavy arterial spray for super impact
+    this.spawnBlood(cx, cy, dir as 1 | -1, 1);
     // Radial spark streaks
     for (let i = 0; i < 28; i++) {
       const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
