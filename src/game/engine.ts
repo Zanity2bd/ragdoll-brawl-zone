@@ -3371,6 +3371,8 @@ export class GameEngine {
             spawnFx(this.attackFx, "impactStar", cx, cy - 8, {
               size: 44, life: 0.32, grow: 80,
             });
+            // Hulk signature: ground crack at slam point.
+            this.spawnCrack(cx, 0.85);
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dist = Math.abs(target.x - cx);
             if (dist < m.range * 1.4) {
