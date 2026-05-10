@@ -4767,6 +4767,32 @@ export class GameEngine {
     // pose overlays. Only the walk pose is computed here; the renderer reads
     // it for cape/torso/head positioning while sprite frames draw the body.
     const base = computeWalkPose(f.walkPhase, f.vx, f.onGround, f.vy, f.attackAnim > 0 || f.punchT > 0, renderFacing, FIGHTER_H);
+    // Anticipation crouch: hip + shoulder dip while preJumpT counts down.
+    if (f.preJumpT > 0) {
+      const t = 1 - f.preJumpT / PRE_JUMP_T; // 0 → 1 over crouch
+      const c = 0.5 - 0.5 * Math.cos(Math.min(1, t) * Math.PI);
+      base.hipY += 6 * c;
+      base.shoulderY += 4 * c;
+      base.headOffsetY += 3 * c;
+      // Knees forward, arms slightly back to load
+      base.legL[2] -= renderFacing * 1.5 * c; base.legL[3] += 4 * c;
+      base.legR[2] -= renderFacing * 1.5 * c; base.legR[3] += 4 * c;
+    }
+    // Landing squash: depth scales with cached landImpact (0..1), ease-out.
+    if (f.landSquashT > 0 && f.onGround) {
+      const dur = 0.08 + f.landImpact * 0.16;
+      const u = 1 - Math.min(1, f.landSquashT / Math.max(0.001, dur)); // 0 just landed → 1 recovered
+      const squash = (1 - u) * (0.45 + 0.55 * f.landImpact);
+      base.hipY += 7 * squash;
+      base.shoulderY += 5 * squash;
+      base.headOffsetY += 3 * squash;
+      // Knees bend forward in the direction of facing
+      base.legL[2] += renderFacing * 3 * squash; base.legL[3] += 4 * squash;
+      base.legR[2] += renderFacing * 3 * squash; base.legR[3] += 4 * squash;
+      // Arms swing forward to absorb impact
+      base.armL[4] += renderFacing * 4 * squash;
+      base.armR[4] += renderFacing * 4 * squash;
+    }
     return applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying);
   }
 

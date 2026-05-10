@@ -253,7 +253,10 @@ export function computeWalkPose(
     const armCounterY = 24 - launchPush * 4 + apex * 2 + fallT * 8;
     const elbowBend = 4 + apex * 3 + launchPush * 2;
 
-    const lean = facing * (0.06 + launchPush * 0.10 + tuck * 0.04 - fallT * 0.06) + airSpin;
+    // Direction-of-travel lean: body tips into the arc when moving horizontally,
+    // independent of which way the head is facing — gives a clear silhouette read.
+    const travelLean = Math.sign(vx) * Math.min(0.22, Math.abs(vx) / 520);
+    const lean = facing * (0.06 + launchPush * 0.10 + tuck * 0.04 - fallT * 0.06) + airSpin + travelLean * 0.55;
     const sqUp = launchPush * 2; // small stretch on push-off
 
     return {
