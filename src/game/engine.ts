@@ -3688,6 +3688,46 @@ export class GameEngine {
     if (target.iframeT > 0) return;
     // During downed/getup the target is on the floor — skip melee hits (mercy)
     if (target.downedT > 0 || target.getUpT > 0) return;
+    // ---- PARRY ----
+    // Target tapped PUNCH within the parry window AND is facing the attacker.
+    // Deflect: 0 damage, attacker staggered + brief stun, defender flashes,
+    // super cooldown is slashed by 40% as the meter-fill reward.
+    const targetFaces = Math.sign(f.x - target.x) === target.facing;
+    if (target.parryT > 0 && targetFaces) {
+      target.parryT = 0;
+      target.parrySuccessT = 0.5;
+      target.iframeT = Math.max(target.iframeT, 0.18);
+      target.superCd = Math.max(0, target.superCd - SUPER_CD * 0.4);
+      // Stagger the attacker — interrupt their swing, knock them back light.
+      f.punchT = 0; f.comboKind = null; f.comboT = 0;
+      f.meleeT = Math.max(f.meleeT, f.meleeDur - 0.05); // skip to recover
+      f.vx = -f.facing * 220;
+      f.wobble.staggerT = Math.max(f.wobble.staggerT, 0.32);
+      f.wobble.staggerDir = (-f.facing) as 1 | -1;
+      f.wobble.staggerMag = 0.7;
+      applyImpulse(f.wobble, -f.facing as 1 | -1, -0.3, 0.7);
+      // FX: bright clang ring + sparks
+      this.hitstopT = Math.max(this.hitstopT, 0.12);
+      this.shake = Math.max(this.shake, 14);
+      this.impact({ intensity: 0.55, dirX: -f.facing, dirY: -0.3, zoom: 0.025, flash: 0, hitstop: 0 });
+      this.shockwaves.push({
+        x: fx, y: fy, r: 8, rMax: 90,
+        life: 0.4, maxLife: 0.4, color: "oklch(0.95 0.18 90)",
+      });
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        const sp = 220 + Math.random() * 180;
+        this.particles.push({
+          x: fx, y: fy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
+          life: 0.35 + Math.random() * 0.2, maxLife: 0.55,
+          color: i % 2 ? "oklch(0.95 0.18 90)" : "oklch(0.98 0.05 80)",
+          size: 1.6 + Math.random() * 1.8,
+        });
+      }
+      Sfx.play("blip", 0.9);
+      Sfx.play("jab", 0.4);
+      return;
+    }
     target.hp = Math.max(0, target.hp - m.damage);
     target.hitFlash = 0.35;
     // Air-juggle: if target is airborne (or already in a juggle), tally
