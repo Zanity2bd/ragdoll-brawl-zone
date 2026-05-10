@@ -3106,16 +3106,23 @@ export class GameEngine {
       }
 
       const prevY = f.y;
-      // Variable gravity: lighter while jump held & ascending, heavier on the way down
-      let gMul = 1;
+      // Variable gravity:
+      //  - Ascending + jump held + within hold window → very light (boost arc)
+      //  - Near apex (|vy| < 90)                       → softened hang for that "snap" pop
+      //  - Ascending + jump released                   → heavy (kills early-release height)
+      //  - Falling                                     → heaviest (decisive descent)
+      let gMul: number;
       if (f.vy < 0) {
-        gMul = (intent.jump && f.jumpHeldT > 0) ? 0.6 : LOW_JUMP_GRAVITY_MUL;
+        if (intent.jump && f.jumpHeldT > 0) gMul = 0.55;
+        else gMul = LOW_JUMP_GRAVITY_MUL;
+      } else if (f.vy < 90) {
+        gMul = APEX_GRAVITY_MUL;
       } else {
         gMul = FALL_GRAVITY_MUL;
       }
       f.vy += GRAVITY * gMul * ldt;
       // Terminal velocity
-      if (f.vy > 1400) f.vy = 1400;
+      if (f.vy > 1500) f.vy = 1500;
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
 
