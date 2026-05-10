@@ -5367,6 +5367,7 @@ export class GameEngine {
     ctx.strokeText("PARRY!", 0, 0);
     ctx.fillText("PARRY!", 0, 0);
     ctx.restore();
+  }
 
   /** Floating "xN HIT" tag above an actively juggled fighter. */
   private drawJuggleCounter(f: Fighter) {
