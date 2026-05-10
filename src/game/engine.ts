@@ -2996,43 +2996,68 @@ export class GameEngine {
         else if (f.vx < 0) f.vx = Math.min(0, f.vx + fr);
       }
 
-      // ---- Jump feel: coyote time + buffered press + variable height + 1 air-jump ----
+      // ---- Jump feel: anticipation + coyote + buffered press + variable height + 1 air-jump ----
       if (f.onGround) { f.coyoteT = COYOTE_T; f.airJumps = MAX_AIR_JUMPS; }
       else f.coyoteT = Math.max(0, f.coyoteT - ldt);
       if (f.jumpBufferT > 0) f.jumpBufferT = Math.max(0, f.jumpBufferT - ldt);
       if (f.jumpHeldT > 0) f.jumpHeldT = Math.max(0, f.jumpHeldT - ldt);
+      if (f.landSquashT > 0) f.landSquashT = Math.max(0, f.landSquashT - ldt);
 
       const wantsDrop = !locked && intent.jump && intent.ay > 0.5 && f.onGround;
-      if (wantsDrop) {
+
+      // Anticipation crouch tick — when expires, fire the actual launch.
+      if (f.preJumpT > 0) {
+        f.preJumpT -= ldt;
+        // Lock horizontal during crouch so the launch reads as decisive.
+        f.vx *= Math.pow(0.25, ldt * 60);
+        if (f.preJumpT <= 0) {
+          f.preJumpT = 0;
+          // Apply launch
+          f.vy = -JUMP_V;
+          f.onGround = false;
+          f.coyoteT = 0;
+          f.jumpHeldT = JUMP_HOLD_T;
+          // Strong stretch springing out of crouch
+          f.wobble.squashV -= 9;
+          f.wobble.bvy -= 30;
+          if (!this.lowPower) {
+            for (let i = 0; i < 7; i++) {
+              this.particles.push({
+                x: f.x + (Math.random() - 0.5) * 22,
+                y: f.y + FIGHTER_H - 2,
+                vx: (Math.random() - 0.5) * 130,
+                vy: -18 - Math.random() * 40,
+                life: 0.36, maxLife: 0.36,
+                color: "oklch(0.8 0.03 230)",
+                size: 1.6 + Math.random() * 1.6,
+              });
+            }
+          }
+          Sfx.play("whoosh", 0.18);
+        }
+      } else if (wantsDrop) {
         f.dropT = 0.18;
         f.onGround = false;
         f.y += 2;
         f.jumpBufferT = 0;
-      } else if (!locked && f.jumpBufferT > 0 && (f.onGround || f.coyoteT > 0)) {
-        // Ground / coyote jump
-        f.vy = -JUMP_V;
-        f.onGround = false;
-        f.coyoteT = 0;
-        f.jumpBufferT = 0;
-        f.jumpHeldT = JUMP_HOLD_T;
-        // Launch squash: compress slightly, springs into stretch
-        f.wobble.squashV -= 5;
-        // Dust puff
-        if (!this.lowPower) {
-          for (let i = 0; i < 5; i++) {
-            this.particles.push({
-              x: f.x + (Math.random() - 0.5) * 18,
-              y: f.y + FIGHTER_H - 2,
-              vx: (Math.random() - 0.5) * 90,
-              vy: -10 - Math.random() * 30,
-              life: 0.32, maxLife: 0.32,
-              color: "oklch(0.8 0.04 230)",
-              size: 1.5 + Math.random() * 1.4,
-            });
-          }
+      } else if (!locked && f.jumpBufferT > 0 && (f.onGround || f.coyoteT > 0) && f.landSquashT <= 0.04) {
+        // Ground / coyote jump → enter anticipation crouch first.
+        // Skip preJump if airborne via coyote (no time to crouch in air).
+        if (f.onGround) {
+          f.preJumpT = PRE_JUMP_T;
+          // Visible knee-bend dip
+          f.wobble.bvy += 22;
+          f.wobble.squashV += 4;
+        } else {
+          // Coyote: launch immediately
+          f.vy = -JUMP_V;
+          f.coyoteT = 0;
+          f.jumpHeldT = JUMP_HOLD_T;
+          f.wobble.squashV -= 6;
         }
+        f.jumpBufferT = 0;
       } else if (!locked && f.jumpBufferT > 0 && f.airJumps > 0 && !f.onGround) {
-        // Mid-air double jump
+        // Mid-air double jump — instant, no anticipation
         f.airJumps--;
         f.vy = -JUMP_V * 0.85;
         f.jumpBufferT = 0;
@@ -3054,8 +3079,9 @@ export class GameEngine {
         }
       }
 
-      // Variable-height: if jump released early during ascent, kill upward velocity faster
+      // Variable-height: jump released early during ascent → cut upward velocity hard.
       if (!intent.jump && f.vy < 0 && f.jumpHeldT > 0) {
+        f.vy *= 0.45;
         f.jumpHeldT = 0;
       }
 
