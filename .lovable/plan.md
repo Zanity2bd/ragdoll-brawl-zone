@@ -1,75 +1,116 @@
-# Improve Ragdoll → Get-Up Sequence
 
-## Problems in the current implementation
+# OgunArena → Production-Ready Roadmap
 
-After reading `src/game/engine.ts` (ragdoll loop ~2225, downed/getup ~2289-2330, `poseFor` get-up branch ~4210-4256, sprite render branch ~5014-5158):
+Three phases, shippable at the end of each. Anger-of-Stick visual target: chunkier, action-movie weight, blood/impact heavy, dark realistic. Stickman bodies stay procedural (current engine) — upgrade lives in **portraits + signature FX + combat feel + meta**.
 
-1. **Two conflicting systems** drive the rise.
-   - `poseFor()` uses a 2-stage smoothstep (flat → kneel → stand) — drives cape, head anchor, eye-line.
-   - `render()` uses a separate 5-frame sprite ladder (DOWN → GETUP_A → GETUP_B → KNEE_CHAMBER → RECOVERY → STAND).
-   They disagree on phase boundaries, so cape/head/eye anchors slide off the sprite mid-rise.
-2. **Linear `groundLift = (1-ease) * 0.46H`** is monotonic. The body keeps lifting even on plant frames where the sprite shows weight-bearing — visually the character "floats up" through a kneel instead of planting.
-3. **easeOutQuart frontloads 80% of the lift in the first 30% of the timeline.** By the push-up frame the body is already nearly upright; later phases have nothing to do.
-4. **`f.getUpDur = 0.7s` is too short** for 5 phases + overshoot; each plant only gets ~140 ms, so beats blur together.
-5. **No angle blend.** `ragdollAng` is hard-reset to 0 only at the end. Sprite renders upright from u=0 even if body just snapped from face-down.
-6. **No anticipation/hold.** Rise is one continuous easeOut — no pre-stand crouch dip, no settle hold at the top.
-7. **FX overload.** Every plant beat (4×) fires camera kick=9 + 18 dust + embers + radial flash, so the stand beat doesn't feel special. "Decals" are pushed as particles (round, drift up).
-8. **No iframe tell.** Post-rise `iframeT = 1.0` has no visual cue — players don't know they're invulnerable.
-9. **Ragdoll settle thresholds (`|vx|<60`, `|av|<2.0`) cause early "snap to flat"** while body is still clearly tumbling on screen.
+---
 
-## Goal
+## Phase 1 — Combat Feel (the "AAA" gap)
 
-A single, beat-driven get-up where pose, sprite, lift, lean, and FX share one phase clock; the rise reads as gather → press → plant → coil → drive → settle, with a clean angle recovery and a focused FX hit on the drive beat.
+This is what separates Anger of Stick from a tech demo. Pure code, no new assets.
 
-## Plan
+**Hit & impact system**
+- Hit-stop on every connecting strike: freeze both fighters 40–110ms scaled by damage. Heavies = longer freeze + 1-frame white flash on victim.
+- Layered screen shake: replace single `shake` scalar with `{trauma, decay, dirX, dirY}` so hits punch in the strike direction.
+- Time-dilation on KO blow & super hits (0.35× for 220ms, ease back).
+- Camera zoom-punch (1.0 → 1.04 → 1.0 over 180ms) on heavy connect.
 
-### 1. Single shared phase function (`engine.ts`)
-Add a small helper near the get-up code:
-```
-type RisePhase = "gather" | "press" | "kneel" | "coil" | "drive" | "settle";
-function risePhase(u: number): { phase: RisePhase; local: number; lift: number };
-```
-- Phase windows (of normalized u): gather 0-0.10, press 0.10-0.30, kneel 0.30-0.50, coil 0.50-0.68, drive 0.68-0.88, settle 0.88-1.0.
-- `lift` returned as a hand-shaped curve (not monotonic ease): stays near 0 during gather, rises during press, **plateaus on kneel** (plant), small dip at start of coil (anticipation), explosive rise on drive, tiny overshoot + settle.
-- Both `poseFor()` and the sprite branch consume this function so they cannot drift apart.
+**Blood & gore (Anger-of-Stick signature)**
+- Blood particle system: arterial spray on heavy hits, ground pooling decals, blood smears on wall slams.
+- Damage state on bodies: light bruising tint at 60% HP, blood streaks at 30%, soaked at <15%.
+- Finisher cam: on KO with super, slow-mo + impact freeze + blood burst.
 
-### 2. Lengthen and re-time
-- `f.getUpDur` → **0.95s** (was 0.7s). Still snappy but phases breathe.
-- Settle phase holds the stand frame for ~80 ms before unlocking control — gives a readable "I'm back" beat.
+**Move depth**
+- Cancel windows: light → light → heavy chains with timing windows.
+- Parry (tap block at the right frame) → stagger opponent + meter gain.
+- Super meter (already partial) → 2 supers per skin: standard + finisher.
+- Air juggles: opponent stays launched longer if you connect mid-air, with diminishing returns.
 
-### 3. Couple `poseFor()` to the same ladder
-Replace the 2-stage flat/kneel/stand blend with a 4-keyframe blend driven by `risePhase`:
-flat → press (hands planted, hips low) → kneel (one-knee chamber) → stand. Lean blends on the same clock so cape/eye-line stay glued to the sprite frame.
+**Audio layering**
+- Per-hit SFX layered: whoosh + impact + body thud + grunt (3–4 samples per hit).
+- Adaptive music: low-intensity loop swaps to high-intensity when either fighter <30% HP.
+- Generated via AI Gateway + curated free libraries; pooled and limited so mobile doesn't choke.
 
-### 4. Smooth angle recovery
-- During `gather` phase, ease `ragdollAng → 0` with `Math.pow(0.001, dt/0.08)` damp instead of hard-resetting at the end. Removes the visible snap when the body was face-down.
-- Keep the final hard zero in the existing `getUpT <= 0` block as a safety.
+**AI variety**
+- Personality profiles per skin (aggressive/defensive/zoner/grappler) instead of one difficulty curve.
+- Reads player habits within a round (spam-blocker → starts grabbing).
 
-### 5. Ragdoll settle quality
-- Raise settle thresholds: require `|vx| < 35` AND `|av| < 1.2` AND at least 0.18s grounded (new `f.groundedT` accumulator), so the tumble doesn't snap flat mid-roll.
-- Keep the existing 90° snap, but ease over 0.10s instead of instant.
+---
 
-### 6. FX rebalance
-- Remove dust/embers/flash/shake from press and kneel beats (those become small foot-scuffs only: 4 particles, no shake).
-- Keep the **drive beat (≥0.68)** as the hero hit: 16 dust + 8 embers + radial flash + `shake = 8`.
-- Add a soft `shake = 2` on settle for the landing tap.
-- Replace the particle-as-decal hack with a real `groundDecals` array (already used for impact decals if present; otherwise add a tiny `{x, w, life, maxLife}` ring buffer rendered as flat ellipses before fighters). Keeps decals from drifting and sizes correctly.
-- Audio: `Sfx.play("thud", 0.12)` on press, `("thud", 0.18)` on kneel, `("thud", 0.32)` on drive (current code only plays once when entering get-up).
+## Phase 2 — Premium Visual Upgrade (portraits + FX only)
 
-### 7. Iframe tell
-- While `f.iframeT > 0` after rising, render a thin pulsing rim using existing `skin.glow` (sin-modulated alpha 0.15-0.35, period 0.18s). Stops automatically when iframe expires.
+Bodies stay procedural per your call. Upgrade is everything *around* the body.
 
-### 8. Cleanup
-- Delete the old hard-coded thresholds (`u < 0.14 / 0.34 / 0.56 / 0.78 / 0.94`) and the duplicated overshoot/sx/sy/leanCurve math — all replaced by `risePhase()` outputs.
-- Keep `motion-blur afterimage` but key its alpha off `risePhase().phase === "drive"` so blur is concentrated where there's actual velocity.
+**Hero portraits — all 9 skins**
+- Premium imagegen, dark realistic style matched to OgunArena brand.
+- Replace placeholder previews on character select. Add hover/idle micro-animation.
+- Versus splash screen: portrait slam-in with tagline before each fight.
 
-## Files touched
+**Per-skin signature FX (generated textures + code)**
+- Spider-Man: web-shot trails, impact webbing on KO.
+- Hulk: green shockwave rings, ground crack decals on heavy slam.
+- Flash: lightning streak afterimages, sonic-boom ring on dash.
+- Homelander: red laser-eye beams, heat distortion.
+- Superman: ice-breath puffs, freeze-frost overlay.
+- Nightcrawler: bamf smoke + sulfur spark on teleport.
+- Each skin gets 1 unique HUD frame element (flag/sigil) on their side of the bar.
 
-- `src/game/engine.ts` — add `risePhase()` helper, rewrite get-up branch in `update()` (~2225-2331), rewrite get-up branch in `poseFor()` (~4210-4256), rewrite get-up branch in render (~5014-5158), add iframe rim render in fighter draw, add small ground-decal buffer + render pass.
+**Map polish**
+- Generated parallax background art for the 13 maps (3 layers each: far, mid, fg silhouette).
+- Foreground occluders (rain, embers, dust) per map mood.
+- Environmental hits: wall slams crack the wall texture, ground slams kick up dust matched to map palette.
 
-No other files require changes. No new assets — reuses existing sprite frames and `skin.glow` token.
+**UI premium pass**
+- HUD redesign: chunkier health bars with damage chip animation, super meter that pulses when full.
+- Round transitions: KO freeze + black bar letterbox + slow-mo replay of the final hit.
+- Win screen with portrait + stats + Blkdom credit.
 
-## Risk / verification
+---
 
-- Risk: `poseFor()` drives cape/eye anchors during get-up; if the new keyframes don't match sprite hip/shoulder positions, cape will float. Mitigation: tune kneel pose `hipY/shoulderY` to match `KNEE_CHAMBER_FRAME` once and verify on Nightcrawler + a non-cape skin.
-- Verify by triggering a ragdoll (heavy combo or super-dash KO), then watching the rise at 0.5x via dev throttle: check (a) no snap when face-down, (b) clear plant beat at kneel, (c) drive beat shakes camera, (d) iframe rim pulses for ~1s after stand.
+## Phase 3 — Content & Progression (Lovable Cloud)
+
+Turns it from "demo" into "game you come back to."
+
+**Modes**
+- Arcade ladder: 8-fight gauntlet per character with a final boss skin (locked behind clears).
+- Survival: endless waves of CPUs, score + leaderboard.
+- Daily challenge: fixed matchup + modifier (low gravity, one-hit KO, etc.).
+
+**Meta progression**
+- Account (anonymous device id → upgrade to email login).
+- XP per match, level → unlocks alt color palettes per skin (recolors via existing skin token system, no new art).
+- Cloud save: unlocks, settings, stats sync across devices.
+- Global leaderboards per mode.
+
+**Monetization-ready hooks** (build now, monetize later)
+- Skin slots flagged `locked: true` — currently free but the gate exists.
+- Cosmetic categories: alt palettes, victory poses, intro stings.
+
+---
+
+## What I need from you to start
+
+Just confirm Phase 1 is the starting point. I'll execute it in 3–4 sub-batches:
+1. Hit-stop + shake + freeze frames + zoom-punch
+2. Blood/damage system + finisher cam
+3. Cancel/parry/super system + air juggles
+4. Audio layering + AI personalities
+
+Each sub-batch is shippable and playable on its own.
+
+## Files I expect to touch in Phase 1
+
+- `src/game/engine.ts` — hit-stop, shake vector, time-dilation, zoom, blood particles, damage tinting, cancel/parry windows, juggles
+- `src/game/combat.ts` — chain windows, parry detection, super activation
+- `src/game/ai.ts` — personality profiles, habit reading
+- `src/game/sfx.ts` — layered playback, adaptive music switching
+- New: `src/game/blood.ts` — particle pool + decal buffer
+- New: `src/game/cameraFx.ts` — extracts camera/shake/zoom/timescale into one system
+
+No schema changes in Phase 1. Phase 3 is when Lovable Cloud goes on.
+
+## Risks to call out
+
+- **Mobile perf**: blood particles + extra shake math on a 393px viewport with low-end GPUs. Mitigation: hard caps on active particles, decal ring buffer with auto-fade, skip layered audio if `audioContext.baseLatency > 0.05`.
+- **AI-generated portraits drifting off-brand**: I'll generate 2–3 candidates per skin, you pick. Same for map backgrounds.
+- **Audio file size**: keep total SFX bundle <2MB by reusing samples with pitch variation.
