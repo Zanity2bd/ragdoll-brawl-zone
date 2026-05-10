@@ -4967,12 +4967,19 @@ export class GameEngine {
     const spread = Math.hypot(dx, dy);
     // Map spread → desired zoom (close fight = 2.0x, far fight = 1.35x)
     let targetZoom = Math.max(1.35, Math.min(2.0, 520 / Math.max(220, spread)));
-    // KO cinematic: punch in hard on the loser for ~1.4s
-    const koActive = this.phase === "ko" && this.koCinematicT < 1.4;
+    // KO cinematic: two-stage punch — hard zoom-in on impact (2.95x for ~0.45s),
+    // then ease back to a held framing (2.2x) so the loser, blood, and final
+    // pose all read clearly without the camera feeling stuck.
+    const koActive = this.phase === "ko" && this.koCinematicT < 1.6;
     if (koActive) {
-      targetZoom = 2.6;
+      const t = this.koCinematicT;
+      targetZoom = t < 0.45
+        ? 2.95
+        : 2.95 - (Math.min(1, (t - 0.45) / 0.6)) * 0.75; // 2.95 → 2.2
     }
-    this.camZoom += (targetZoom - this.camZoom) * (koActive ? 0.18 : 0.08);
+    // Faster lerp during the initial KO punch-in so the snap is felt.
+    const koFastLerp = koActive && this.koCinematicT < 0.45;
+    this.camZoom += (targetZoom - this.camZoom) * (koFastLerp ? 0.32 : koActive ? 0.14 : 0.08);
     // Multiplicative zoom-punch overlay — bell curve that fades to 0.
     let zoomMul = 1;
     if (this.zoomPunchT > 0 && this.zoomPunchDur > 0) {
