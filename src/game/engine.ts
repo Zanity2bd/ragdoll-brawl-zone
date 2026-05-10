@@ -931,6 +931,7 @@ export class GameEngine {
       prevFacing: 1, prevHitFlash: 0,
       dropT: 0, ledgeFlash: 0,
       coyoteT: 0, jumpBufferT: 0, jumpHeldT: 0, airJumps: 0,
+      preJumpT: 0, landSquashT: 0, landImpact: 0, ragdollWobble: 0,
       wobble: createWobble(),
       dash: null,
       frenzy: null,
