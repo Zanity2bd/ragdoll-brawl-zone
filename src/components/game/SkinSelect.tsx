@@ -1,31 +1,6 @@
 import { SKINS, type SkinId, type Universe, getSkin, type Skin } from "@/game/skins";
 import type { Difficulty } from "@/game/ai";
 import { useEffect, useRef, useState } from "react";
-import spidermanHero from "@/assets/heroes/spiderman.png";
-import hulkHero from "@/assets/heroes/hulk.png";
-import flashHero from "@/assets/heroes/flash.png";
-import ironmanHero from "@/assets/heroes/ironman.png";
-import nightcrawlerHero from "@/assets/heroes/nightcrawler.png";
-import batmanHero from "@/assets/heroes/batman.png";
-import supermanHero from "@/assets/heroes/superman.png";
-import heatwaveHero from "@/assets/heroes/heatwave.png";
-import homelanderHero from "@/assets/heroes/homelander.png";
-import butcherHero from "@/assets/heroes/butcher.png";
-import atrainHero from "@/assets/heroes/atrain.png";
-
-const HERO_PORTRAITS: Partial<Record<SkinId, string>> = {
-  spiderman: spidermanHero,
-  hulk: hulkHero,
-  flash: flashHero,
-  ironman: ironmanHero,
-  nightcrawler: nightcrawlerHero,
-  batman: batmanHero,
-  superman: supermanHero,
-  heatwave: heatwaveHero,
-  homelander: homelanderHero,
-  butcher: butcherHero,
-  atrain: atrainHero,
-};
 
 const UNIVERSES: Universe[] = ["Marvel", "DC", "The Boys"];
 const DIFFS: { id: Difficulty; label: string }[] = [
