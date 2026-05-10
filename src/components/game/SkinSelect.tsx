@@ -116,7 +116,7 @@ function SkinPicker({
       </div>
 
       <div className="flex items-center justify-center gap-3 py-2 sm:py-4">
-        <HeroOrPreview skin={skin} />
+        <SkinPreview skin={skin} />
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -132,35 +132,6 @@ function SkinPicker({
             {s.name}
           </button>
         ))}
-      </div>
-    </div>
-  );
-}
-
-function HeroOrPreview({ skin }: { skin: Skin }) {
-  const hero = HERO_PORTRAITS[skin.id];
-  const [hover, setHover] = useState(false);
-  if (!hero) return <SkinPreview skin={skin} />;
-  return (
-    <div
-      className="relative w-[150px] h-[180px] sm:w-[200px] sm:h-[240px]"
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onTouchStart={() => setHover((h) => !h)}
-    >
-      {hover ? (
-        <SkinPreview skin={skin} />
-      ) : (
-        <img
-          src={hero}
-          alt={`${skin.name} hero pose`}
-          loading="lazy"
-          className="w-full h-full object-contain drop-shadow-[0_8px_20px_rgba(0,0,0,0.5)] select-none pointer-events-none"
-          draggable={false}
-        />
-      )}
-      <div className="absolute bottom-1 right-1 font-mono text-[8px] tracking-widest uppercase text-foreground/40 pointer-events-none">
-        {hover ? "walk" : "hover"}
       </div>
     </div>
   );
