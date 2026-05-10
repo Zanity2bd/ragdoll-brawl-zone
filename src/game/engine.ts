@@ -183,6 +183,11 @@ interface Fighter {
   comboDur: number;     // duration of current combo swing
   comboKind: "kick" | "knee" | null;
   comboHit: boolean;
+  // Air juggle: hits stacked while target is airborne. Scales damage/KB
+  // down with diminishing returns so launches stay cinematic but not abusive.
+  juggleHits: number;
+  juggleResetT: number;     // resets when target lands & stays grounded
+  juggleFlash: number;      // 0..1 cosmetic pulse for floating combo counter
 }
 
 interface SmokeCloud {
