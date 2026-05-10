@@ -147,12 +147,24 @@ export class CpuController {
     if (snap.phase !== "fight") return;
     if (snap.teleTargeting) return;
 
-    const cfg = DIFF[this.diff];
+    const baseCfg = DIFF[this.diff];
+    const persona = PERSONA[SKIN_PERSONA[this.engine.getSkinIdFor(this.id)] ?? "aggressive"];
+    // Personality-modulated copy used by the rest of decide()
+    const cfg: DiffCfg = {
+      ...baseCfg,
+      specialChance: Math.min(1, baseCfg.specialChance * persona.specialMul),
+      powerChance:   Math.min(1, baseCfg.powerChance   * persona.powerMul),
+      kiteChance:    Math.min(1, baseCfg.kiteChance    * persona.kiteMul),
+      reactMs:       Math.max(40, baseCfg.reactMs - persona.reactBoost),
+    };
     const me = this.id === "p1" ? snap.p1 : snap.p2;
     const opp = this.id === "p1" ? snap.p2 : snap.p1;
     const meRect = this.engine.getFighterRect(this.id) as RectInfo | null;
     const oppRect = this.engine.getFighterRect(this.id === "p1" ? "p2" : "p1") as RectInfo | null;
     if (!meRect || !oppRect) return;
+    // Personality also rescales preferred engagement distance.
+    this.preferredScale = persona.preferredMul;
+    this.jumpinessBoost = persona.jumpinessBoost;
 
     this.reactT -= dt;
     this.feintT -= dt;
