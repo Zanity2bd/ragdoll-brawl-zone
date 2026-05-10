@@ -3654,6 +3654,17 @@ export class GameEngine {
     this.hitstopT = Math.max(this.hitstopT, Math.max(m.hitstop, 0.025)); // 1–2 frame hit-freeze min
     if (m.slowmoT > 0) { this.slowmoT = Math.max(this.slowmoT, m.slowmoT); this.slowmoMode = "impact"; }
     this.impactFlash = 1;
+    // Centralized hit-feel layer — directional camera kick + zoom-punch
+    // sized by move damage. Strikes that hit harder shake the camera ALONG
+    // the strike vector, sell follow-through, and pop a quick zoom.
+    const intensity = Math.min(1, Math.max(0.25, m.damage / 22));
+    this.impact({
+      intensity,
+      dirX: f.facing,
+      dirY: -0.25, // small upward bias — punches read as lifting the camera
+      flash: 0,    // already set above
+      hitstop: 0,  // already set above
+    });
     this.burst(fx, fy, f.skin.glow, 28);
     this.shockwaves.push({ x: fx, y: fy, r: 6, rMax: 80, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.05 80)" });
     Sfx.play(m.hitSfx, 1);
