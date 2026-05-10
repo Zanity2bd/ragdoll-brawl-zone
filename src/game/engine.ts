@@ -133,6 +133,12 @@ interface Fighter {
   landImpact: number;      // 0..1 cached at landing (drives squash depth + frame hold)
   // ragdoll secondary motion
   ragdollWobble: number;   // secondary floppy angle overlay (rad, decays with energy)
+  // Per-limb rotational lag — each limb chases ragdollAV with its own damping
+  // so the body flails instead of moving in lockstep.
+  headLag: number;
+  armLagL: number;
+  armLagR: number;
+  legLag: number;
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
@@ -934,6 +940,7 @@ export class GameEngine {
       dropT: 0, ledgeFlash: 0,
       coyoteT: 0, jumpBufferT: 0, jumpHeldT: 0, airJumps: 0,
       preJumpT: 0, landSquashT: 0, landImpact: 0, ragdollWobble: 0,
+      headLag: 0, armLagL: 0, armLagR: 0, legLag: 0,
       wobble: createWobble(),
       dash: null,
       frenzy: null,
@@ -2442,6 +2449,14 @@ export class GameEngine {
       f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 2);
       f.ragdollAV *= Math.pow(0.94, dt * 60);
       f.ragdollAng += f.ragdollAV * dt;
+      // Per-limb rotational lag — each limb chases ragdollAV with its own time
+      // constant so head/arms/legs flop with offset phase, never lockstep.
+      const lagChase = (cur: number, target: number, k: number) =>
+        cur + (target - cur) * Math.min(1, dt * k);
+      f.headLag  = lagChase(f.headLag,  f.ragdollAV * 0.35, 6.5) * Math.pow(0.92, dt * 60);
+      f.armLagL  = lagChase(f.armLagL,  f.ragdollAV * 0.55, 9.0) * Math.pow(0.90, dt * 60);
+      f.armLagR  = lagChase(f.armLagR,  f.ragdollAV * 0.55, 8.2) * Math.pow(0.90, dt * 60);
+      f.legLag   = lagChase(f.legLag,   f.ragdollAV * 0.40, 7.0) * Math.pow(0.91, dt * 60);
       // Walls — bounce with energy loss
       if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
       if (f.x > W - 30) { f.x = W - 30; f.vx = -Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
@@ -2454,6 +2469,14 @@ export class GameEngine {
           f.vy = -impact * 0.32;
           f.vx *= 0.55;
           f.ragdollAV *= 0.4;
+          // Impact pulse: body rolls in travel direction, scaled by impact.
+          const pulseDir = Math.sign(f.vx) || (f.facing as number);
+          f.ragdollAV += pulseDir * impact * 0.012;
+          // Limbs jolt on impact too — flesh-on-floor flop.
+          f.armLagL += pulseDir * impact * 0.006;
+          f.armLagR += pulseDir * impact * 0.005;
+          f.legLag  += pulseDir * impact * 0.004;
+          f.headLag += pulseDir * impact * 0.003;
           f.ragdollEnergy = Math.max(0, f.ragdollEnergy - 0.25);
           this.shake = Math.max(this.shake, Math.min(14, impact * 0.05));
           Sfx.play("thud", Math.min(0.6, impact / 600));
@@ -2547,10 +2570,31 @@ export class GameEngine {
         f.ragdollAng *= k;
         if (Math.abs(f.ragdollAng) < 0.01) f.ragdollAng = 0;
       }
+      // Drive-phase weight cue: small ground shake + scuff dust the moment
+      // the rise transitions from coil → drive (around u ≈ 0.68).
+      const prevU = 1 - ((f.getUpT + dt) / Math.max(0.001, f.getUpDur));
+      if (prevU < 0.68 && u >= 0.68) {
+        this.shake = Math.max(this.shake, 4);
+        Sfx.play("thud", 0.18);
+        if (!this.lowPower) {
+          for (let i = 0; i < 5; i++) {
+            this.particles.push({
+              x: f.x + (Math.random() - 0.5) * 18,
+              y: GROUND_Y - 2,
+              vx: (Math.random() - 0.5) * 70,
+              vy: -14 - Math.random() * 26,
+              life: 0.45, maxLife: 0.45,
+              color: "oklch(0.72 0.02 60)",
+              size: 1.6 + Math.random() * 1.6,
+            });
+          }
+        }
+      }
       if (f.getUpT <= 0) {
         f.iframeT = 1.0;            // 1s post-rise invulnerability
         f.ragdollImmuneT = 2.0;     // anti-chain window
         f.ragdollAng = 0; f.ragdollAV = 0; f.ragdollEnergy = 0;
+        f.headLag = f.armLagL = f.armLagR = f.legLag = 0;
         resetWobble(f.wobble);
       }
       return;
@@ -4676,8 +4720,30 @@ export class GameEngine {
   private poseFor(f: Fighter): Pose {
     if (f.ragdollT > 0) {
       const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H, f.ragdollAng);
-      // Override lean with physical body angle for stable visual
-      return { ...p, lean: f.ragdollAng };
+      // Per-limb rotational lag — limbs trail the body so it reads as flesh,
+      // not a rigid plank. Lag values are in radians; convert to small XY swings.
+      const sw = (lag: number, r: number): [number, number] => {
+        const a = Math.max(-1.4, Math.min(1.4, lag));
+        return [Math.sin(a) * r, (1 - Math.cos(a)) * r * 0.6];
+      };
+      const [hx, hy] = sw(f.headLag, 4);
+      const [aLx, aLy] = sw(f.armLagL, 7);
+      const [aRx, aRy] = sw(f.armLagR, 7);
+      const [lx, ly] = sw(f.legLag, 5);
+      return {
+        ...p,
+        headOffsetY: p.headOffsetY + hy,
+        handL: [p.handL[0] + aLx, p.handL[1] + aLy],
+        handR: [p.handR[0] + aRx, p.handR[1] + aRy],
+        armL: [p.armL[0], p.armL[1], p.armL[2] + aLx * 0.5, p.armL[3] + aLy * 0.5, p.armL[4] + aLx, p.armL[5] + aLy],
+        armR: [p.armR[0], p.armR[1], p.armR[2] + aRx * 0.5, p.armR[3] + aRy * 0.5, p.armR[4] + aRx, p.armR[5] + aRy],
+        footL: [p.footL[0] + lx, p.footL[1] + ly],
+        footR: [p.footR[0] + lx, p.footR[1] + ly],
+        legL: [p.legL[0], p.legL[1], p.legL[2] + lx * 0.5, p.legL[3] + ly * 0.5, p.legL[4] + lx, p.legL[5] + ly],
+        legR: [p.legR[0], p.legR[1], p.legR[2] + lx * 0.5, p.legR[3] + ly * 0.5, p.legR[4] + lx, p.legR[5] + ly],
+        // Override lean with physical body angle for stable visual; add tiny head bias.
+        lean: f.ragdollAng + hx * 0.01,
+      };
     }
     if (f.downedT > 0) {
       const targetAng = f.ragdollAng >= 0 ? Math.PI / 2 : -Math.PI / 2;
