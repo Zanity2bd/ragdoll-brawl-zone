@@ -70,6 +70,44 @@ const SKILLS: Record<SkinId, SkillCfg> = {
   butcher:      { preferred: 50,  specialMin: 0,   specialMax: 70,  bruiser: true },
 };
 
+// ---- Personality profiles ----
+// Each skin has a temperament that biases the existing decision weights.
+// aggressive → more specials, less kiting, closes distance
+// defensive  → more kiting, fewer specials, prefers cover
+// zoner      → keeps mid-range, leans on power abilities
+// grappler   → rushes in, hunts grabs/heavies at point-blank
+type Personality = "aggressive" | "defensive" | "zoner" | "grappler";
+
+interface PersonalityCfg {
+  specialMul: number;    // multiplies cfg.specialChance
+  powerMul: number;      // multiplies cfg.powerChance
+  kiteMul: number;       // multiplies cfg.kiteChance
+  preferredMul: number;  // scales preferred engagement distance
+  reactBoost: number;    // subtracts from reactMs (faster = harder)
+  jumpinessBoost: number; // adds to anti-stand-still hop chance
+}
+
+const PERSONA: Record<Personality, PersonalityCfg> = {
+  aggressive: { specialMul: 1.25, powerMul: 1.20, kiteMul: 0.45, preferredMul: 0.75, reactBoost: 30, jumpinessBoost: 0.15 },
+  defensive:  { specialMul: 0.80, powerMul: 1.05, kiteMul: 1.55, preferredMul: 1.30, reactBoost: 0,  jumpinessBoost: 0.05 },
+  zoner:      { specialMul: 0.95, powerMul: 1.45, kiteMul: 1.20, preferredMul: 1.20, reactBoost: 10, jumpinessBoost: 0    },
+  grappler:   { specialMul: 1.30, powerMul: 0.90, kiteMul: 0.30, preferredMul: 0.55, reactBoost: 20, jumpinessBoost: 0.20 },
+};
+
+const SKIN_PERSONA: Record<SkinId, Personality> = {
+  superman:     "aggressive",
+  hulk:         "grappler",
+  butcher:      "grappler",
+  atrain:       "aggressive",
+  flash:        "aggressive",
+  nightcrawler: "aggressive",
+  spiderman:    "zoner",
+  ironman:      "zoner",
+  homelander:   "zoner",
+  heatwave:     "zoner",
+  batman:       "defensive",
+};
+
 type RectInfo = ReturnType<GameEngine["getFighterRect"]> & {};
 
 export class CpuController {
