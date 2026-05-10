@@ -2629,6 +2629,7 @@ export class GameEngine {
       }
     }
 
+    // ---- Universal basic punch + 3-tap combo (punch → high-kick → knee) ----
     f.punchCd = Math.max(0, f.punchCd - dt);
     if (f.recoverT > 0) f.recoverT = Math.max(0, f.recoverT - dt);
     if (f.comboWindowT > 0) {
