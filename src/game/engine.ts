@@ -1501,6 +1501,10 @@ export class GameEngine {
       }
     }
     this.impactFlash = Math.max(0, this.impactFlash - dt * 4);
+    // Decay directional shake + zoom-punch (run on real dt so they aren't
+    // affected by hit-stop pause — they should resolve smoothly).
+    if (this.shakeDirT > 0) this.shakeDirT = Math.max(0, this.shakeDirT - dt);
+    if (this.zoomPunchT > 0) this.zoomPunchT = Math.max(0, this.zoomPunchT - dt);
 
     // Hitstop freezes simulation for a few frames (render still runs)
     if (this.hitstopT > 0) {
