@@ -2570,6 +2570,26 @@ export class GameEngine {
         f.ragdollAng *= k;
         if (Math.abs(f.ragdollAng) < 0.01) f.ragdollAng = 0;
       }
+      // Drive-phase weight cue: small ground shake + scuff dust the moment
+      // the rise transitions from coil → drive (around u ≈ 0.68).
+      const prevU = 1 - ((f.getUpT + dt) / Math.max(0.001, f.getUpDur));
+      if (prevU < 0.68 && u >= 0.68) {
+        this.shake = Math.max(this.shake, 4);
+        Sfx.play("thud", 0.18);
+        if (!this.lowPower) {
+          for (let i = 0; i < 5; i++) {
+            this.particles.push({
+              x: f.x + (Math.random() - 0.5) * 18,
+              y: GROUND_Y - 2,
+              vx: (Math.random() - 0.5) * 70,
+              vy: -14 - Math.random() * 26,
+              life: 0.45, maxLife: 0.45,
+              color: "oklch(0.72 0.02 60)",
+              size: 1.6 + Math.random() * 1.6,
+            });
+          }
+        }
+      }
       if (f.getUpT <= 0) {
         f.iframeT = 1.0;            // 1s post-rise invulnerability
         f.ragdollImmuneT = 2.0;     // anti-chain window
