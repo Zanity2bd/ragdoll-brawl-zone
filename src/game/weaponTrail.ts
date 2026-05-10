@@ -38,10 +38,11 @@ export function resetTrail(t: TrailState) {
 }
 
 /** Arm the trail for the given duration. Sampling will run while active. */
-export function armTrail(t: TrailState, seconds: number, rgb?: string, width?: number) {
+export function armTrail(t: TrailState, seconds: number, opts: { rgb?: string; width?: number; limb?: TrailLimb } = {}) {
   t.active = Math.max(t.active, seconds);
-  if (rgb) t.rgb = rgb;
-  if (width != null) t.width = width;
+  if (opts.rgb) t.rgb = opts.rgb;
+  if (opts.width != null) t.width = opts.width;
+  if (opts.limb) t.limb = opts.limb;
 }
 
 /**
