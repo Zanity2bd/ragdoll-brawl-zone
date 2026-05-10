@@ -3930,6 +3930,9 @@ export class GameEngine {
       x, rays, life: 5, maxLife: 5, intensity: it,
     });
   }
+
+  /**
+   * Anger-of-Stick blood spray.
    * Emits an arterial cone of droplets in `dir` direction with gravity, plus a
    * fine mist back-spray. Droplets stamp ground decals on landing. Hard-capped
    * so heavy combos don't tank mobile framerate.
