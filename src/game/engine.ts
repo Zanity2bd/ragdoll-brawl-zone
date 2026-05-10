@@ -3937,8 +3937,17 @@ export class GameEngine {
       Sfx.play("jab", 0.4);
       return;
     }
+    const hpBefore = target.hp;
     target.hp = Math.max(0, target.hp - m.damage);
     target.hitFlash = 0.35;
+    // Near-KO dramatic emphasis: when a hit takes the opponent below 25% HP
+    // (and isn't itself the killing blow), brief slow-mo + zoom punch sells
+    // the "this could end it" moment.
+    if (hpBefore > 25 && target.hp <= 25 && target.hp > 0) {
+      this.slowmoT = Math.max(this.slowmoT, 0.32);
+      this.slowmoMode = "impact";
+      this.impact({ intensity: 0.85, dirX: f.facing, dirY: -0.2, zoom: 0.07, hitstop: 0.10, flash: 0.7 });
+    }
     // Air-juggle: if target is airborne (or already in a juggle), tally
     // hits with diminishing returns. 1.0 → 0.85 → 0.7 → 0.55 → 0.45 → 0.4
     const wasAirborne = !target.onGround || target.ragdollT > 0;
