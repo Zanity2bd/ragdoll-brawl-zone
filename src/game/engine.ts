@@ -3458,6 +3458,7 @@ export class GameEngine {
   }
 
   private startMelee(f: Fighter) {
+    f.cancelOK = false;
     // Flash's old Phase Strike rapid-punch is disabled; Flash uses the basic kick instead.
     if (f.skin.id === "flash") return;
     const m = f.move;
