@@ -564,6 +564,17 @@ export class GameEngine {
   private impactFlash = 0;
 
   private shake = 0;
+  // Directional shake: punches the camera *toward* the strike direction
+  // before settling, on top of the legacy omnidirectional random shake.
+  private shakeDirX = 0;
+  private shakeDirY = 0;
+  private shakeDirT = 0;
+  private shakeDirDur = 0;
+  // Zoom-punch: short multiplicative zoom kick on big hits.
+  // 0 = no effect; positive values briefly multiply camZoom.
+  private zoomPunch = 0;
+  private zoomPunchT = 0;
+  private zoomPunchDur = 0;
   private introT = 1.5;
   private phase: "intro" | "fight" | "ko" = "intro";
   private winner: PlayerId | null = null;
@@ -789,12 +800,57 @@ export class GameEngine {
     this.slowmoT = 0; this.slowmoMode = null;
     this.hitstopT = 0; this.impactFlash = 0;
     this.shake = 0;
+    this.shakeDirX = 0; this.shakeDirY = 0; this.shakeDirT = 0; this.shakeDirDur = 0;
+    this.zoomPunch = 0; this.zoomPunchT = 0; this.zoomPunchDur = 0;
     this.introT = 1.2;
     this.phase = "intro";
     this.winner = null;
     this.koCinematicT = 0;
     this.koFocus = null;
     this.emit();
+  }
+
+  /**
+   * Centralized "this hit feels heavy" funnel. Layers directional shake,
+   * zoom-punch, hit-stop, and white-flash from a single intensity value.
+   * Additive on top of legacy `this.shake` / `this.hitstopT` calls — safe
+   * to sprinkle next to existing impact code without removing the old lines.
+   *
+   * intensity: 0..1 (0.4 = light hit, 0.7 = heavy, 1.0 = super/finisher)
+   * dirX/dirY: world-space direction the strike is travelling. Camera
+   *            kicks ALONG this vector so the player feels the punch land.
+   */
+  private impact(opts: {
+    intensity: number;
+    dirX?: number;
+    dirY?: number;
+    flash?: number;
+    hitstop?: number;
+    zoom?: number;
+  }) {
+    const i = Math.max(0, Math.min(1, opts.intensity));
+    // Directional shake: decays over ~120-220ms scaled by intensity.
+    const dx = opts.dirX ?? 0;
+    const dy = opts.dirY ?? 0;
+    const len = Math.hypot(dx, dy) || 1;
+    const kickStrength = 6 + i * 18; // px at peak, in screen space
+    this.shakeDirX = (dx / len) * kickStrength;
+    this.shakeDirY = (dy / len) * kickStrength;
+    this.shakeDirDur = 0.12 + i * 0.10;
+    this.shakeDirT = this.shakeDirDur;
+    // Zoom-punch: 1.0 → 1+kick → 1.0 over ~180ms. Heavy hits punch harder.
+    const z = opts.zoom ?? (0.02 + i * 0.045);
+    this.zoomPunch = Math.max(this.zoomPunch, z);
+    this.zoomPunchDur = 0.18 + i * 0.08;
+    this.zoomPunchT = this.zoomPunchDur;
+    // Layer hit-stop and white flash on top of existing scalars (max so we
+    // never *reduce* what other code already set this frame).
+    const hs = opts.hitstop ?? (0.04 + i * 0.10);
+    this.hitstopT = Math.max(this.hitstopT, hs);
+    const fl = opts.flash ?? (0.25 + i * 0.55);
+    this.impactFlash = Math.max(this.impactFlash, fl);
+    // Background omni-shake floor scales with intensity.
+    this.shake = Math.max(this.shake, 8 + i * 28);
   }
 
   /**
@@ -814,6 +870,9 @@ export class GameEngine {
     this.slowmoT = Math.max(this.slowmoT, 1.1);
     this.slowmoMode = "impact";
     this.impactFlash = 1;
+    // KO: heaviest possible zoom punch + lateral kick toward the loser.
+    const koDir = winnerId === "p1" ? 1 : -1;
+    this.impact({ intensity: 1.0, dirX: koDir, dirY: -0.5, zoom: 0.09, flash: 0, hitstop: 0 });
     Sfx.play("boom", 0.9);
   }
 
@@ -1445,6 +1504,10 @@ export class GameEngine {
       }
     }
     this.impactFlash = Math.max(0, this.impactFlash - dt * 4);
+    // Decay directional shake + zoom-punch (run on real dt so they aren't
+    // affected by hit-stop pause — they should resolve smoothly).
+    if (this.shakeDirT > 0) this.shakeDirT = Math.max(0, this.shakeDirT - dt);
+    if (this.zoomPunchT > 0) this.zoomPunchT = Math.max(0, this.zoomPunchT - dt);
 
     // Hitstop freezes simulation for a few frames (render still runs)
     if (this.hitstopT > 0) {
@@ -3594,6 +3657,17 @@ export class GameEngine {
     this.hitstopT = Math.max(this.hitstopT, Math.max(m.hitstop, 0.025)); // 1–2 frame hit-freeze min
     if (m.slowmoT > 0) { this.slowmoT = Math.max(this.slowmoT, m.slowmoT); this.slowmoMode = "impact"; }
     this.impactFlash = 1;
+    // Centralized hit-feel layer — directional camera kick + zoom-punch
+    // sized by move damage. Strikes that hit harder shake the camera ALONG
+    // the strike vector, sell follow-through, and pop a quick zoom.
+    const intensity = Math.min(1, Math.max(0.25, m.damage / 22));
+    this.impact({
+      intensity,
+      dirX: f.facing,
+      dirY: -0.25, // small upward bias — punches read as lifting the camera
+      flash: 0,    // already set above
+      hitstop: 0,  // already set above
+    });
     this.burst(fx, fy, f.skin.glow, 28);
     this.shockwaves.push({ x: fx, y: fy, r: 6, rMax: 80, life: 0.35, maxLife: 0.35, color: "oklch(0.95 0.05 80)" });
     Sfx.play(m.hitSfx, 1);
@@ -3624,6 +3698,8 @@ export class GameEngine {
     this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
     this.slowmoMode = "impact";
     this.impactFlash = 1;
+    // Super: max-intensity directional impact + heavy zoom punch.
+    this.impact({ intensity: 1.0, dirX: dir, dirY: -0.4, zoom: 0.07, flash: 0, hitstop: 0 });
     // Cinematic glow burst — multi-ring shockwaves + dense particle explosion
     const cx = t.x, cy = t.y + FIGHTER_H * 0.5;
     this.burst(cx, cy, attacker.skin.glow, 64);
@@ -4402,8 +4478,19 @@ export class GameEngine {
 
   private render() {
     const ctx = this.ctx;
+    // Legacy omni-shake (random jitter both axes)
     const shx = (Math.random() - 0.5) * this.shake;
     const shy = (Math.random() - 0.5) * this.shake;
+    // Directional kick — eased pulse along the strike vector. Peaks at
+    // ~30% of the duration then settles, reading as a real punch land.
+    let dirShx = 0, dirShy = 0;
+    if (this.shakeDirT > 0 && this.shakeDirDur > 0) {
+      const u = 1 - this.shakeDirT / this.shakeDirDur; // 0→1
+      // pulse: fast rise, slower fall — sin(πu)^0.6 with bias
+      const pulse = Math.pow(Math.sin(Math.PI * u), 0.7) * (1 - u * 0.4);
+      dirShx = this.shakeDirX * pulse;
+      dirShy = this.shakeDirY * pulse;
+    }
 
     const cw = this.canvas.width, ch = this.canvas.height;
 
@@ -4422,7 +4509,14 @@ export class GameEngine {
       targetZoom = 2.6;
     }
     this.camZoom += (targetZoom - this.camZoom) * (koActive ? 0.18 : 0.08);
-    const worldScale = baseScale * this.camZoom;
+    // Multiplicative zoom-punch overlay — bell curve that fades to 0.
+    let zoomMul = 1;
+    if (this.zoomPunchT > 0 && this.zoomPunchDur > 0) {
+      const u = 1 - this.zoomPunchT / this.zoomPunchDur;
+      const bell = Math.sin(Math.PI * u);
+      zoomMul = 1 + this.zoomPunch * bell;
+    }
+    const worldScale = baseScale * this.camZoom * zoomMul;
 
     // Visible world half-extents (in world units)
     const vw = cw / worldScale, vh = ch / worldScale;
@@ -4442,8 +4536,8 @@ export class GameEngine {
     this.camX += (clampedTx - this.camX) * 0.12;
     this.camY += (clampedTy - this.camY) * 0.12;
 
-    const offX = cw / 2 - this.camX * worldScale + shx;
-    const offY = ch / 2 - this.camY * worldScale + shy;
+    const offX = cw / 2 - this.camX * worldScale + shx + dirShx;
+    const offY = ch / 2 - this.camY * worldScale + shy + dirShy;
 
     this.viewScale = worldScale;
     this.viewOffX = offX;
