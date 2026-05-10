@@ -213,6 +213,10 @@ interface Particle {
   maxLife: number;
   color: string;
   size: number;
+  /** Optional gravity multiplier (1 = full gravity). Used for blood droplets. */
+  grav?: number;
+  /** When true, on touching ground (GROUND_Y) particle stamps a ground decal. */
+  blood?: boolean;
 }
 
 interface Shockwave { x: number; y: number; r: number; rMax: number; life: number; maxLife: number; color: string; }
