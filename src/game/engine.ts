@@ -3909,6 +3909,8 @@ export class GameEngine {
     if (target.iframeT > 0) return;
     // During downed/getup the target is on the floor — skip melee hits (mercy)
     if (target.downedT > 0 || target.getUpT > 0) return;
+    // Hit confirmed → attacker may now cancel into another move.
+    f.cancelOK = true;
     // ---- PARRY ----
     // Target tapped PUNCH within the parry window AND is facing the attacker.
     // Deflect: 0 damage, attacker staggered + brief stun, defender flashes,
