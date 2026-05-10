@@ -133,6 +133,12 @@ interface Fighter {
   landImpact: number;      // 0..1 cached at landing (drives squash depth + frame hold)
   // ragdoll secondary motion
   ragdollWobble: number;   // secondary floppy angle overlay (rad, decays with energy)
+  // Per-limb rotational lag — each limb chases ragdollAV with its own damping
+  // so the body flails instead of moving in lockstep.
+  headLag: number;
+  armLagL: number;
+  armLagR: number;
+  legLag: number;
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
