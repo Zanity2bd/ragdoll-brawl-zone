@@ -149,6 +149,12 @@ interface Fighter {
   hitReactDur: number;
   hitReactDir: 1 | -1;
   hitReactMag: number; // 0..1
+  // Cancel system: once the current attack lands a confirmed hit, the fighter
+  // can cancel out of recovery into another attack/jump. Buffers smooth taps
+  // pressed during recovery so chains feel responsive.
+  cancelOK: boolean;
+  meleeBufferT: number;
+  punchBufferT: number;
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
@@ -953,6 +959,7 @@ export class GameEngine {
       headLag: 0, armLagL: 0, armLagR: 0, legLag: 0,
       weaponTrail: createTrail(),
       hitReactKind: null, hitReactT: 0, hitReactDur: 0, hitReactDir: 1, hitReactMag: 0,
+      cancelOK: false, meleeBufferT: 0, punchBufferT: 0,
       wobble: createWobble(),
       dash: null,
       frenzy: null,
