@@ -2374,6 +2374,11 @@ export class GameEngine {
     // Weapon trail: decay every frame; sample at draw time using live pose.
     tickTrail(f.weaponTrail, dt);
     if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) resetTrail(f.weaponTrail);
+    // Decay hit-reaction overlay timer.
+    if (f.hitReactT > 0) {
+      f.hitReactT = Math.max(0, f.hitReactT - dt);
+      if (f.hitReactT <= 0) f.hitReactKind = null;
+    }
 
     // ---- Cape & body secondary motion (spring-mass) ----
     // Heavier feel: lower stiffness + higher damping → slower, weightier swing.
