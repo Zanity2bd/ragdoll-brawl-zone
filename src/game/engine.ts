@@ -186,8 +186,12 @@ interface Fighter {
   // Air juggle: hits stacked while target is airborne. Scales damage/KB
   // down with diminishing returns so launches stay cinematic but not abusive.
   juggleHits: number;
-  juggleResetT: number;     // resets when target lands & stays grounded
-  juggleFlash: number;      // 0..1 cosmetic pulse for floating combo counter
+  juggleResetT: number;
+  juggleFlash: number;
+  // Parry window: tap PUNCH right before an incoming hit to deflect it,
+  // stagger the attacker, and refund a chunk of super cooldown.
+  parryT: number;
+  parrySuccessT: number; // cosmetic flash after a successful parry
 }
 
 interface SmokeCloud {
@@ -926,6 +930,7 @@ export class GameEngine {
       punchT: 0, punchCd: 0, punchHit: false, recoverT: 0, justLandedT: 0,
       comboStep: 0, comboWindowT: 0, comboT: 0, comboDur: 0, comboKind: null, comboHit: false,
       juggleHits: 0, juggleResetT: 0, juggleFlash: 0,
+      parryT: 0, parrySuccessT: 0,
     };
   }
 
@@ -2618,6 +2623,8 @@ export class GameEngine {
 
     // ---- Air-juggle bookkeeping ----
     // Once the fighter is grounded & stable, the juggle counter unwinds.
+    if (f.parryT > 0) f.parryT = Math.max(0, f.parryT - dt);
+    if (f.parrySuccessT > 0) f.parrySuccessT = Math.max(0, f.parrySuccessT - dt * 1.4);
     if (f.juggleFlash > 0) f.juggleFlash = Math.max(0, f.juggleFlash - dt * 1.6);
     if (f.juggleHits > 0) {
       const stable = f.onGround && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0;
@@ -2713,6 +2720,9 @@ export class GameEngine {
       }
     }
     if (intent.punch && f.punchT === 0 && f.comboKind == null && f.punchCd <= 0 && !f.meleeKind && !f.dash && !f.frenzy && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.wobble.staggerT < 0.2) {
+      // Arm a tight parry window on every punch tap. If a hit lands within
+      // the next ~140ms it'll be deflected (see applyMeleeHit).
+      f.parryT = 0.14;
       if (f.comboStep === 1 && f.comboWindowT > 0) {
         // Step 2: high kick
         f.comboKind = "kick"; f.comboT = 0.0001; f.comboDur = 0.32; f.comboHit = false;
@@ -3678,6 +3688,46 @@ export class GameEngine {
     if (target.iframeT > 0) return;
     // During downed/getup the target is on the floor — skip melee hits (mercy)
     if (target.downedT > 0 || target.getUpT > 0) return;
+    // ---- PARRY ----
+    // Target tapped PUNCH within the parry window AND is facing the attacker.
+    // Deflect: 0 damage, attacker staggered + brief stun, defender flashes,
+    // super cooldown is slashed by 40% as the meter-fill reward.
+    const targetFaces = Math.sign(f.x - target.x) === target.facing;
+    if (target.parryT > 0 && targetFaces) {
+      target.parryT = 0;
+      target.parrySuccessT = 0.5;
+      target.iframeT = Math.max(target.iframeT, 0.18);
+      target.superCd = Math.max(0, target.superCd - SUPER_CD * 0.4);
+      // Stagger the attacker — interrupt their swing, knock them back light.
+      f.punchT = 0; f.comboKind = null; f.comboT = 0;
+      f.meleeT = Math.max(f.meleeT, f.meleeDur - 0.05); // skip to recover
+      f.vx = -f.facing * 220;
+      f.wobble.staggerT = Math.max(f.wobble.staggerT, 0.32);
+      f.wobble.staggerDir = (-f.facing) as 1 | -1;
+      f.wobble.staggerMag = 0.7;
+      applyImpulse(f.wobble, -f.facing as 1 | -1, -0.3, 0.7);
+      // FX: bright clang ring + sparks
+      this.hitstopT = Math.max(this.hitstopT, 0.12);
+      this.shake = Math.max(this.shake, 14);
+      this.impact({ intensity: 0.55, dirX: -f.facing, dirY: -0.3, zoom: 0.025, flash: 0, hitstop: 0 });
+      this.shockwaves.push({
+        x: fx, y: fy, r: 8, rMax: 90,
+        life: 0.4, maxLife: 0.4, color: "oklch(0.95 0.18 90)",
+      });
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        const sp = 220 + Math.random() * 180;
+        this.particles.push({
+          x: fx, y: fy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 60,
+          life: 0.35 + Math.random() * 0.2, maxLife: 0.55,
+          color: i % 2 ? "oklch(0.95 0.18 90)" : "oklch(0.98 0.05 80)",
+          size: 1.6 + Math.random() * 1.8,
+        });
+      }
+      Sfx.play("blip", 0.9);
+      Sfx.play("jab", 0.4);
+      return;
+    }
     target.hp = Math.max(0, target.hp - m.damage);
     target.hitFlash = 0.35;
     // Air-juggle: if target is airborne (or already in a juggle), tally
@@ -5295,6 +5345,28 @@ export class GameEngine {
     this.drawFighterAt(f, f.x, f.y, pose, false);
     this.drawDamageOverlay(f);
     this.drawJuggleCounter(f);
+    this.drawParryFlash(f);
+  }
+
+  /** Bright "PARRY!" pop above a fighter who just deflected a hit. */
+  private drawParryFlash(f: Fighter) {
+    if (f.parrySuccessT <= 0) return;
+    const ctx = this.ctx;
+    const a = Math.min(1, f.parrySuccessT * 1.6);
+    const pop = 1 + (1 - a) * 0.45;
+    const y = f.y - 30 - (1 - a) * 18;
+    ctx.save();
+    ctx.translate(f.x, y);
+    ctx.scale(pop, pop);
+    ctx.font = "900 16px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 3.2;
+    ctx.strokeStyle = `oklch(0.18 0.06 80 / ${0.9 * a})`;
+    ctx.fillStyle = `oklch(0.95 0.20 95 / ${a})`;
+    ctx.strokeText("PARRY!", 0, 0);
+    ctx.fillText("PARRY!", 0, 0);
+    ctx.restore();
   }
 
   /** Floating "xN HIT" tag above an actively juggled fighter. */
