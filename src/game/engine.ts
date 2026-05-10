@@ -5260,6 +5260,57 @@ export class GameEngine {
   private drawFighter(f: Fighter) {
     const pose = this.poseFor(f);
     this.drawFighterAt(f, f.x, f.y, pose, false);
+    this.drawDamageOverlay(f);
+  }
+
+  /**
+   * Anger-of-Stick damage state: as HP drops the body shows progressive
+   * blood/bruising. Drawn AFTER the sprite so it tints whatever frame is
+   * on screen. Hidden during ragdoll/down because we want the silhouette
+   * clean during cinematic moments (the blood spray sells those instead).
+   */
+  private drawDamageOverlay(f: Fighter) {
+    if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) return;
+    const hp = Math.max(0, f.hp);
+    if (hp >= 60) return; // no visible damage above 60% HP
+    const ctx = this.ctx;
+    // Tier curve: 60→0 maps to 0→1 intensity
+    const t = Math.min(1, (60 - hp) / 60);
+    const x = f.x + f.bodyLagX;
+    const top = f.y + FIGHTER_H * 0.10;
+    const h = FIGHTER_H * 0.65;
+    const w = FIGHTER_H * 0.34;
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+    // Bruise wash — desaturated dark red, gets stronger
+    ctx.globalAlpha = 0.18 + t * 0.42;
+    ctx.fillStyle = hp < 15
+      ? "oklch(0.30 0.18 22)"          // soaked
+      : hp < 30 ? "oklch(0.42 0.15 22)" // blood streaks
+      : "oklch(0.55 0.10 25)";          // light bruise
+    ctx.beginPath();
+    ctx.ellipse(x, top + h * 0.5, w, h * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // Drip streaks (only at lower tiers)
+    if (hp < 30 && !this.lowPower) {
+      ctx.save();
+      ctx.strokeStyle = "oklch(0.32 0.18 25)";
+      ctx.lineWidth = 1.2;
+      ctx.globalAlpha = 0.55 + t * 0.3;
+      const seed = (f.id === "p1" ? 13 : 27);
+      const drips = hp < 15 ? 5 : 3;
+      for (let i = 0; i < drips; i++) {
+        const ox = ((seed * (i + 1) * 53) % 19) - 9;
+        const sy = top + (i * 8 + (seed % 7));
+        const len = 8 + ((seed * (i + 3)) % 12) + t * 10;
+        ctx.beginPath();
+        ctx.moveTo(x + ox, sy);
+        ctx.lineTo(x + ox + (i % 2 ? 1 : -1), sy + len);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
 
   private drawFighterAt(f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
