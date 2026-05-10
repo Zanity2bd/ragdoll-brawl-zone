@@ -142,6 +142,13 @@ interface Fighter {
   legLag: number;
   // Per-strike weapon/limb motion-trail ribbon (presentation only)
   weaponTrail: TrailState;
+  // Hit-reaction library — distinct flinch profiles applied as canvas
+  // transforms over the body sprite. Pure presentation; combat math unchanged.
+  hitReactKind: "light" | "heavy" | "juggle" | "wallBounce" | "groundBounce" | null;
+  hitReactT: number;
+  hitReactDur: number;
+  hitReactDir: 1 | -1;
+  hitReactMag: number; // 0..1
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
@@ -945,6 +952,7 @@ export class GameEngine {
       preJumpT: 0, landSquashT: 0, landImpact: 0, ragdollWobble: 0,
       headLag: 0, armLagL: 0, armLagR: 0, legLag: 0,
       weaponTrail: createTrail(),
+      hitReactKind: null, hitReactT: 0, hitReactDur: 0, hitReactDir: 1, hitReactMag: 0,
       wobble: createWobble(),
       dash: null,
       frenzy: null,
@@ -2366,6 +2374,11 @@ export class GameEngine {
     // Weapon trail: decay every frame; sample at draw time using live pose.
     tickTrail(f.weaponTrail, dt);
     if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) resetTrail(f.weaponTrail);
+    // Decay hit-reaction overlay timer.
+    if (f.hitReactT > 0) {
+      f.hitReactT = Math.max(0, f.hitReactT - dt);
+      if (f.hitReactT <= 0) f.hitReactKind = null;
+    }
 
     // ---- Cape & body secondary motion (spring-mass) ----
     // Heavier feel: lower stiffness + higher damping → slower, weightier swing.
@@ -2465,8 +2478,10 @@ export class GameEngine {
       f.armLagR  = lagChase(f.armLagR,  f.ragdollAV * 0.55, 8.2) * Math.pow(0.90, dt * 60);
       f.legLag   = lagChase(f.legLag,   f.ragdollAV * 0.40, 7.0) * Math.pow(0.91, dt * 60);
       // Walls — bounce with energy loss
-      if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
-      if (f.x > W - 30) { f.x = W - 30; f.vx = -Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6); }
+      if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6);
+        f.hitReactKind = "wallBounce"; f.hitReactT = 0.22; f.hitReactDur = 0.22; f.hitReactDir = 1; f.hitReactMag = Math.min(1, Math.abs(f.vx) / 360 + 0.3); }
+      if (f.x > W - 30) { f.x = W - 30; f.vx = -Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6);
+        f.hitReactKind = "wallBounce"; f.hitReactT = 0.22; f.hitReactDur = 0.22; f.hitReactDir = -1; f.hitReactMag = Math.min(1, Math.abs(f.vx) / 360 + 0.3); }
       // Ground impact
       if (f.y + FIGHTER_H >= GROUND_Y) {
         f.y = GROUND_Y - FIGHTER_H;
@@ -2487,6 +2502,8 @@ export class GameEngine {
           f.ragdollEnergy = Math.max(0, f.ragdollEnergy - 0.25);
           this.shake = Math.max(this.shake, Math.min(14, impact * 0.05));
           Sfx.play("thud", Math.min(0.6, impact / 600));
+          f.hitReactKind = "groundBounce"; f.hitReactT = 0.18; f.hitReactDur = 0.18;
+          f.hitReactDir = (pulseDir as 1 | -1) || 1; f.hitReactMag = Math.min(1, impact / 480);
           // Dust puff
           if (!this.lowPower) {
             for (let i = 0; i < 6; i++) {
@@ -3957,6 +3974,17 @@ export class GameEngine {
       target.wobble.staggerDir = f.facing;
       target.wobble.staggerMag = mag;
       applyImpulse(target.wobble, f.facing, -0.45, mag);
+    }
+    // Hit-reaction profile: pick light/heavy/juggle based on context. Ragdoll
+    // hits get no overlay (ragdoll renderer owns the body during that window).
+    if (target.ragdollT <= 0) {
+      const dmgN = Math.min(1, m.damage / 22);
+      const isJuggle = wasAirborne && target.juggleHits >= 2;
+      target.hitReactKind = isJuggle ? "juggle" : (m.damage >= 12 ? "heavy" : "light");
+      target.hitReactT = isJuggle ? 0.30 : (m.damage >= 12 ? 0.26 : 0.18);
+      target.hitReactDur = target.hitReactT;
+      target.hitReactDir = f.facing as 1 | -1;
+      target.hitReactMag = Math.max(0.3, dmgN);
     }
     this.shake = Math.max(this.shake, m.shake);
     this.hitstopT = Math.max(this.hitstopT, Math.max(m.hitstop, 0.025)); // 1–2 frame hit-freeze min
@@ -5670,7 +5698,56 @@ export class GameEngine {
 
   private drawFighter(f: Fighter) {
     const pose = this.poseFor(f);
-    this.drawFighterAt(f, f.x, f.y, pose, false);
+    const ctx = this.ctx;
+    // Hit-reaction transform — distinct profile per flinch kind. Pure
+    // canvas-space transform applied around the body so the sprite stays
+    // unchanged but the silhouette reads as "hit".
+    const hr = f.hitReactKind;
+    if (hr && f.hitReactT > 0 && f.ragdollT <= 0) {
+      const u = f.hitReactT / Math.max(0.0001, f.hitReactDur);   // 1 → 0
+      // Ease-out so the snap is on impact and recovery is smooth
+      const e = u * u;
+      const dir = f.hitReactDir;
+      const mag = f.hitReactMag;
+      let dx = 0, dy = 0, rot = 0, sx = 1, sy = 1;
+      switch (hr) {
+        case "light":
+          dx = dir * 4 * mag * e;
+          rot = -dir * 0.05 * mag * e;
+          break;
+        case "heavy":
+          dx = dir * 9 * mag * e;
+          dy = -3 * mag * e;
+          rot = -dir * 0.13 * mag * e;
+          sy = 1 - 0.07 * mag * e; sx = 1 + 0.05 * mag * e; // squash
+          break;
+        case "juggle":
+          // Spin tilt for chained air hits — rotates more on each flinch.
+          dx = dir * 5 * mag * e;
+          dy = -6 * mag * e;
+          rot = -dir * (0.18 + Math.min(0.18, f.juggleHits * 0.025)) * mag * e;
+          break;
+        case "wallBounce":
+          dx = dir * 7 * mag * e;
+          rot = dir * 0.16 * mag * e;
+          sx = 1 - 0.08 * mag * e; sy = 1 + 0.06 * mag * e; // sideways squash
+          break;
+        case "groundBounce":
+          dy = -4 * mag * e;
+          sx = 1 + 0.10 * mag * e; sy = 1 - 0.10 * mag * e; // pancake
+          rot = dir * 0.06 * mag * e;
+          break;
+      }
+      ctx.save();
+      ctx.translate(f.x + dx, f.y + FIGHTER_H + dy);
+      ctx.rotate(rot);
+      ctx.scale(sx, sy);
+      ctx.translate(-(f.x), -(f.y + FIGHTER_H));
+      this.drawFighterAt(f, f.x, f.y, pose, false);
+      ctx.restore();
+    } else {
+      this.drawFighterAt(f, f.x, f.y, pose, false);
+    }
     this.drawDamageOverlay(f);
     this.drawJuggleCounter(f);
     this.drawParryFlash(f);
