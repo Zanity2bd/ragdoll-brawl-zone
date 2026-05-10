@@ -2861,22 +2861,14 @@ export class GameEngine {
       f.parryT = 0.14;
       if (f.comboStep === 1 && f.comboWindowT > 0) {
         // Step 2: high kick
-        f.comboKind = "kick"; f.comboT = 0.0001; f.comboDur = 0.32; f.comboHit = false;
+         f.comboKind = "kick"; f.comboT = 0.0001; f.comboDur = 0.32; f.comboHit = false;
         f.attackAnim = Math.max(f.attackAnim, 0.32);
-        f.comboStep = 2; f.comboWindowT = 0.5;
+        // Combo ends after the high kick — knee finisher removed per design.
+        f.comboStep = 0; f.comboWindowT = 0;
         f.punchCd = PUNCH_CD;
         f.cancelOK = false;
         Sfx.play("whoosh", 0.5);
         armTrail(f.weaponTrail, 0.32, { limb: "footR", rgb: "200,230,255", width: 8 });
-      } else if (f.comboStep === 2 && f.comboWindowT > 0) {
-        // Step 3: knee finisher
-        f.comboKind = "knee"; f.comboT = 0.0001; f.comboDur = 0.36; f.comboHit = false;
-        f.attackAnim = Math.max(f.attackAnim, 0.36);
-        f.comboStep = 0; f.comboWindowT = 0;
-        f.punchCd = PUNCH_CD * 1.5;
-        f.cancelOK = false;
-        Sfx.play("whoosh", 0.6);
-        armTrail(f.weaponTrail, 0.36, { limb: "footR", rgb: "255,210,150", width: 10 });
       } else if (f.recoverT === 0) {
         f.punchT = 0.0001;
         f.punchHit = false;
@@ -3504,6 +3496,40 @@ export class GameEngine {
       f.x = Math.max(40, Math.min(W - 40, behind));
       f.facing = t.facing === 1 ? -1 : 1;
       this.burst(f.x, f.y + 40, f.skin.glow, 16);
+    }
+    // Strong AI windup telegraph on Hard / Extreme — gives the player a fair
+    // read on incoming specials: charge ring + colored glow + brief slow-mo + flash.
+    if (
+      this.cpuEnabled &&
+      f.id === "p2" &&
+      (this.cpuDifficulty === "hard" || this.cpuDifficulty === "extreme") &&
+      m.windup > 0.05
+    ) {
+      const cy = f.y + 36;
+      // Big outer charge ring
+      spawnFx(this.attackFx, "chargeRing", f.x + f.facing * 6, cy, {
+        size: 44,
+        life: m.windup,
+        spin: 7,
+        grow: 26,
+        blend: "lighter",
+        facing: f.facing as 1 | -1,
+      });
+      // Inner flash ring slightly delayed for a layered "ramp" feel
+      spawnFx(this.attackFx, "chargeRing", f.x + f.facing * 6, cy, {
+        size: 22,
+        life: Math.max(0.12, m.windup * 0.7),
+        spin: -9,
+        grow: 14,
+        blend: "lighter",
+        facing: f.facing as 1 | -1,
+      });
+      // Body glow flash on the AI fighter itself
+      f.hitFlash = Math.max(f.hitFlash, 0.35);
+      // Brief slow-mo so the player can react to the windup
+      this.slowmoT = Math.max(this.slowmoT, Math.min(0.22, m.windup));
+      this.slowmoMode = "impact";
+      Sfx.play("whoosh", 0.45);
     }
     if (m.kind === "batCombo") {
       // Throw batarang immediately
