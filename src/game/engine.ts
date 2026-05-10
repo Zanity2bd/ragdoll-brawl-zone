@@ -3905,7 +3905,31 @@ export class GameEngine {
   }
 
   /**
-   * Anger-of-Stick blood spray.
+   * Hulk-style ground crack decal: 4–7 jagged rays radiating from impact x at
+   * GROUND_Y. Persists ~5s, fades. Capped at 16 active so the floor doesn't
+   * become a solid black mat on long matches.
+   */
+  private spawnCrack(x: number, intensity: number) {
+    if (this.lowPower && intensity < 0.7) return;
+    if (this.cracks.length > 16) this.cracks.shift();
+    const it = Math.max(0.3, Math.min(1, intensity));
+    const rayN = 4 + Math.floor(Math.random() * 4);
+    const rays: Crack["rays"] = [];
+    for (let i = 0; i < rayN; i++) {
+      const ang = -Math.PI + (i / rayN) * Math.PI + (Math.random() - 0.5) * 0.4;
+      const len = (28 + Math.random() * 38) * it;
+      // 3-segment polyline jitter offsets (perpendicular wiggle)
+      const jitter = [
+        (Math.random() - 0.5) * 6,
+        (Math.random() - 0.5) * 8,
+        (Math.random() - 0.5) * 5,
+      ];
+      rays.push({ ang, len, jitter });
+    }
+    this.cracks.push({
+      x, rays, life: 5, maxLife: 5, intensity: it,
+    });
+  }
    * Emits an arterial cone of droplets in `dir` direction with gravity, plus a
    * fine mist back-spray. Droplets stamp ground decals on landing. Hard-capped
    * so heavy combos don't tank mobile framerate.
