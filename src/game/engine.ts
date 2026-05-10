@@ -2979,7 +2979,9 @@ export class GameEngine {
       }
       // Soft control penalty during stagger (partial-ragdoll window)
       const staggered = f.wobble.staggerT > 0;
-      const moveMul = staggered ? 0.65 : 1;
+      // Anticipation crouch + landing recovery hard-lock movement (attacks still pass).
+      const moveLocked = f.preJumpT > 0 || f.landSquashT > 0;
+      const moveMul = (staggered ? 0.65 : 1) * (moveLocked ? 0 : 1);
       const accelMul = staggered ? 0.7 : 1;
       // Air control: reduced accel & friction when airborne for natural arcs
       const airMul = f.onGround ? 1 : AIR_CONTROL;
