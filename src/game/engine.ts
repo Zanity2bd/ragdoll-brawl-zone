@@ -2865,6 +2865,7 @@ export class GameEngine {
         f.attackAnim = Math.max(f.attackAnim, 0.32);
         f.comboStep = 2; f.comboWindowT = 0.5;
         f.punchCd = PUNCH_CD;
+        f.cancelOK = false;
         Sfx.play("whoosh", 0.5);
         armTrail(f.weaponTrail, 0.32, { limb: "footR", rgb: "200,230,255", width: 8 });
       } else if (f.comboStep === 2 && f.comboWindowT > 0) {
@@ -2873,6 +2874,7 @@ export class GameEngine {
         f.attackAnim = Math.max(f.attackAnim, 0.36);
         f.comboStep = 0; f.comboWindowT = 0;
         f.punchCd = PUNCH_CD * 1.5;
+        f.cancelOK = false;
         Sfx.play("whoosh", 0.6);
         armTrail(f.weaponTrail, 0.36, { limb: "footR", rgb: "255,210,150", width: 10 });
       } else if (f.recoverT === 0) {
