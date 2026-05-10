@@ -29,7 +29,7 @@ export interface TrailState {
 }
 
 export function createTrail(rgb = "255,235,180", width = 9, decay = 0.18): TrailState {
-  return { samples: [], active: 0, rgb, width, decay };
+  return { samples: [], active: 0, rgb, width, decay, limb: "handR" };
 }
 
 export function resetTrail(t: TrailState) {
