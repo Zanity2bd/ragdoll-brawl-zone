@@ -12,6 +12,8 @@ export interface TrailSample {
   maxLife: number;
 }
 
+export type TrailLimb = "handL" | "handR" | "footL" | "footR";
+
 export interface TrailState {
   samples: TrailSample[];
   /** if positive, trail is actively being drawn from this point */
@@ -22,6 +24,8 @@ export interface TrailState {
   width: number;
   /** How long each sample lives (sec) */
   decay: number;
+  /** Which pose limb to sample */
+  limb: TrailLimb;
 }
 
 export function createTrail(rgb = "255,235,180", width = 9, decay = 0.18): TrailState {
