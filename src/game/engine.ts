@@ -2363,6 +2363,9 @@ export class GameEngine {
     f.attackAnim = Math.max(0, f.attackAnim - dt);
     f.slowedT = Math.max(0, f.slowedT - dt);
     f.hoverPhase += dt * HOVER_RATE * Math.PI * 2;
+    // Weapon trail: decay every frame; sample at draw time using live pose.
+    tickTrail(f.weaponTrail, dt);
+    if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) resetTrail(f.weaponTrail);
 
     // ---- Cape & body secondary motion (spring-mass) ----
     // Heavier feel: lower stiffness + higher damping → slower, weightier swing.
