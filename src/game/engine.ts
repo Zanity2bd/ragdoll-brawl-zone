@@ -2816,6 +2816,7 @@ export class GameEngine {
         f.comboStep = 2; f.comboWindowT = 0.5;
         f.punchCd = PUNCH_CD;
         Sfx.play("whoosh", 0.5);
+        armTrail(f.weaponTrail, 0.32, { limb: "footR", rgb: "200,230,255", width: 8 });
       } else if (f.comboStep === 2 && f.comboWindowT > 0) {
         // Step 3: knee finisher
         f.comboKind = "knee"; f.comboT = 0.0001; f.comboDur = 0.36; f.comboHit = false;
@@ -2823,12 +2824,14 @@ export class GameEngine {
         f.comboStep = 0; f.comboWindowT = 0;
         f.punchCd = PUNCH_CD * 1.5;
         Sfx.play("whoosh", 0.6);
+        armTrail(f.weaponTrail, 0.36, { limb: "footR", rgb: "255,210,150", width: 10 });
       } else if (f.recoverT === 0) {
         f.punchT = 0.0001;
         f.punchHit = false;
         f.punchCd = PUNCH_CD;
         f.attackAnim = Math.max(f.attackAnim, PUNCH_DUR);
         Sfx.play("whoosh", 0.35);
+        armTrail(f.weaponTrail, PUNCH_DUR, { limb: "handR", rgb: "255,235,180", width: 7 });
       }
     }
     intent.punch = false;
