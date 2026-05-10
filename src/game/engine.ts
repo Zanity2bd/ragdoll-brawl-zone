@@ -3409,7 +3409,7 @@ export class GameEngine {
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
     // Per-strike weapon trail — tinted + sized per move kind.
     {
-      const k = m.kind;
+      const k = m.kind as string;
       const isKick = k === "kick" || k === "groundSmash" || k === "spinKick" || k === "flyingKnee" || k === "bamfKick";
       const limb: import("./weaponTrail").TrailLimb = isKick ? "footR" : "handR";
       let rgb = "255,235,180", width = 9;
