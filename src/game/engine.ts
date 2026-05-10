@@ -19,6 +19,7 @@ import {
 import { getStance } from "./stances";
 import { loadV2Sheet } from "./walkCycleV2";
 import { loadAttackFx, spawnFx, tickFx, drawFxPool, type ActiveFx } from "./attackFx";
+import { createTrail, armTrail, sampleTrail, tickTrail, drawTrail, resetTrail, type TrailState } from "./weaponTrail";
 
 export type PlayerId = "p1" | "p2";
 
@@ -139,6 +140,8 @@ interface Fighter {
   armLagL: number;
   armLagR: number;
   legLag: number;
+  // Per-strike weapon/limb motion-trail ribbon (presentation only)
+  weaponTrail: TrailState;
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
   // super-dash
@@ -941,6 +944,7 @@ export class GameEngine {
       coyoteT: 0, jumpBufferT: 0, jumpHeldT: 0, airJumps: 0,
       preJumpT: 0, landSquashT: 0, landImpact: 0, ragdollWobble: 0,
       headLag: 0, armLagL: 0, armLagR: 0, legLag: 0,
+      weaponTrail: createTrail(),
       wobble: createWobble(),
       dash: null,
       frenzy: null,
@@ -2359,6 +2363,9 @@ export class GameEngine {
     f.attackAnim = Math.max(0, f.attackAnim - dt);
     f.slowedT = Math.max(0, f.slowedT - dt);
     f.hoverPhase += dt * HOVER_RATE * Math.PI * 2;
+    // Weapon trail: decay every frame; sample at draw time using live pose.
+    tickTrail(f.weaponTrail, dt);
+    if (f.ragdollT > 0 || f.downedT > 0 || f.getUpT > 0) resetTrail(f.weaponTrail);
 
     // ---- Cape & body secondary motion (spring-mass) ----
     // Heavier feel: lower stiffness + higher damping → slower, weightier swing.
@@ -2812,6 +2819,7 @@ export class GameEngine {
         f.comboStep = 2; f.comboWindowT = 0.5;
         f.punchCd = PUNCH_CD;
         Sfx.play("whoosh", 0.5);
+        armTrail(f.weaponTrail, 0.32, { limb: "footR", rgb: "200,230,255", width: 8 });
       } else if (f.comboStep === 2 && f.comboWindowT > 0) {
         // Step 3: knee finisher
         f.comboKind = "knee"; f.comboT = 0.0001; f.comboDur = 0.36; f.comboHit = false;
@@ -2819,12 +2827,14 @@ export class GameEngine {
         f.comboStep = 0; f.comboWindowT = 0;
         f.punchCd = PUNCH_CD * 1.5;
         Sfx.play("whoosh", 0.6);
+        armTrail(f.weaponTrail, 0.36, { limb: "footR", rgb: "255,210,150", width: 10 });
       } else if (f.recoverT === 0) {
         f.punchT = 0.0001;
         f.punchHit = false;
         f.punchCd = PUNCH_CD;
         f.attackAnim = Math.max(f.attackAnim, PUNCH_DUR);
         Sfx.play("whoosh", 0.35);
+        armTrail(f.weaponTrail, PUNCH_DUR, { limb: "handR", rgb: "255,235,180", width: 7 });
       }
     }
     intent.punch = false;
@@ -3400,6 +3410,21 @@ export class GameEngine {
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
+    // Per-strike weapon trail — tinted + sized per move kind.
+    {
+      const k = m.kind as string;
+      const isKick = k === "kick" || k === "groundSmash" || k === "spinKick" || k === "flyingKnee" || k === "bamfKick";
+      const limb: import("./weaponTrail").TrailLimb = isKick ? "footR" : "handR";
+      let rgb = "255,235,180", width = 9;
+      if (k === "heatPunch") { rgb = "255,120,80"; width = 12; }
+      else if (k === "crowbar") { rgb = "210,200,180"; width = 11; }
+      else if (k === "repulsor") { rgb = "200,230,255"; width = 12; }
+      else if (k === "groundSmash") { rgb = "255,200,120"; width = 14; }
+      else if (k === "bamfPunch" || k === "bamfKick") { rgb = "180,120,255"; width = 11; }
+      else if (k === "phaseStrike") { rgb = "255,240,120"; width = 9; }
+      else if (k === "speedFlurry") { rgb = "255,250,200"; width = 7; }
+      armTrail(f.weaponTrail, m.windup + m.active + 0.05, { limb, rgb, width });
+    }
     // Charge-ring telegraph for the new sprite-driven specials.
     if (m.kind === "heatPunch" || m.kind === "crowbar" || m.kind === "repulsor" || m.kind === "groundSmash") {
       const cy = m.kind === "groundSmash" ? f.y + FIGHTER_H - 6 : f.y + 36;
@@ -5196,6 +5221,15 @@ export class GameEngine {
 
     // Hide attacker (and target) during frenzy — replaced by video clip below.
     const frenzyAttacker = this.p1.frenzy ? this.p1 : (this.p2.frenzy ? this.p2 : null);
+    // Sample weapon trails using current pose so the ribbon tracks the limb
+    // exactly. Drawn UNDER the fighter sprite so the body stays the focal point.
+    for (const f of [this.p1, this.p2]) {
+      if (f.weaponTrail.active <= 0 && f.weaponTrail.samples.length === 0) continue;
+      const pose = this.poseFor(f);
+      const lp = pose[f.weaponTrail.limb];
+      sampleTrail(f.weaponTrail, f.x + lp[0], f.y + lp[1]);
+      drawTrail(ctx, f.weaponTrail);
+    }
     if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
     // Sprite-based attack FX overlays (charge ring, slash arc, impact star, shockwave).
