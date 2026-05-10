@@ -3407,6 +3407,21 @@ export class GameEngine {
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
+    // Per-strike weapon trail — tinted + sized per move kind.
+    {
+      const k = m.kind;
+      const isKick = k === "kick" || k === "groundSmash" || k === "spinKick" || k === "flyingKnee" || k === "bamfKick";
+      const limb: import("./weaponTrail").TrailLimb = isKick ? "footR" : "handR";
+      let rgb = "255,235,180", width = 9;
+      if (k === "heatPunch") { rgb = "255,120,80"; width = 12; }
+      else if (k === "crowbar") { rgb = "210,200,180"; width = 11; }
+      else if (k === "repulsor") { rgb = "200,230,255"; width = 12; }
+      else if (k === "groundSmash") { rgb = "255,200,120"; width = 14; }
+      else if (k === "bamfPunch" || k === "bamfKick") { rgb = "180,120,255"; width = 11; }
+      else if (k === "phaseStrike") { rgb = "255,240,120"; width = 9; }
+      else if (k === "speedFlurry") { rgb = "255,250,200"; width = 7; }
+      armTrail(f.weaponTrail, m.windup + m.active + 0.05, { limb, rgb, width });
+    }
     // Charge-ring telegraph for the new sprite-driven specials.
     if (m.kind === "heatPunch" || m.kind === "crowbar" || m.kind === "repulsor" || m.kind === "groundSmash") {
       const cy = m.kind === "groundSmash" ? f.y + FIGHTER_H - 6 : f.y + 36;
