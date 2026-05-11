@@ -6660,12 +6660,14 @@ export class GameEngine {
       const drawFrame = (idx: number) =>
         drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
 
-      // ---- Ragdoll tumble (rotate down silhouette by physics angle) ----
+      // ---- Ragdoll tumble (rotate down silhouette around HIP, not sprite center) ----
       if (f.ragdollT > 0) {
         ctx.save();
-        ctx.translate(x + f.bodyLagX, y + FIGHTER_H * 0.5);
+        // Pelvis pivot keeps the body anchored at the hip during tumble — no
+        // sprite-center slide that breaks skin/skeleton cohesion.
+        ctx.translate(x + f.bodyLagX, y + FIGHTER_H * 0.62);
         ctx.rotate(f.ragdollAng);
-        ctx.translate(0, FIGHTER_H * 0.5);
+        ctx.translate(0, FIGHTER_H * 0.38);
         drawWalkFrame(ctx, skin, DOWN_FRAME, 0, 0, renderFacing, FIGHTER_H);
         ctx.restore();
         return;
