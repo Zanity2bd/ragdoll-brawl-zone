@@ -3993,6 +3993,7 @@ export class GameEngine {
                 target.ragdollEnergy = 1;
                 target.ragdollAV = dir * 5;
                 target.ragdollImmuneT = 1.0;
+                applyHitReaction(target.rs, dir, 0.5, 0.85, -1, HR_AIRBORNE | HR_LAUNCHER);
                 if (target.iframeT <= 0) {
                   const airDmg = Math.max(6, Math.round(m.damage * 0.35));
                   target.hp = Math.max(0, target.hp - airDmg);
