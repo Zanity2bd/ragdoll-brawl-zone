@@ -6468,10 +6468,14 @@ export class GameEngine {
           break;
       }
       ctx.save();
-      ctx.translate(f.x + dx, f.y + FIGHTER_H + dy);
+      // Pelvis-rooted pivot for hit-reaction transforms — feet pivot caused
+      // the entire body to slide horizontally on rotation, separating the
+      // sprite from the procedural rig. Rotating around the hip keeps the
+      // body silhouette anchored where the impact actually applies force.
+      ctx.translate(f.x + dx, f.y + FIGHTER_H * 0.62 + dy);
       ctx.rotate(rot);
       ctx.scale(sx, sy);
-      ctx.translate(-(f.x), -(f.y + FIGHTER_H));
+      ctx.translate(-(f.x), -(f.y + FIGHTER_H * 0.62));
       this.drawFighterAt(f, f.x, f.y, pose, false);
       ctx.restore();
     } else {
