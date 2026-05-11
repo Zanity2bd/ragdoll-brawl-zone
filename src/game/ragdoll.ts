@@ -248,6 +248,33 @@ export function applyHitReaction(
   if (state === "knockoutCollapse" || state === "finalKO") {
     rs.recoveryT = 0.6 + 0.6 * p;
   }
+
+  // Anticipation, if set, is consumed by the impact (release the brace).
+  rs.incomingImpactT = 0;
+  rs.incomingImpactStrength = 0;
+  rs.incomingImpactDir = 0;
+}
+
+/**
+ * Telegraph an upcoming heavy hit on `target`. Triggers a 1–2 frame inward
+ * "brace" before impact lands. Visual-only; never freezes gameplay. Skip for
+ * jabs / DOT / instant collisions — caller decides eligibility.
+ *
+ * @param leadTime  seconds until the hit lands (caller estimates).
+ * @param strength  0..1 (matches the eventual hit power).
+ * @param dir       sign of incoming hit direction.
+ */
+export function applyAnticipation(
+  rs: RagdollState,
+  leadTime: number,
+  strength: number,
+  dir: number,
+): void {
+  if (rs.state === "knockoutCollapse" || rs.state === "finalKO") return;
+  const t = Math.max(0.016, Math.min(0.05, leadTime)); // 16-50ms cap
+  rs.incomingImpactT = Math.max(rs.incomingImpactT, t);
+  rs.incomingImpactStrength = Math.max(rs.incomingImpactStrength, Math.max(0, Math.min(1, strength)));
+  rs.incomingImpactDir = dir < 0 ? -1 : 1;
 }
 
 /**
