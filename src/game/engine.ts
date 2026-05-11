@@ -405,27 +405,30 @@ function attackEnvelope(
   };
 
   if (kind === "kick") {
+    // Rotation values are larger here than for hip-pivoted attacks because
+    // the renderer pivots kicks around the planted foot — a small angle at
+    // the foot translates to a meaningful hip arc, which sells weight.
     if (u < 0.30) {
       phase = smooth(u / 0.30);
-      tx = -facing * 4 * phase;            // weight shifts back onto stance leg
-      ty = -1.5 * phase;                   // tiny rise on chamber
-      rot = -facing * 0.04 * phase;        // shoulder dips back
+      tx = -facing * 3 * phase;            // weight shifts back onto stance leg
+      ty = -2 * phase;                     // body drops slightly to chamber
+      rot = -facing * 0.10 * phase;        // lean BACK over planted foot
     } else if (u < 0.45) {
       phase = smooth((u - 0.30) / 0.15);
-      tx = -facing * 4 * (1 - phase) + facing * 8 * phase;
-      ty = -1.5 * (1 - phase) + 1.5 * phase;
-      rot = -facing * 0.04 * (1 - phase) + facing * 0.05 * phase;
+      tx = -facing * 3 * (1 - phase) + facing * 4 * phase;
+      ty = -2 * (1 - phase) + 1 * phase;
+      rot = -facing * 0.10 * (1 - phase) + facing * 0.14 * phase;  // lean FORWARD into hit
       sx = 1 + 0.04 * phase;               // forward stretch on snap
     } else if (u < 0.65) {
-      tx = facing * 8;
-      ty = 1.5;
-      rot = facing * 0.05;
+      tx = facing * 4;
+      ty = 1;
+      rot = facing * 0.14;
       sx = 1.04;
     } else {
       phase = smooth((u - 0.65) / 0.35);
-      tx = facing * 8 * (1 - phase);
-      ty = 1.5 * (1 - phase);
-      rot = facing * 0.05 * (1 - phase);
+      tx = facing * 4 * (1 - phase);
+      ty = 1 * (1 - phase);
+      rot = facing * 0.14 * (1 - phase);
       sx = 1 + 0.04 * (1 - phase);
     }
   } else if (kind === "knee") {
@@ -7172,15 +7175,41 @@ export class GameEngine {
         const swingIdx = f.comboKind === "kick"
           ? (u < 0.4 ? KICK_CHAMBER_FRAME : KICK_HIT_FRAME)
           : (u < 0.4 ? KNEE_CHAMBER_FRAME : KNEE_HIT_FRAME);
-        const hipPx = x + f.bodyLagX;
-        const hipPy = y + FIGHTER_H * 0.62;
+        // ---- Foot-pivot weight transfer (poor-man's IK) ----
+        // True per-bone IK isn't possible on bitmap sprites — but pivoting
+        // the rotation/scale around the *planted foot* (instead of the hip)
+        // makes the body lean forward over the standing leg the same way
+        // weight transfers in a real kick. The standing foot stays world-
+        // locked because it IS the pivot. Hip is still the translation
+        // anchor so the envelope's tx/ty still read as forward push.
+        // Stance foot sits ~10px behind body center on the back-leg side.
+        const stanceOffsetX = -renderFacing * 10;
+        const footPx = x + f.bodyLagX + stanceOffsetX;
+        const footPy = y + FIGHTER_H - 1; // ground contact
         ctx.save();
-        ctx.translate(hipPx + env.tx, hipPy + env.ty);
+        ctx.translate(footPx + env.tx, footPy + env.ty);
         ctx.rotate(env.rot);
         ctx.scale(env.sx, env.sy);
-        ctx.translate(-hipPx, -hipPy);
+        ctx.translate(-footPx, -footPy);
         drawFrame(swingIdx);
         ctx.restore();
+        // ---- Foot-plant dust puff on first active frame ----
+        // One-shot scuff at the planted foot when the kick fires — sells
+        // the "weight slamming down" the IK pivot is now visualizing.
+        if (!f.comboHit && u > 0.18 && u < 0.32 && !this.lowPower
+            && f.onGround && this.particles.length < 220) {
+          for (let i = 0; i < 4; i++) {
+            this.particles.push({
+              x: footPx + (Math.random() - 0.5) * 8,
+              y: GROUND_Y - 1,
+              vx: -renderFacing * (40 + Math.random() * 80),
+              vy: -10 - Math.random() * 24,
+              life: 0.32, maxLife: 0.32,
+              color: "oklch(0.78 0.02 60)",
+              size: 1.0 + Math.random() * 1.2,
+            });
+          }
+        }
         return;
       }
 
