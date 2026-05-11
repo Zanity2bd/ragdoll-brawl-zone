@@ -5849,7 +5849,12 @@ export class GameEngine {
       if (f.weaponTrail.active <= 0 && f.weaponTrail.samples.length === 0) continue;
       const pose = this.poseFor(f);
       const lp = pose[f.weaponTrail.limb];
-      sampleTrail(f.weaponTrail, f.x + lp[0], f.y + lp[1]);
+      // Inherit the same root body-offset the renderer applies — without
+      // this the trail anchor stays in raw world space while the body
+      // visibly shifts under ragdoll springs, producing a detached ribbon.
+      const rOffX = f.rs ? f.rs.bodyOffX : 0;
+      const rOffY = f.rs ? f.rs.bodyOffY : 0;
+      sampleTrail(f.weaponTrail, f.x + lp[0] + rOffX, f.y + lp[1] + rOffY);
       drawTrail(ctx, f.weaponTrail);
     }
     if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
@@ -6468,10 +6473,14 @@ export class GameEngine {
           break;
       }
       ctx.save();
-      ctx.translate(f.x + dx, f.y + FIGHTER_H + dy);
+      // Pelvis-rooted pivot for hit-reaction transforms — feet pivot caused
+      // the entire body to slide horizontally on rotation, separating the
+      // sprite from the procedural rig. Rotating around the hip keeps the
+      // body silhouette anchored where the impact actually applies force.
+      ctx.translate(f.x + dx, f.y + FIGHTER_H * 0.62 + dy);
       ctx.rotate(rot);
       ctx.scale(sx, sy);
-      ctx.translate(-(f.x), -(f.y + FIGHTER_H));
+      ctx.translate(-(f.x), -(f.y + FIGHTER_H * 0.62));
       this.drawFighterAt(f, f.x, f.y, pose, false);
       ctx.restore();
     } else {
@@ -6580,6 +6589,17 @@ export class GameEngine {
   private drawFighterAt(f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
     const ctx = this.ctx;
     const skin = f.skin;
+    // ---- Pelvis-rooted transform integration ----
+    // Bake ragdoll spring body offset into the root coordinates so EVERY
+    // downstream visual layer (sprite body, procedural rig, cape, emblem,
+    // shadow, FX anchors) inherits it as a single root translation. Without
+    // this, the sprite path renders at raw (x,y) while the procedural rig
+    // applies springs only to limb offsets — causing visible skin/skeleton
+    // drift on recoil, kicks, and ragdoll spring-back.
+    if (!ghost && f.rs) {
+      x += f.rs.bodyOffX;
+      y += f.rs.bodyOffY;
+    }
 
     // ---- Sprite-sheet walk override ----
     // Replace the procedural body render with the imported walk sheet
@@ -6597,6 +6617,23 @@ export class GameEngine {
     // (Taijutsu sprite playback removed — Nightcrawler uses default sprite rig.)
 
     if (useSpriteWalk) {
+      // ---- Hip-rooted root transform for sprite body ----
+      // Apply ragdoll torso tilt around the HIP (pelvis), not feet or
+      // sprite-center. The cosmetic sprite inherits the same rotational
+      // impulse the procedural rig already shows so the skin never drifts
+      // off the skeleton during recoil / hit-reaction springs.
+      // Skipped during full ragdoll tumble — that branch owns its own pivot.
+      const __rsTilt = (!ghost && f.rs && f.ragdollT <= 0) ? f.rs.torsoAng : 0;
+      const __needRoot = Math.abs(__rsTilt) > 0.005;
+      if (__needRoot) {
+        ctx.save();
+        const hipPx = x + f.bodyLagX;
+        const hipPy = y + FIGHTER_H * 0.62;
+        ctx.translate(hipPx, hipPy);
+        ctx.rotate(__rsTilt);
+        ctx.translate(-hipPx, -hipPy);
+      }
+      try {
       // Soft accent pool — only when grounded
       if (f.onGround && !this.lowPower) {
         ctx.save();
@@ -6632,12 +6669,14 @@ export class GameEngine {
       const drawFrame = (idx: number) =>
         drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
 
-      // ---- Ragdoll tumble (rotate down silhouette by physics angle) ----
+      // ---- Ragdoll tumble (rotate down silhouette around HIP, not sprite center) ----
       if (f.ragdollT > 0) {
         ctx.save();
-        ctx.translate(x + f.bodyLagX, y + FIGHTER_H * 0.5);
+        // Pelvis pivot keeps the body anchored at the hip during tumble — no
+        // sprite-center slide that breaks skin/skeleton cohesion.
+        ctx.translate(x + f.bodyLagX, y + FIGHTER_H * 0.62);
         ctx.rotate(f.ragdollAng);
-        ctx.translate(0, FIGHTER_H * 0.5);
+        ctx.translate(0, FIGHTER_H * 0.38);
         drawWalkFrame(ctx, skin, DOWN_FRAME, 0, 0, renderFacing, FIGHTER_H);
         ctx.restore();
         return;
@@ -6920,6 +6959,9 @@ export class GameEngine {
       // Sprite is authoritative for the body; FX (slash arc, beams, etc.)
       // and overlays (cape, emblem, eyes) layer on top elsewhere.
       return;
+      } finally {
+        if (__needRoot) ctx.restore();
+      }
     }
 
     // ---- Bamf strike depth FX (perspective scale + z-shadow) ----
