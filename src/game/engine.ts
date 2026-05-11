@@ -106,6 +106,8 @@ interface Fighter {
   // afterimage trail
   trail: Array<{ x: number; y: number; phase: number; vx: number; onGround: boolean; vy: number; facing: 1 | -1; pose: Pose }>;
   skin: Skin;
+  // butcher: true while his iconic crowbar is mid-flight or resting on the ground
+  crowbarThrown?: boolean;
   // flight
   canFly: boolean;
   flying: boolean;
@@ -235,9 +237,13 @@ interface Projectile {
   life: number;
   color: string;
   glow: string;
-  kind: "bolt" | "batarang" | "web";
+  kind: "bolt" | "batarang" | "web" | "crowbar";
   damage?: number;
   homing?: boolean;
+  // crowbar-only: spinning iron bar in flight, settles on ground/cover
+  rested?: boolean;
+  rot?: number;
+  spin?: number;
 }
 
 interface Particle {
@@ -1652,6 +1658,8 @@ export class GameEngine {
     for (const pr of this.projectiles) {
       // Frozen: projectiles owned by frozen player are paused.
       if (freezeActive && pr.owner !== this.timeFreezer) continue;
+      // Crowbar at rest sits on the ground until picked up — skip physics.
+      if (pr.kind === "crowbar" && pr.rested) continue;
       if (pr.kind === "batarang" && pr.homing) {
         const target = pr.owner === "p1" ? this.p2 : this.p1;
         const dx = target.x - pr.x, dy = target.y + 30 - pr.y;
@@ -1662,7 +1670,31 @@ export class GameEngine {
         const cap = 720;
         if (sp > cap) { pr.vx = pr.vx / sp * cap; pr.vy = pr.vy / sp * cap; }
       }
+      if (pr.kind === "crowbar") {
+        // Iron bar — gravity arcs the throw, spin reads as tumbling steel.
+        pr.vy += 720 * sdt;
+        pr.rot = (pr.rot ?? 0) + (pr.spin ?? 0) * sdt;
+      }
       pr.x += pr.vx * sdt; pr.y += pr.vy * sdt; pr.life -= dt;
+      // Crowbar settles on cover or ground instead of vanishing.
+      if (pr.kind === "crowbar" && !pr.rested) {
+        for (const pl of this.platforms) {
+          if (pl.destroyed || pl.kind !== "cover") continue;
+          if (pr.x > pl.x && pr.x < pl.x + pl.w && pr.y > pl.y - 4 && pr.y < pl.y + pl.h) {
+            pr.y = pl.y - 2; pr.vx = 0; pr.vy = 0; pr.spin = 0;
+            pr.rested = true; pr.life = 999;
+            Sfx.play("thud", 0.55);
+            break;
+          }
+        }
+        if (!pr.rested && pr.y >= GROUND_Y - 4) {
+          pr.y = GROUND_Y - 4; pr.vx = 0; pr.vy = 0; pr.spin = 0;
+          pr.rot = Math.PI / 2; // lies flat
+          pr.rested = true; pr.life = 999;
+          this.shake = Math.max(this.shake, 4);
+          Sfx.play("thud", 0.6);
+        }
+      }
       // Cover blocks projectiles (web/batarang excluded — web is a tether, batarang homes)
       if (pr.kind === "bolt") {
         for (const pl of this.platforms) {
@@ -1701,12 +1733,16 @@ export class GameEngine {
     for (const pr of this.projectiles) {
       const target = pr.owner === "p1" ? this.p2 : this.p1;
       if (this.phase !== "fight") continue;
-      const hitR = pr.kind === "batarang" ? 18 : (pr.kind === "web" ? 14 : FIGHTER_W);
+      if (pr.kind === "crowbar" && pr.rested) continue;
+      const hitR = pr.kind === "batarang" ? 18 : (pr.kind === "web" ? 14 : (pr.kind === "crowbar" ? 22 : FIGHTER_W));
       if (Math.abs(pr.x - target.x) < hitR && pr.y > target.y && pr.y < target.y + FIGHTER_H) {
-        if (target.iframeT > 0 || target.downedT > 0 || target.getUpT > 0) { pr.life = 0; continue; }
+        if (target.iframeT > 0 || target.downedT > 0 || target.getUpT > 0) {
+          if (pr.kind !== "crowbar") pr.life = 0;
+          continue;
+        }
         const dmg = pr.damage ?? FIRE_DAMAGE;
         target.hp = Math.max(0, target.hp - dmg);
-        target.hitFlash = 0.25;
+        target.hitFlash = 0.35;
         if (pr.kind === "web") {
           // pull target toward owner
           const owner = pr.owner === "p1" ? this.p1 : this.p2;
@@ -1714,6 +1750,42 @@ export class GameEngine {
           target.vy = -180;
           target.onGround = false;
           Sfx.play("whoosh", 0.7);
+        } else if (pr.kind === "crowbar") {
+          // Heavy iron strike: massive launch + ragdoll.
+          const dir = (Math.sign(pr.vx) || 1) as 1 | -1;
+          target.vx = dir * 520;
+          target.vy = -360;
+          target.onGround = false;
+          target.ragdollT = Math.max(target.ragdollT, 0.9);
+          target.ragdollEnergy = 1;
+          target.ragdollAV = dir * 7;
+          target.ragdollImmuneT = 1.0;
+          this.hitstopT = Math.max(this.hitstopT, 0.22);
+          this.slowmoT = Math.max(this.slowmoT, 0.35);
+          this.shake = Math.max(this.shake, 24);
+          this.impactFlash = Math.max(this.impactFlash, 0.85);
+          // Bright impact star + sparks at contact
+          spawnFx(this.attackFx, "impactStar", pr.x, pr.y, { size: 40, life: 0.32, grow: 90, spin: 5 });
+          spawnFx(this.attackFx, "shockRing", pr.x, pr.y, { size: 22, life: 0.32, grow: 90, blend: "lighter" });
+          for (let i = 0; i < 14; i++) {
+            this.particles.push({
+              x: pr.x + (Math.random() - 0.5) * 14, y: pr.y + (Math.random() - 0.5) * 10,
+              vx: -dir * (80 + Math.random() * 220), vy: -160 - Math.random() * 200,
+              life: 0.5, maxLife: 0.5,
+              color: "oklch(0.92 0.16 80)", size: 1.4 + Math.random() * 1.6,
+            });
+          }
+          Sfx.play("thud", 0.95);
+          // Crowbar drops at impact location and rests on the ground.
+          pr.vx = 0; pr.vy = 0; pr.spin = 0;
+          pr.y = GROUND_Y - 4;
+          pr.rot = Math.PI / 2;
+          pr.rested = true;
+          pr.life = 999;
+          if (target.hp <= 0 && this.phase === "fight") {
+            this.triggerKo(pr.owner);
+          }
+          continue;
         } else {
           target.vx += Math.sign(pr.vx || target.x - (pr.owner === "p1" ? this.p1.x : this.p2.x)) * FIRE_KNOCKBACK;
           target.vy = -240;
@@ -1734,6 +1806,20 @@ export class GameEngine {
         pr.life = 0;
         if (target.hp <= 0 && this.phase === "fight") {
           this.triggerKo(pr.owner);
+        }
+      }
+    }
+    // Butcher pickup: walking near his rested crowbar restores the special.
+    for (const f of [this.p1, this.p2]) {
+      if (f.skin.id !== "butcher" || !f.crowbarThrown) continue;
+      for (const pr of this.projectiles) {
+        if (pr.kind !== "crowbar" || !pr.rested || pr.owner !== f.id) continue;
+        if (Math.abs(pr.x - f.x) < 30 && Math.abs(pr.y - (f.y + FIGHTER_H)) < 70 && f.onGround) {
+          pr.life = 0;
+          f.crowbarThrown = false;
+          f.meleeCd = 0.3;
+          Sfx.play("blip", 0.5);
+          spawnFx(this.attackFx, "chargeRing", pr.x, pr.y - 12, { size: 22, life: 0.28, grow: 30, spin: 8, blend: "lighter" });
         }
       }
     }
@@ -3595,6 +3681,30 @@ export class GameEngine {
         kind: "web", damage: m.damage,
       });
     }
+    // Butcher hurls his iconic crowbar instead of swinging it. The bar spins
+    // through the air, knocks the victim into a ragdoll on hit, then settles
+    // wherever it lands. Butcher must walk over and pick it up to use again.
+    if (m.kind === "crowbar" && f.skin.id === "butcher") {
+      const throwY = f.y + 30;
+      this.projectiles.push({
+        owner: f.id,
+        x: f.x + f.facing * 22,
+        y: throwY,
+        vx: f.facing * 760,
+        vy: -120,
+        life: 4.0,
+        color: "oklch(0.78 0.02 80)",
+        glow: "oklch(0.85 0.04 80)",
+        kind: "crowbar",
+        damage: m.damage,
+        rot: 0,
+        spin: f.facing * 22,
+      });
+      f.crowbarThrown = true;
+      // Lock the special until the crowbar is recovered.
+      f.meleeCd = 999;
+      Sfx.play("whoosh", 0.7);
+    }
   }
 
   private resolveMelees(dt: number = 1 / 60) {
@@ -3610,6 +3720,8 @@ export class GameEngine {
         case "heatPunch":
         case "crowbar":
         case "repulsor": {
+          // Butcher's crowbar is a thrown projectile (handled in startMelee/projectiles)
+          if (m.kind === "crowbar" && f.skin.id === "butcher") break;
           if (inActive && f.meleeHitMask.size === 0) {
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
@@ -5701,6 +5813,14 @@ export class GameEngine {
         ctx.stroke();
         ctx.fillStyle = pr.color;
         ctx.beginPath(); ctx.arc(pr.x, pr.y, 4, 0, Math.PI * 2); ctx.fill();
+      } else if (pr.kind === "crowbar") {
+        // Render in source-over so the dark iron reads against bright bgs.
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.translate(pr.x, pr.y);
+        ctx.rotate(pr.rot ?? 0);
+        drawCrowbar(ctx, 0, 0, 1);
+        ctx.restore();
       }
     }
     ctx.shadowBlur = 0;
@@ -6696,6 +6816,18 @@ export class GameEngine {
       drawFist(ctx, pose.handL, skin.gloves);
       drawFist(ctx, pose.handR, skin.gloves);
     }
+    // Butcher's iconic crowbar — held in his right hand whenever it isn't
+    // mid-flight or lying on the ground.
+    if (skin.id === "butcher" && !f.crowbarThrown) {
+      const hx = pose.handR[0];
+      const hy = pose.handR[1];
+      // Hangs slightly forward and down from the grip, scaled by current facing
+      ctx.save();
+      ctx.translate(hx, hy + 2);
+      ctx.rotate(0.55);
+      drawCrowbar(ctx, 0, 0, 1);
+      ctx.restore();
+    }
 
     // Torso (uses sized torsoW)
     ctx.strokeStyle = bodyColor;
@@ -6994,6 +7126,65 @@ function drawFist(ctx: CanvasRenderingContext2D, p: [number, number], color: str
   ctx.beginPath();
   ctx.arc(p[0], p[1], 3.2, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/**
+ * Butcher's iconic crowbar. Drawn around the local origin pointing along +x
+ * (the rotating projectile uses ctx.rotate before calling). Hooked claw at
+ * the head end, chisel taper at the heel — all in dark forged steel with a
+ * specular highlight stripe so it reads at small scale.
+ */
+function drawCrowbar(ctx: CanvasRenderingContext2D, x: number, y: number, facing: 1 | -1) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(facing, 1);
+  // Shaft
+  const shaftLen = 26;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "oklch(0.32 0.012 60)";
+  ctx.lineWidth = 3.2;
+  ctx.beginPath();
+  ctx.moveTo(-shaftLen * 0.55, 0);
+  ctx.lineTo(shaftLen * 0.45, 0);
+  ctx.stroke();
+  // Highlight stripe along the shaft
+  ctx.strokeStyle = "oklch(0.62 0.012 70)";
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(-shaftLen * 0.55 + 1, -0.9);
+  ctx.lineTo(shaftLen * 0.45 - 1, -0.9);
+  ctx.stroke();
+  // Hooked claw end (curves up and back to a forked tip)
+  ctx.strokeStyle = "oklch(0.28 0.012 60)";
+  ctx.lineWidth = 3.0;
+  ctx.beginPath();
+  ctx.moveTo(shaftLen * 0.45, 0);
+  ctx.quadraticCurveTo(shaftLen * 0.62, -1.5, shaftLen * 0.62, -5.5);
+  ctx.stroke();
+  // Forked nail-puller notch
+  ctx.fillStyle = "oklch(0.22 0.012 60)";
+  ctx.beginPath();
+  ctx.moveTo(shaftLen * 0.55, -5.5);
+  ctx.lineTo(shaftLen * 0.7, -5.5);
+  ctx.lineTo(shaftLen * 0.66, -3.2);
+  ctx.lineTo(shaftLen * 0.59, -3.2);
+  ctx.closePath();
+  ctx.fill();
+  // Chisel heel: short bend down at the grip end
+  ctx.strokeStyle = "oklch(0.28 0.012 60)";
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(-shaftLen * 0.55, 0);
+  ctx.lineTo(-shaftLen * 0.62, 2.2);
+  ctx.stroke();
+  // Grip wrap (subtle)
+  ctx.strokeStyle = "oklch(0.18 0.02 30)";
+  ctx.lineWidth = 3.6;
+  ctx.beginPath();
+  ctx.moveTo(-shaftLen * 0.45, 0);
+  ctx.lineTo(-shaftLen * 0.2, 0);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawBoot(ctx: CanvasRenderingContext2D, p: [number, number], facing: 1 | -1, color: string) {
