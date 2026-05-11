@@ -241,6 +241,17 @@ export class CpuController {
     });
     if (this.wantJump) { this.engine.pressJump(this.id); this.wantJump = false; }
     if (this.wantSpecial) { this.wantSpecial = false; this.fireSpecial(me.name); }
+    if (this.wantPunch) {
+      this.wantPunch = false;
+      this.engine.pressPunch(this.id);
+      // Slightly varied cadence — short between jab→kick chain, longer after a finisher.
+      this.punchStreak++;
+      const cadence = this.punchStreak >= 2
+        ? 0.34 + Math.random() * 0.18  // breathing room after a combo
+        : 0.16 + Math.random() * 0.08; // tight chain
+      if (this.punchStreak >= 2) this.punchStreak = 0;
+      this.nextPunchT = cadence;
+    }
     if (this.wantPower1) { this.wantPower1 = false; this.engine.pressPower1(this.id); this.nextPowerT = 0.4; }
     if (this.wantPower2) { this.wantPower2 = false; this.engine.pressPower2(this.id); this.nextPowerT = 0.4; }
     if (this.wantSuperDash) { this.wantSuperDash = false; this.engine.pressSuperDash(this.id); this.nextPowerT = 0.6; }
