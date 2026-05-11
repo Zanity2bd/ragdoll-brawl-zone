@@ -123,6 +123,7 @@ export class CpuController {
   private wantPower1 = false;
   private wantPower2 = false;
   private wantSuperDash = false;
+  private wantPunch = false;
   private feintT = 0;
   private commitT = 0;
   private lastOppMelee: string | null = null;
@@ -132,6 +133,12 @@ export class CpuController {
   private dodgedAtX = 0;
   // throttle so we don't spam powers every think tick
   private nextPowerT = 0;
+  // throttle basic punches so combat reads like deliberate strikes, not a held button
+  private nextPunchT = 0;
+  private punchStreak = 0;
+  // brief "back off" timer after the opponent goes down so the AI clears space
+  // before launching a special — feels far more natural than insta-special-on-fall.
+  private regroupT = 0;
   // anti-stand-still timer — forces a small movement / jump when idle too long
   private idleT = 0;
   private preferredScale = 1;
