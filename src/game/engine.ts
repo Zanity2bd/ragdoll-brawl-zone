@@ -374,6 +374,107 @@ const PUNCH_RANGE = 64;
 const PUNCH_DMG = 1;
 const FIGHTER_W = 30;
 
+/**
+ * Procedural transform envelope wrapped around discrete attack sprite frames
+ * to synthesize the in-between motion (anticipation → snap-extension →
+ * follow-through). Returns pelvis-pivoted offsets the renderer applies as
+ * `translate · rotate · scale` around the hip before drawing the bitmap.
+ *
+ * `u` is normalized attack progress 0 → 1.
+ * Profiles tuned per attack:
+ *   kick:  big anticipation pull-back, snap forward + downward shear, slow recover
+ *   knee:  shorter pull-back, sharper vertical pop on impact
+ *   punch: tight pull-back, fast forward jab, quick settle
+ */
+function attackEnvelope(
+  kind: "kick" | "knee" | "punch",
+  u: number,
+  facing: 1 | -1,
+): { tx: number; ty: number; rot: number; sx: number; sy: number } {
+  // Anticipation 0..0.30: ease-out pull BACK (opposite of facing)
+  // Strike      0.30..0.45: ease-in snap FORWARD past neutral
+  // Hold        0.45..0.65: peak extension
+  // Recover     0.65..1.00: ease back to neutral
+  let phase: number;
+  let tx = 0, ty = 0, rot = 0, sx = 1, sy = 1;
+
+  // 5-th order smoothstep for cinematic acceleration curves
+  const smooth = (t: number) => {
+    const c = Math.max(0, Math.min(1, t));
+    return c * c * c * (c * (c * 6 - 15) + 10);
+  };
+
+  if (kind === "kick") {
+    if (u < 0.30) {
+      phase = smooth(u / 0.30);
+      tx = -facing * 4 * phase;            // weight shifts back onto stance leg
+      ty = -1.5 * phase;                   // tiny rise on chamber
+      rot = -facing * 0.04 * phase;        // shoulder dips back
+    } else if (u < 0.45) {
+      phase = smooth((u - 0.30) / 0.15);
+      tx = -facing * 4 * (1 - phase) + facing * 8 * phase;
+      ty = -1.5 * (1 - phase) + 1.5 * phase;
+      rot = -facing * 0.04 * (1 - phase) + facing * 0.05 * phase;
+      sx = 1 + 0.04 * phase;               // forward stretch on snap
+    } else if (u < 0.65) {
+      tx = facing * 8;
+      ty = 1.5;
+      rot = facing * 0.05;
+      sx = 1.04;
+    } else {
+      phase = smooth((u - 0.65) / 0.35);
+      tx = facing * 8 * (1 - phase);
+      ty = 1.5 * (1 - phase);
+      rot = facing * 0.05 * (1 - phase);
+      sx = 1 + 0.04 * (1 - phase);
+    }
+  } else if (kind === "knee") {
+    if (u < 0.25) {
+      phase = smooth(u / 0.25);
+      tx = -facing * 2.5 * phase;
+      ty = -2 * phase;                     // gather
+      sy = 1 - 0.04 * phase;               // crouch squash
+    } else if (u < 0.42) {
+      phase = smooth((u - 0.25) / 0.17);
+      tx = -facing * 2.5 * (1 - phase) + facing * 5 * phase;
+      ty = -2 * (1 - phase) - 4 * phase;   // pop UP on knee strike
+      sy = (1 - 0.04) * (1 - phase) + (1 + 0.06) * phase;
+    } else if (u < 0.60) {
+      tx = facing * 5;
+      ty = -4;
+      sy = 1.06;
+    } else {
+      phase = smooth((u - 0.60) / 0.40);
+      tx = facing * 5 * (1 - phase);
+      ty = -4 * (1 - phase);
+      sy = 1 + 0.06 * (1 - phase);
+    }
+  } else {
+    // punch
+    if (u < 0.25) {
+      phase = smooth(u / 0.25);
+      tx = -facing * 2 * phase;            // tight pull-back
+      rot = -facing * 0.025 * phase;
+    } else if (u < 0.45) {
+      phase = smooth((u - 0.25) / 0.20);
+      tx = -facing * 2 * (1 - phase) + facing * 5 * phase;
+      rot = -facing * 0.025 * (1 - phase) + facing * 0.03 * phase;
+      sx = 1 + 0.03 * phase;
+    } else if (u < 0.62) {
+      tx = facing * 5;
+      rot = facing * 0.03;
+      sx = 1.03;
+    } else {
+      phase = smooth((u - 0.62) / 0.38);
+      tx = facing * 5 * (1 - phase);
+      rot = facing * 0.03 * (1 - phase);
+      sx = 1 + 0.03 * (1 - phase);
+    }
+  }
+  return { tx, ty, rot, sx, sy };
+}
+
+
 const FIRE_CD = 0.8;
 const TELE_CD = 0.9;
 const FIRE_DAMAGE = 12;
@@ -7028,13 +7129,26 @@ export class GameEngine {
       if (f.justLandedT > 0 || f.landSquashT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
 
       // ---- Combo swing (high kick / knee finisher) ----
+      // Frame interpolation pass: bitmap frames are discrete (chamber → hit
+      // is a 2-frame swap), so we synthesize the in-between motion as a
+      // procedural transform envelope wrapped around the sprite. Reads as
+      // anticipation → snap-extension → follow-through without crossfading
+      // the line-art frames (project rule: never alpha-blend stickman frames).
       if (f.comboKind && f.comboT > 0) {
         const u = f.comboT / Math.max(0.001, f.comboDur);
-        if (f.comboKind === "kick") {
-          drawFrame(u < 0.4 ? KICK_CHAMBER_FRAME : KICK_HIT_FRAME);
-        } else {
-          drawFrame(u < 0.4 ? KNEE_CHAMBER_FRAME : KNEE_HIT_FRAME);
-        }
+        const env = attackEnvelope(f.comboKind, u, renderFacing);
+        const swingIdx = f.comboKind === "kick"
+          ? (u < 0.4 ? KICK_CHAMBER_FRAME : KICK_HIT_FRAME)
+          : (u < 0.4 ? KNEE_CHAMBER_FRAME : KNEE_HIT_FRAME);
+        const hipPx = x + f.bodyLagX;
+        const hipPy = y + FIGHTER_H * 0.62;
+        ctx.save();
+        ctx.translate(hipPx + env.tx, hipPy + env.ty);
+        ctx.rotate(env.rot);
+        ctx.scale(env.sx, env.sy);
+        ctx.translate(-hipPx, -hipPy);
+        drawFrame(swingIdx);
+        ctx.restore();
         return;
       }
 
@@ -7046,7 +7160,17 @@ export class GameEngine {
         else if (pt < PUNCH_F11 + PUNCH_F12) pIdx = 1;
         else if (pt < PUNCH_F11 + PUNCH_F12 + PUNCH_F13) pIdx = 2;
         else pIdx = 3;
+        const punchU = 1 - (pt / PUNCH_DUR); // 0 → 1 across the punch
+        const env = attackEnvelope("punch", punchU, renderFacing);
+        const hipPx = x + f.bodyLagX;
+        const hipPy = y + FIGHTER_H * 0.62;
+        ctx.save();
+        ctx.translate(hipPx + env.tx, hipPy + env.ty);
+        ctx.rotate(env.rot);
+        ctx.scale(env.sx, env.sy);
+        ctx.translate(-hipPx, -hipPy);
         drawFrame(PUNCH_FRAME_START + pIdx);
+        ctx.restore();
         return;
       }
 
