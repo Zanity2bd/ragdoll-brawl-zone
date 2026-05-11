@@ -623,6 +623,17 @@ export class GameEngine {
   private impactFlash = 0;
 
   private shake = 0;
+  // AoS5-style floating hit labels ("PUNCH!", "KICK!", "x3 COMBO!").
+  // Pure presentation; spawns next to impact, drifts up + fades.
+  private hitLabels: Array<{
+    x: number; y: number; text: string;
+    t: number; life: number;
+    vy: number; color: string; scale: number;
+    italic: boolean;
+  }> = [];
+  // Per-attacker combo tracking: counts consecutive landed hits within window.
+  private comboCount: Record<PlayerId, number> = { p1: 0, p2: 0 };
+  private comboCountT: Record<PlayerId, number> = { p1: 0, p2: 0 };
   // Directional shake: punches the camera *toward* the strike direction
   // before settling, on top of the legacy omnidirectional random shake.
   private shakeDirX = 0;
@@ -860,6 +871,9 @@ export class GameEngine {
     this.teleTargeting = null;
     this.slowmoT = 0; this.slowmoMode = null;
     this.hitstopT = 0; this.impactFlash = 0;
+    this.hitLabels = [];
+    this.comboCount = { p1: 0, p2: 0 };
+    this.comboCountT = { p1: 0, p2: 0 };
     this.shake = 0;
     this.shakeDirX = 0; this.shakeDirY = 0; this.shakeDirT = 0; this.shakeDirDur = 0;
     this.zoomPunch = 0; this.zoomPunchT = 0; this.zoomPunchDur = 0;
@@ -938,6 +952,81 @@ export class GameEngine {
     this.spawnBlood(loser.x, loser.y + FIGHTER_H * 0.45, koDir as 1 | -1, 1);
     this.spawnBlood(loser.x, loser.y + FIGHTER_H * 0.30, koDir as 1 | -1, 0.85);
     Sfx.play("boom", 0.9);
+  }
+
+  /**
+   * AoS5-style hit confirmation: pop a punchy label near the impact and
+   * bump the attacker's combo counter. Pure presentation; no balance impact.
+   * Call EVERY time a strike connects — combo escalates automatically.
+   */
+  private spawnHitLabel(attacker: PlayerId, kind: "PUNCH" | "KICK" | "KNEE" | "CROWBAR" | "SLAM" | "SPECIAL", x: number, y: number, facing: 1 | -1) {
+    // bump combo
+    this.comboCount[attacker] = Math.min(99, this.comboCount[attacker] + 1);
+    this.comboCountT[attacker] = 1.4; // window resets on each new hit
+    const n = this.comboCount[attacker];
+    // Per-kind palette + slight scale to convey weight
+    const palette: Record<typeof kind, { color: string; scale: number }> = {
+      PUNCH:   { color: "oklch(0.97 0.16 85)",  scale: 1.0 },
+      KICK:    { color: "oklch(0.92 0.20 55)",  scale: 1.15 },
+      KNEE:    { color: "oklch(0.90 0.22 35)",  scale: 1.2 },
+      CROWBAR: { color: "oklch(0.95 0.18 75)",  scale: 1.35 },
+      SLAM:    { color: "oklch(0.92 0.22 25)",  scale: 1.3 },
+      SPECIAL: { color: "oklch(0.85 0.24 320)", scale: 1.25 },
+    };
+    const pal = palette[kind];
+    // Stagger labels so combo doesn't stack on top of itself
+    const jitterX = facing * (8 + (n % 3) * 6);
+    const jitterY = -((n % 3) * 14);
+    this.hitLabels.push({
+      x: x + jitterX, y: y - 18 + jitterY, text: kind + "!",
+      t: 0, life: 0.55,
+      vy: -110, color: pal.color, scale: pal.scale, italic: true,
+    });
+    // Combo counter — shows from x2 onward
+    if (n >= 2) {
+      const comboText = n >= 4 ? `x${n} COMBO!` : `x${n}`;
+      this.hitLabels.push({
+        x: x + jitterX * 0.5, y: y - 42 + jitterY,
+        text: comboText, t: 0, life: 0.7,
+        vy: -75, color: n >= 5 ? "oklch(0.95 0.24 25)" : "oklch(0.95 0.18 320)",
+        scale: 0.85 + Math.min(0.6, n * 0.07), italic: false,
+      });
+    }
+  }
+
+  private drawHitLabels(ctx: CanvasRenderingContext2D) {
+    if (this.hitLabels.length === 0) return;
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (const hl of this.hitLabels) {
+      const u = hl.t / hl.life;
+      // Pop-in: snap up to 1.15x then settle to 1.0
+      const pop = u < 0.15 ? (u / 0.15) * 1.15 : (1.15 - 0.15 * Math.min(1, (u - 0.15) / 0.2));
+      const s = hl.scale * pop;
+      const alpha = u < 0.7 ? 1 : Math.max(0, 1 - (u - 0.7) / 0.3);
+      const fontPx = Math.round(22 * s);
+      ctx.font = `900 ${hl.italic ? "italic " : ""}${fontPx}px "Inter", "Arial Black", system-ui, sans-serif`;
+      // Heavy black outline for legibility over any background
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.lineWidth = Math.max(4, 5 * s);
+      ctx.strokeStyle = `oklch(0.12 0.02 60 / ${alpha})`;
+      ctx.fillStyle = hl.color.replace(")", ` / ${alpha})`).replace(" / ", " / ");
+      // Soft glow
+      ctx.shadowColor = hl.color;
+      ctx.shadowBlur = 14 * s;
+      // Slight italic-skew slant pop for impact words
+      ctx.translate(hl.x, hl.y);
+      if (hl.italic) ctx.transform(1, 0, -0.18, 1, 0, 0);
+      ctx.strokeText(hl.text, 0, 0);
+      ctx.shadowBlur = 0;
+      // Re-extract color with alpha (oklch / alpha syntax)
+      ctx.fillStyle = hl.color.replace(/\)$/, ` / ${alpha})`);
+      ctx.fillText(hl.text, 0, 0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
+    ctx.restore();
   }
 
   private makeFighter(id: PlayerId, x: number, skin: Skin): Fighter {
@@ -1776,6 +1865,7 @@ export class GameEngine {
             });
           }
           Sfx.play("thud", 0.95);
+          this.spawnHitLabel(pr.owner, "CROWBAR", pr.x, pr.y - 10, dir);
           // Crowbar drops at impact location and rests on the ground.
           pr.vx = 0; pr.vy = 0; pr.spin = 0;
           pr.y = GROUND_Y - 4;
@@ -1878,6 +1968,20 @@ export class GameEngine {
     }
     this.shockwaves = this.shockwaves.filter(s => s.life > 0);
     tickFx(this.attackFx, dt);
+    // Tick floating hit labels — drift up + fade.
+    for (const hl of this.hitLabels) {
+      hl.t += dt;
+      hl.y += hl.vy * dt;
+      hl.vy += -90 * dt; // mild upward ease-out (gravity-like deceleration of upward drift)
+    }
+    this.hitLabels = this.hitLabels.filter(h => h.t < h.life);
+    // Decay combo windows
+    for (const id of ["p1", "p2"] as PlayerId[]) {
+      if (this.comboCountT[id] > 0) {
+        this.comboCountT[id] = Math.max(0, this.comboCountT[id] - dt);
+        if (this.comboCountT[id] === 0) this.comboCount[id] = 0;
+      }
+    }
     for (const b of this.beams) {
       if (freezeActive && b.owner !== this.timeFreezer) continue;
       b.life -= dt;
@@ -2888,6 +2992,7 @@ export class GameEngine {
             this.hitstopT = Math.max(this.hitstopT, f.comboKind === "kick" ? 0.12 : 0.10);
             this.impactFlash = Math.max(this.impactFlash, 0.42);
             Sfx.play("attackImpact", 1.0);
+            this.spawnHitLabel(f.id, f.comboKind === "kick" ? "KICK" : "KNEE", ix, iy - 8, f.facing as 1 | -1);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
@@ -2936,6 +3041,7 @@ export class GameEngine {
             this.hitstopT = Math.max(this.hitstopT, 0.075);
             this.impactFlash = Math.max(this.impactFlash, 0.32);
             Sfx.play("punch", 0.9);
+            this.spawnHitLabel(f.id, "PUNCH", ix, iy - 6, f.facing as 1 | -1);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
@@ -5583,6 +5689,7 @@ export class GameEngine {
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
     // Sprite-based attack FX overlays (charge ring, slash arc, impact star, shockwave).
     drawFxPool(ctx, this.attackFx);
+    this.drawHitLabels(ctx);
     // Web-swing tethers — silky double strand with glow + slight slack curve.
     for (const f of [this.p1, this.p2]) {
       if (!f.swing) continue;
