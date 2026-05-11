@@ -180,7 +180,9 @@ export class CpuController {
     this.commitT = Math.max(0, this.commitT - dt);
     this.punishT = Math.max(0, this.punishT - dt);
     this.retreatT = Math.max(0, this.retreatT - dt);
+    this.regroupT = Math.max(0, this.regroupT - dt);
     this.nextPowerT = Math.max(0, this.nextPowerT - dt);
+    this.nextPunchT = Math.max(0, this.nextPunchT - dt);
     this.lastOppMeleeT += dt;
     this.idleT = this.moveDir === 0 ? this.idleT + dt : 0;
 
