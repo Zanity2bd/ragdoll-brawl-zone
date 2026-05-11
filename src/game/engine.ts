@@ -3681,30 +3681,39 @@ export class GameEngine {
         kind: "web", damage: m.damage,
       });
     }
-    // Butcher hurls his iconic crowbar instead of swinging it. The bar spins
-    // through the air, knocks the victim into a ragdoll on hit, then settles
-    // wherever it lands. Butcher must walk over and pick it up to use again.
-    if (m.kind === "crowbar" && f.skin.id === "butcher") {
-      const throwY = f.y + 30;
-      this.projectiles.push({
-        owner: f.id,
-        x: f.x + f.facing * 22,
-        y: throwY,
-        vx: f.facing * 760,
-        vy: -120,
-        life: 4.0,
-        color: "oklch(0.78 0.02 80)",
-        glow: "oklch(0.85 0.04 80)",
-        kind: "crowbar",
-        damage: m.damage,
-        rot: 0,
-        spin: f.facing * 22,
-      });
-      f.crowbarThrown = true;
-      // Lock the special until the crowbar is recovered.
-      f.meleeCd = 999;
-      Sfx.play("whoosh", 0.7);
-    }
+    // Butcher's crowbar is now thrown at the END of windup so the player
+    // sees the dotted aim trajectory first (rendered each frame from his
+    // current facing/position). Throw is fired in resolveMelees().
+  }
+
+  /** Initial throw vector for butcher's crowbar — used by both the live
+   *  projectile and the dotted aim preview so they always agree. */
+  private crowbarLaunch(f: Fighter): { x: number; y: number; vx: number; vy: number } {
+    return {
+      x: f.x + f.facing * 22,
+      y: f.y + 30,
+      vx: f.facing * 760,
+      vy: -120,
+    };
+  }
+
+  /** Spawn the actual crowbar projectile at end of windup. */
+  private throwCrowbar(f: Fighter, m: MoveSpec) {
+    const l = this.crowbarLaunch(f);
+    this.projectiles.push({
+      owner: f.id,
+      x: l.x, y: l.y, vx: l.vx, vy: l.vy,
+      life: 4.0,
+      color: "oklch(0.78 0.02 80)",
+      glow: "oklch(0.85 0.04 80)",
+      kind: "crowbar",
+      damage: m.damage,
+      rot: 0,
+      spin: f.facing * 22,
+    });
+    f.crowbarThrown = true;
+    f.meleeCd = 999;
+    Sfx.play("whoosh", 0.85);
   }
 
   private resolveMelees(dt: number = 1 / 60) {
