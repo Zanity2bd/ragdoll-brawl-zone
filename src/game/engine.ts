@@ -1865,6 +1865,7 @@ export class GameEngine {
             });
           }
           Sfx.play("thud", 0.95);
+          this.spawnHitLabel(pr.owner, "CROWBAR", pr.x, pr.y - 10, dir);
           // Crowbar drops at impact location and rests on the ground.
           pr.vx = 0; pr.vy = 0; pr.spin = 0;
           pr.y = GROUND_Y - 4;
