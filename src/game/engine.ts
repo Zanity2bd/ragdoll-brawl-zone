@@ -6430,6 +6430,80 @@ export class GameEngine {
     }
   }
 
+  /**
+   * Single source of truth for the fighter's root visual transform this frame:
+   * hit-reaction translate/rotate/scale, ragdoll spring torso tilt, and
+   * spring body offset. Used by drawFighter (to wrap the sprite) AND by
+   * cosmetic anchor sampling (weapon trails) so cosmetics never drift off
+   * the visible body during recoil/torsion/airborne hits.
+   */
+  private getRootTransform(f: Fighter) {
+    let dx = 0, dy = 0, rot = 0, sx = 1, sy = 1;
+    const hr = f.hitReactKind;
+    if (hr && f.hitReactT > 0 && f.ragdollT <= 0) {
+      const u = f.hitReactT / Math.max(0.0001, f.hitReactDur);
+      const e = u * u;
+      const dir = f.hitReactDir;
+      const mag = f.hitReactMag;
+      switch (hr) {
+        case "light":
+          dx = dir * 4 * mag * e; rot = -dir * 0.05 * mag * e; break;
+        case "heavy":
+          dx = dir * 9 * mag * e; dy = -3 * mag * e;
+          rot = -dir * 0.13 * mag * e;
+          sy = 1 - 0.07 * mag * e; sx = 1 + 0.05 * mag * e; break;
+        case "juggle":
+          dx = dir * 5 * mag * e; dy = -6 * mag * e;
+          rot = -dir * (0.18 + Math.min(0.18, f.juggleHits * 0.025)) * mag * e; break;
+        case "wallBounce":
+          dx = dir * 7 * mag * e; rot = dir * 0.16 * mag * e;
+          sx = 1 - 0.08 * mag * e; sy = 1 + 0.06 * mag * e; break;
+        case "groundBounce":
+          dy = -4 * mag * e;
+          sx = 1 + 0.10 * mag * e; sy = 1 - 0.10 * mag * e;
+          rot = dir * 0.06 * mag * e; break;
+      }
+    }
+    const torsoAng = (f.rs && f.ragdollT <= 0) ? f.rs.torsoAng : 0;
+    const bodyOffX = f.rs ? f.rs.bodyOffX : 0;
+    const bodyOffY = f.rs ? f.rs.bodyOffY : 0;
+    return { dx, dy, rot, sx, sy, torsoAng, bodyOffX, bodyOffY };
+  }
+
+  /**
+   * Map a fighter-body-local point (relative to f.x, f.y top-left, the same
+   * frame `pose` uses) into world coordinates after applying the full root
+   * transform stack — torso tilt and hit-reaction around the hip pivot,
+   * plus ragdoll spring body offset. This is the canonical conversion for
+   * any cosmetic anchor that needs to track the visible body.
+   */
+  private bodyToWorld(f: Fighter, lx: number, ly: number): [number, number] {
+    const t = this.getRootTransform(f);
+    let x = f.x + lx + t.bodyOffX;
+    let y = f.y + ly + t.bodyOffY;
+    const px = f.x;
+    const py = f.y + FIGHTER_H * 0.62;
+    if (t.torsoAng) {
+      const c = Math.cos(t.torsoAng), s = Math.sin(t.torsoAng);
+      const rx = x - px, ry = y - py;
+      x = px + rx * c - ry * s;
+      y = py + rx * s + ry * c;
+    }
+    if (t.dx || t.dy || t.rot || t.sx !== 1 || t.sy !== 1) {
+      let rx = (x - px) * t.sx;
+      let ry = (y - py) * t.sy;
+      if (t.rot) {
+        const c = Math.cos(t.rot), s = Math.sin(t.rot);
+        const nx = rx * c - ry * s;
+        const ny = rx * s + ry * c;
+        rx = nx; ry = ny;
+      }
+      x = px + rx + t.dx;
+      y = py + ry + t.dy;
+    }
+    return [x, y];
+  }
+
   private drawFighter(f: Fighter) {
     const pose = this.poseFor(f);
     const ctx = this.ctx;
