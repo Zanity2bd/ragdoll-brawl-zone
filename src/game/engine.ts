@@ -5458,6 +5458,46 @@ export class GameEngine {
       retreating,
       lowPower: this.lowPower,
     });
+    // Defensive guard overlay: arms snap up to a boxer block while the body
+    // continues to be shoved by vx. Fades in fast, eases out. Skipped during
+    // own attacks so swings stay readable.
+    if (f.guardT > 0 && f.attackAnim <= 0 && f.punchT <= 0 && !f.meleeKind) {
+      // Ease: punch-in fast, smooth fade. Peak around 0.20s, total ~0.34s.
+      const u = Math.min(1, f.guardT / 0.34);            // 1 fresh → 0 done
+      const inEase = Math.min(1, (1 - u) * 5.0);          // ramp-in
+      const g = Math.max(0, Math.min(1, inEase * (0.55 + 0.45 * u))) * (0.55 + 0.45 * f.guardMag);
+      const fac = renderFacing;
+      // Boxer guard target: forearms vertical, fists at chin/temple height.
+      // shoulderY ≈ 50, headOffsetY ≈ 28 → fists land near y≈30 (head level).
+      const tgt = {
+        // Lead arm (front): elbow tucked, fist forward of chin
+        armLLx: -6 + fac * 2,  armLLy: 50,
+        armLEx: -3 + fac * 6,  armLEy: 42,
+        armLHx:  2 + fac * 8,  armLHy: 30,
+        // Rear arm: elbow tighter to ribs, fist by cheek
+        armRLx:  6 - fac * 2,  armRLy: 50,
+        armRLx2: 4 - fac * 4,  armRLy2: 44,
+        armRHx: -2 - fac * 4,  armRHy: 32,
+      };
+      const mix = (a: number, b: number) => a + (b - a) * g;
+      base.armL[0] = mix(base.armL[0], tgt.armLLx); base.armL[1] = mix(base.armL[1], tgt.armLLy);
+      base.armL[2] = mix(base.armL[2], tgt.armLEx); base.armL[3] = mix(base.armL[3], tgt.armLEy);
+      base.armL[4] = mix(base.armL[4], tgt.armLHx); base.armL[5] = mix(base.armL[5], tgt.armLHy);
+      base.handL[0] = mix(base.handL[0], tgt.armLHx); base.handL[1] = mix(base.handL[1], tgt.armLHy);
+      base.armR[0] = mix(base.armR[0], tgt.armRLx); base.armR[1] = mix(base.armR[1], tgt.armRLy);
+      base.armR[2] = mix(base.armR[2], tgt.armRLx2); base.armR[3] = mix(base.armR[3], tgt.armRLy2);
+      base.armR[4] = mix(base.armR[4], tgt.armRHx); base.armR[5] = mix(base.armR[5], tgt.armRHy);
+      base.handR[0] = mix(base.handR[0], tgt.armRHx); base.handR[1] = mix(base.handR[1], tgt.armRHy);
+      // Chin tuck + slight crouch — bracing under the hit.
+      base.headOffsetY += 2.5 * g;
+      base.shoulderY += 1.5 * g;
+      base.hipY += 1.0 * g;
+      // Lean AWAY from the incoming force (guardDir is the push direction,
+      // so torso tilts backward into that direction — selling the impact).
+      base.lean += f.guardDir * 0.18 * g * (0.6 + 0.4 * f.guardMag);
+      // Shoulder roll absorbs the hit on the lead side.
+      base.shoulderRoll += -f.guardDir * 0.10 * g;
+    }
     const wob = applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying);
     return applyRagdollPose(wob, f.rs, this.lowPower, this.slowmoT > 0 ? 0.18 : 1);
   }
