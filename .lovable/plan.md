@@ -1,206 +1,484 @@
-# Ragdoll + Hit-Reaction Overhaul — Merged Phased Plan
+# Unified Character Render Architecture — Pelvis-Rooted Transform Refactor
 
-Render/physics-response polish only. Gameplay (hitboxes, damage, AI, timers, hitstop, movement physics) is untouched. All work is allocation-free, deterministic, dt-correct, mobile-first, and `lowPower`-aware.
+## Problem
 
-## Files
+Cosmetic skins, sprite frames, procedural rig, ragdoll tumble, recoil offsets, capes, weapon trails and FX anchors each apply transforms in **different coordinate spaces with different pivots**:
 
-- `src/game/ragdoll.ts` — NEW. State machine, `RagdollState`, `applyHitReaction`, `stepRagdoll`, `applyRagdollPose`. Allocation-free (`Float32Array` for limbs + ring buffers).
-- `src/game/engine.ts` — replace existing knockback/ragdoll call sites and per-tick stepping with the new API. Add `incomingImpactT/Strength/Dir` setter on telegraphed attacks. No combat-balance edits.
-- `src/game/animation.ts` — pose blend hook so ragdoll/reaction layer composes cleanly with the existing wobble + walk pipeline (priority gate).
-- `src/game/wobble.ts` — keep as-is for idle/locomotion secondary motion. Ragdoll layer takes authority when `state !== none` and wobble is suppressed.
-- `src/components/game/GameCanvas.tsx` — render reads `applyRagdollPose` output; supports cinematic pose-hold (visual-only freeze of pose write, NOT of `f.x/f.vx/timers`).
+- `drawFighter` wraps hit-reaction `translate/rotate/scale` around feet `(f.x, f.y + FIGHTER_H)`.
+- `drawFighterAt` (procedural) translates to `(x + bodyLagX, y)`, then `translate(0, FIGHTER_H)` + `rotate(pose.lean + bodyRoll)` — **feet pivot**.
+- `drawFighterAt` (sprite path) draws `drawWalkFrame` at `(x + bodyLagX, y + FIGHTER_H)` with **no rotation at all**, so torso/hip rotation, ragdoll spring tilt, and recoil never reach the sprite.
+- Ragdoll tumble rotates the sprite around `(x + bodyLagX, y + FIGHTER_H * 0.5)` — **sprite-center pivot**.
+- Weapon trails, cape, emblem and FX anchors sample joints in **world space** (`f.x + lp[0]`, `f.y + lp[1]`), bypassing the body transform stack entirely.
+- `applyRagdollPose` writes additive offsets onto Pose only — sprite path ignores Pose, so springs never affect the cosmetic body.
 
-## Global Architecture Decisions
+Net effect: the skeleton solves a pose, but each layer pins to a different anchor → visible skin/skeleton drift on kicks, torso rotation, recoil, airborne spin.
 
-1. `**muscleTension: 0..1` is the master scalar.** Drives spring stiffness, damping ratio, stabilization, head lag, limb spread, secondary wobble amplitude, and recovery blend. Removes the per-state ζ table — each state sets a *target* tension + transition rate, not raw ζ values. KO = monotonic tension decay then re-rise during recovery.
-2. **Cinematic pose preservation is visual-only.** A `poseHoldT` (20–40ms) freezes/interpolates only the pose buffer the renderer reads. `f.x`, `f.vx`, hitstun timers, AI, input — all continue normally.
-3. **Anticipatory impact compression is telegraph-aware.** New per-fighter fields `incomingImpactT`, `incomingImpactStrength`, `incomingImpactDir` are written by the *attacker's* startup phase for telegraphed heavies/launchers/finishers only. Compression = 1–2 frames inward brace before release. Skipped for jabs, DOT, instant collisions.
-4. **Propagation delays use preallocated ring buffers.** `Float32Array` per fighter, fixed size (8 slots @ ~4ms each → 32ms window). Torso → shoulders (12ms) → hips (22ms) → legs (32ms), head settles last via lag spring. Zero runtime allocation.
+## Goal
 
-## Phase A — Core Foundation
+One pelvis-rooted transform stack used by every visual layer (sprite, procedural rig, cape, emblem, eyes, weapon trails, FX anchors, shadow). Ragdoll and recoil resolve **before** any cosmetic draw. After the root stack is pushed, all rendering happens in **pelvis-local space** — no system is allowed to issue world-space coordinates.
 
-Replace the rigid ragdoll with a stable premium base. Ship and verify before Phase B.
+## Plan
 
-`**ragdoll.ts` exports**
+### 1. Canonical FighterTransform (single source of truth)
 
-- `RagdollState` — `state`, `muscleTension`, `targetTension`, `tensionRate`, `torsoAng/AV`, `hipAng/AV`, `headLagAng`, `limb: Float32Array(32)` (8 segments × 4: ang, angV, posOffX, posOffY), `bodyVelX/Y`, `recoveryT`, `immuneT`, `bounceCount`, `seed`, `variantTwist`, `variantArch`, `propRing: Float32Array(N*3)`, `poseHoldT`.
-- `createRagdoll()`, `resetRagdoll(rs)`.
-- `applyHitReaction(rs, dirX, dirY, dirZ, power, height, flags)` — primitives only; picks state, seeds variation, writes torso impulse + queues propagation, sets `targetTension`, optionally sets `poseHoldT`.
-- `stepRagdoll(rs, dt, env)` — fixed substeps `ceil(dt/0.0167)`, capped 4 (2 in `lowPower`); integrates springs, drains ring buffer, handles airborne/ground/bounce/KO transitions, decays tension toward target.
-- `applyRagdollPose(pose, rs, lowPower)` — composes onto baked pose; respects `poseHoldT` (lerp-pause writes).
+Add a per-fighter, per-frame struct computed once before any draw:
 
-**State machine** (9 states): `none`, `lightHit`, `heavyHit`, `launcher`, `airborneSpin`, `wallBounce`, `groundBounce`, `knockoutCollapse`, `finalKO`. Transitions driven by `power`, `dir`, `height`, vImpact, bounceCount.
+```text
+FighterTransform {
+  pelvisX, pelvisY        // world-space pelvis anchor (y + FIGHTER_H * 0.62)
+  facing, facingVisual    // ±1 + signed magnitude from facingT
+  rootRot                 // pose.lean + bodyRoll + ragdoll torsoAng
+  hipRot, torsoRot        // for spine bend (downstream skeleton)
+  recoilX, recoilY        // hit-reaction translate
+  recoilRot               // hit-reaction rotation
+  squashX, squashY        // hit-reaction scale + wobble squash
+  bodyOffsetX, bodyOffsetY// ragdoll spring bodyOff
+  ragdollRot              // tumble (only when ragdollT>0)
+  worldMatrix             // baked DOMMatrix (allocation-free, reused)
+}
+```
 
-**Procedural momentum propagation**
+Store one preallocated instance per fighter on the engine (no per-frame allocation). All hit-reaction, ragdoll, wobble and recoil math collapses into populating this struct.
 
-- Torso receives full linear impulse → `bodyVelX/Y` and AV from `rHit × impulse`.
-- Hip AV scheduled via ring buffer (one slot ahead). Legs scheduled later. Head uses lag spring against torso.
-- Per-limb seeded angular kick × counter-swing multiplier (deterministic via mulberry32 of `seed`).
+### 2. Canonical render-root push (fixed transform order)
 
-**Spring-based limb physics**
+Replace every scattered `ctx.save/translate/rotate/scale` block in `drawFighter`, `drawFighterAt` (sprite + procedural branches), ragdoll/down/get-up branches, and ghost trails with a single helper:
 
-- 8 segments, 1-DOF angular spring + 2-DOF positional offset spring driven by torso linear accel.
-- `k` and `ζ` derived from `muscleTension`: `k = kMin + (kMax-kMin)*tension`, `ζ = 0.45 + 0.55*tension`.
+```text
+pushFighterRoot(ctx, xform):
+  ctx.save()
+  translate(pelvisX, pelvisY)
+  scale(facingVisual, 1)             // facing + yaw foreshortening
+  translate(recoilX, recoilY)
+  rotate(rootRot + ragdollRot + recoilRot)
+  scale(squashX, squashY)
+  translate(bodyOffsetX, bodyOffsetY)
+// >>> from here all coords are pelvis-local <<<
+```
 
-**Airborne**: linear `g*dt`, angular damping `^dt`, spin decay ∝ residual energy.
-**Ground impact**: `bounceCoef` from state, squash impulse, radial outward limb kick, head backward lag, `bounceCount++`.
-**KO collapse**: `targetTension` ramps 0.45 → 1.0 over `recoveryT` (0.6–1.2s); 1–2 micro-bounces if `vImpact > 80`.
+Paired `popFighterRoot(ctx)` for cleanup. After this push, **no system may issue world-space coordinates** — enforced by code review and DEBUG_RIG visualization.
 
-**Dynamic surface friction**: `groundFriction^dt` on `bodyVelX` while grounded ragdoll, scaled by tension.
+### 3. Pelvis is the only pivot
 
-**Deterministic variation**: per-hit `seed`, `variantTwist∈{-1,0,1}`, `variantArch∈{-1,0,1}`, per-limb whip ∈ [0.7,1.3].
+Remove all feet-pivot patterns (`translate(0, FIGHTER_H)` / `rotate` / `translate(0, -FIGHTER_H)`) and the sprite-center ragdoll pivot. Everything rotates at pelvis origin via the single `rotate` in step 2.
 
-**Stability clamps**: `|torsoAng-hipAng|≤0.5 rad`, `|AV|≤14 rad/s`, pos offset ≤12 px, head lag ≤0.4 rad, overlap scaling.
+### 4. Sprite body becomes a pelvis-local child
 
-**LowPower**: 4 limbs, skip pos-offset springs, substeps capped 2, no propagation ring (direct apply).
+- Change `drawWalkFrame` call sites: instead of `(x + bodyLagX, y + FIGHTER_H)`, draw at pelvis-local coords `(0, FIGHTER_H * 0.38)` (feet relative to pelvis) **after** the root stack is pushed.
+- Sprite now inherits `rootRot`, recoil rot/scale, ragdoll spring offsets, and yaw foreshortening automatically — closing the main drift gap.
+- Sprite ragdoll path: drop the separate translate/rotate; ragdoll tumble already sits inside `rootRot + ragdollRot`.
 
-**Recovery blending**: tension rising → spring stiffness rises → pose naturally settles toward locomotion baseline. No discrete state pop.
+### 5. Procedural skeleton owns cosmetic binding
 
-**Silhouette protection**: post-spring clamps; if torso vs hip silhouette collapses, push hip outward by 2px along facing.
+- `poseFor` joints re-anchor to **pelvis-local** by subtracting the pelvis offset once at pose-compose time.
+- After the skeleton solves, expose a **final solved joint table** (shoulders, elbows, hands, hips, knees, feet, head, chest) in pelvis-local space.
+- Cape, emblem, eyes, weapon-trail anchors, slash arcs, sparks, shadow all read from this table — no more `f.x + lp[0]` style world-space sampling.
+- Weapon-trail sampling loop (engine.ts ~5848): convert to pelvis-local sampling, then bake to world via the cached `worldMatrix` once per sample.
 
-**Engine integration** (`engine.ts`): replace ~5 knockback/ragdoll call sites (lines ~1871, 1920, 2046, 2445, 2566) with `applyHitReaction(...)`. Replace `if (f.ragdollT > 0) {...}` block with `stepRagdoll(f.rs, dt, env)`. Wobble layer is bypassed when `f.rs.state !== 'none'`.
+### 6. Ragdoll/recoil resolve before render
 
-**Phase A success criteria**
+New per-fighter pipeline, executed in `update()` before `draw()`:
 
-- No stiff/repeated poses; varied per hit.
-- Believable weight; torso leads, limbs follow.
-- Fluid airborne arcs; natural ground bounces.
-- Stable in slow-mo and at 30 FPS throttle.
-- No exploding limbs, no NaN, readable silhouettes on 393×583.
-- `bunx tsc --noEmit` clean.
+```text
+simulation → ragdoll solve → recoil solve → compose FighterTransform
+→ skeleton solve (pose + joints in pelvis-local)
+→ cosmetic attachment solve (cape/emblem/trail anchors)
+→ render
+```
 
-## Phase B — AAA Polish Layer
+Cosmetic layers consume the **final** transform — never the pre-recoil pose.
 
-Only after Phase A is stable in playtest.
+### 7. Kick extension stabilization
 
-- Anticipatory impact compression (telegraph-aware, 1–2 frames).
-- Cinematic pose preservation (`poseHoldT`, visual-only).
-- Spine flex layer (extra DOF between torso and hip springs).
-- Shoulder/hip counterbalance torque.
-- Animation rhythm offsets (per-fighter phase seed).
-- Dynamic recovery poses (state-aware get-up bias).
-- Motion clarity bias (lead limb amplified, trail limb damped).
-- Micro secondary motion (sub-pixel sway gated by tension).
-- Energy conservation accounting across bounces.
-- Perceptual motion cleanup (epsilon filter on tiny offsets).
-- Slow-mo motion compression (reduced amplitude when timeScale<0.6).
-- Contact pose holds (25–50ms, visual-only).
-- Recovery breathing (chest rise during `finalKO` settle).
+During `comboKind === "kick"` active frames:
 
-## Phase C — Final Cinematic Tuning
+- Mark planted foot as a temporary positional anchor; `pelvisX` is clamped so the planted foot's world position cannot drift > N pixels (small threshold, e.g. 3 px).
+- Suppress kick-side recoil chain contribution (`recoilX` from the kick limb is multiplied by ~0.4) so the torso does not slide to "follow" the extended foot.
+- Result: powerful extension reads, body stays anchored.
 
-Polish-only, no new systems unless a gap is found.
+### 8. Silhouette protection
 
-- Direction-aware collapse (forward vs backward fall bias).
-- Recovery intelligence (face-up/face-down resolution).
-- Body-chain timing refinement (ring buffer slot tuning).
-- Advanced motion filtering (low-pass on micro-jitter).
-- Final tuning pass: damping curves, stiffness ranges, momentum transfer ratios, bounce coefficients, KO settle times, airborne looseness.  
+After joint solve, enforce stability clamps before rendering:
 
+- Torso center stays within a pelvis-relative corridor (±X px).
+- Shoulder width cannot collapse below threshold (no negative scale collapse).
+- Head stays within head-to-chest distance bounds.
+- Limbs cannot cross torso center beyond a max angle.
+- If violated, scale the offending procedural offset down (not the rig) — readability over simulation.
 
-## Auto-Scaling Safety Rule
+### 9. Stability guardrails
 
-Any subsystem that hurts gameplay readability, silhouette clarity, mobile FPS, or input responsiveness is scaled back automatically (gated by `lowPower`, FPS sample, or fighter-state). Premium feel > simulation complexity.
+Already partially present in ragdoll.ts (epsilon filter, clamps). Extend to the new transform layer:
 
-## Out of Scope
+- NaN guard on every field of `FighterTransform`; if NaN, fall back to identity for that field.
+- If dt > 50ms or FPS counter < 30, reduce `bodyOffsetX/Y`, `recoilX/Y`, and ragdoll amplitude by 50% for that frame.
+- Clamp `rootRot` to ±1.5 rad, `recoilRot` to ±0.5 rad, `squashX/Y` to [0.6, 1.4].
 
-Hitboxes, damage, AI, balance, FX, camera shake, finisher cinematic flow, networking.
+### 10. DEBUG_RIG overlay (temporary, gated)
+
+Add `DEBUG_RIG` flag (off by default; toggle via `?rig=1` query param read in `GameCanvas`). When on, after the root stack is pushed, draw:
+
+- Pelvis root (magenta filled dot, r=3)
+- Torso pivot (cyan ring at chest joint)
+- Joint chain (yellow dots: shoulders, elbows, hands, hips, knees, feet, head)
+- Cosmetic anchors (green crosses: cape root, emblem center, weapon-trail anchor)
+- Final transformed bounding box (thin white outline)
+- Planted-foot lock indicator (red ring during kick)
+- Recoil vector (orange line from pelvis)
+
+Removed/gated after tuning; zero gameplay impact.
+
+## Files affected
+
+- `src/game/engine.ts`
+  - New: `FighterTransform` interface near top, `computeFighterTransform(f)` helper near `poseFor`.
+  - New: `pushFighterRoot(ctx, xform)` / `popFighterRoot(ctx)` helpers.
+  - New: `solveJoints(f, pose)` returning a preallocated pelvis-local joint table.
+  - Refactor: `drawFighter` (lines 6428–6483), `drawFighterAt` sprite branch (6580–6923), `drawFighterAt` procedural branch (6947+), ragdoll/down/get-up sprite blocks (6636–6707), ghost-trail loop (5827–5842), weapon-trail sampling (5848–5854), cape/emblem/eyes overlay draw sites.
+  - Add: kick-extension planted-foot anchor logic (consumes `comboKind === "kick"` active window).
+  - Add: silhouette clamps + stability guardrails.
+- `src/game/ragdoll.ts`
+  - No API change. `applyRagdollPose` now contributes only **limb-level** local offsets; root-level `bodyOffX/Y` and `torsoAng` flow through the new `computeFighterTransform`. (These fields are already public on RagdollState.)
+- `src/game/walkSprite.ts`
+  - `drawWalkFrame` signature unchanged. Call sites switch to pelvis-local coords.
+- `src/components/game/GameCanvas.tsx`
+  - Read `?rig=1` from `window.location.search`; expose `DEBUG_RIG` boolean to engine.
+
+## Out of scope
+
+- Gameplay, hitboxes, AI, balance, timers, movement — unchanged.
+- No new procedural systems; no retuning of existing ragdoll/recoil values.
+- No skin asset or sprite-sheet changes.
+- No new dependencies.
 
 ## Verification
 
-- `bunx tsc --noEmit` after each phase.
-- Manual: light jab, heavy launcher, aerial spin, wall bounce, repeated KO variation, slow-motion finisher, mobile viewport readability, low FPS throttle, rapid combo chains.  
-  
-Production Safety + Tuning Layer
-  Add these final production-level constraints and tuning systems before implementation begins.
-  1. Global Simulation Budget Guard
-  Add a lightweight runtime budget monitor for ragdoll/update cost.
-  If frame budget exceeds threshold:
-  - reduce substeps
-  - reduce limb spring iterations
-  - reduce secondary wobble amplitude
-  - reduce micro-motion updates
-  - preserve:
-    1. torso momentum
-    2. silhouette readability
-    3. major limb arcs
-  Never sacrifice gameplay responsiveness or readability for simulation detail.
-  2. Motion Priority Stack
-  When multiple motion systems compete:  
-  priority order is:
-  1. gameplay readability
-  2. torso/body line
-  3. attack/reaction silhouette
-  4. momentum continuity
-  5. secondary wobble
-  6. micro motion
-  Lower-priority systems automatically damp/reduce themselves when conflict is detected.
-  3. Anti-Jitter Stabilization
-  Add final-pass stabilization:
-  - epsilon filtering
-  - low-pass smoothing
-  - angular deadzones
-  - micro-motion damping
-  Especially for:
-  - low FPS spikes
-  - slow-motion
-  - repeated wall bounces
-  - rapid combo hits
-  Goal:  
-  motion should always feel intentional and premium,  
-  never noisy or unstable.
-  4. Visual Readability Bias
-  At all times:
-  - preserve clean action silhouettes
-  - preserve readable body curves
-  - avoid tangled limbs
-  - avoid visual clutter during multi-hit combos
-  When readability conflicts with realism:  
-  readability always wins.
-  5. Momentum Continuity Rules
-  Momentum should never:
-  - stop abruptly
-  - reverse unnaturally
-  - snap to zero
-  All settling should:
-  - decay naturally
-  - transfer through body chains
-  - preserve directional flow
-  6. Recovery Readability Constraint
-  Recovery transitions must:
-  - remain readable on small mobile screens
-  - clearly communicate:
-    - grounded
-    - stunned
-    - recovering
-    - KO
-    - airborne
-  Avoid overly subtle recovery states.
-  7. Tunable Debug Controls
-  Add optional debug toggles:
-  - ragdoll springs
-  - muscle tension visualization
-  - propagation delay visualization
-  - pose hold visualization
-  - collision/bounce debug
-  - lowPower simulation preview
-  Developer-only.  
-  No shipping UI.
-  8. Final Design Rule
-  The system should feel:
-  - cinematic
-  - heavy
-  - fluid
-  - reactive
-  - expensive
-  - controlled
-  Never:
-  - floppy
-  - chaotic
-  - over-simulated
-  - jelly-like
-  - noisy
-  - difficult to read
-  The goal is not “real physics.”
-  The goal is:  
-  high-end fighting-game motion quality with believable body weight and premium readability.
+1. `bunx tsc --noEmit` clean.
+2. Visual checks at 393×583, low-FPS throttle:
+  - **Walk / sprint**: skin sits exactly on rig at all phases.
+  - **Heavy kick extension**: torso stays over planted foot; cape/emblem track shoulders.
+  - **Aerial kick / airborne spin**: no separation between sprite body and weapon-trail anchor.
+  - **Light/heavy/juggle hit-reactions**: skin rotates at hip pivot, no sprite-center slide.
+  - **Launcher**: cosmetics follow the spinning body without lag.
+  - **Ragdoll tumble**: sprite, cape, FX anchors all rotate together around hip.
+  - **Slow-mo finisher**: silhouette stable, no jitter or stretch.
+3. Toggle `?rig=1`: pelvis dot stays glued to body center across all states above; planted-foot lock activates during kick frames; cosmetic anchors stay on green crosses.
+4. Performance: idle + heavy combat at <2ms/frame on the canvas path on the 393×583 viewport.
+
+# Additional AAA Render Architecture Rules
+
+## 11. Transform Authority Contract
+
+Every renderable fighter component must declare:
+
+- its parent transform
+
+- whether it operates in local or world space
+
+- whether it is allowed to mutate transforms
+
+Rules:
+
+- ONLY FighterTransform may own world-space transforms.
+
+- All child systems are read-only consumers.
+
+- No child system may apply additional root translations or rotations.
+
+This prevents future drift regressions when new skins or FX are added.
+
+---
+
+# 12. Local/World Space Enforcement
+
+Introduce explicit conversion helpers:
+
+ts worldToPelvisLocal() pelvisLocalToWorld() applyRootTransform() 
+
+Ban manual:
+
+ts f.x + offsetX f.y + offsetY 
+
+outside of:
+
+- computeFighterTransform()
+
+- pelvisLocalToWorld()
+
+This guarantees:
+
+- one canonical conversion path
+
+- no hidden coordinate drift
+
+- deterministic attachment behavior
+
+---
+
+# 13. Animation Authority Hierarchy
+
+Current systems can still fight for ownership of the same body region.
+
+Define explicit authority:
+
+text ragdoll > hitReaction > attackPose > locomotion > idle 
+
+Higher-priority systems may overwrite lower layers.
+
+Lower layers may only add approved secondary offsets.
+
+Example:
+
+- ragdoll owns torso rotation
+
+- locomotion may NOT add torso lean during ragdoll
+
+- recoil may add additive hand shake only if torso authority is free
+
+This prevents:
+
+- double rotations
+
+- additive drift
+
+- conflicting pose math
+
+---
+
+# 14. Root Motion Isolation
+
+Separate:
+
+- gameplay position
+
+from
+
+- visual body offsets
+
+ts fighter.x/y      = gameplay truth bodyOffsetX/Y    = render-only 
+
+Rules:
+
+- gameplay never reads render offsets
+
+- hitboxes never inherit render offsets
+
+- networking never serializes render offsets
+
+Prevents:
+
+- desync
+
+- hitbox drift
+
+- simulation corruption
+
+---
+
+# 15. Attachment Lifecycle System
+
+All cosmetics and overlays become registered attachments:
+
+ts Attachment {   joint   localOffset   inheritsRotation   inheritsScale   inheritsRagdoll   inheritsRecoil } 
+
+Examples:
+
+- cape inherits all
+
+- floating aura ignores recoil rotation
+
+- weapon trail inherits hand rotation only
+
+This future-proofs:
+
+- skins
+
+- cosmetics
+
+- weapons
+
+- character variants
+
+- animated accessories
+
+without new special-case code.
+
+---
+
+# 16. Anti Double-Transform Protection
+
+Current architecture risks:
+
+- root rotation applied twice
+
+- recoil scale stacked twice
+
+- ragdoll offsets compounded
+
+Add per-frame transform flags:
+
+ts rootApplied recoilApplied ragdollApplied 
+
+Debug assert if a transform category is applied twice in one render path.
+
+This catches:
+
+- invisible hierarchy bugs
+
+- future regression drift
+
+- stacked transform explosions
+
+---
+
+# 17. Pelvis-Space Skeleton Contract
+
+The procedural skeleton MUST exist entirely in pelvis-local space.
+
+Rules:
+
+- joints never store world coordinates
+
+- springs never simulate in world space
+
+- IK never solves in world space
+
+- pose layers never write world positions
+
+World-space conversion happens ONLY at final render extraction.
+
+Benefits:
+
+- deterministic animation
+
+- stable ragdoll blending
+
+- simpler recoil math
+
+- easier future networking/replays
+
+---
+
+# 18. Matrix Caching & Dirty Flags
+
+FighterTransform.worldMatrix should only rebuild when:
+
+- pelvis moved
+
+- facing changed
+
+- recoil changed
+
+- root rotation changed
+
+- scale changed
+
+Add:
+
+ts transformDirty 
+
+Avoid rebuilding matrices multiple times per frame for:
+
+- trails
+
+- overlays
+
+- shadows
+
+- debug rig
+
+Important for mobile combat scenes.
+
+---
+
+# 19. Secondary Motion Containment
+
+Secondary systems:
+
+- wobble
+
+- springs
+
+- head lag
+
+- cloth sway
+
+- cape follow-through
+
+must NEVER modify:
+
+- pelvis
+
+- gameplay root
+
+- authoritative torso position
+
+They may only:
+
+- offset child joints
+
+- modify additive visual layers
+
+Prevents “floaty body syndrome.”
+
+---
+
+# 20. Cinematic Stability Rules
+
+During:
+
+- slow motion
+
+- finishers
+
+- airborne spins
+
+- heavy launches
+
+Automatically:
+
+- reduce secondary motion amplitude
+
+- increase silhouette stabilization
+
+- tighten spring damping slightly
+
+- prioritize strong readable poses
+
+Reason:
+
+cinematic moments magnify instability.
+
+Premium combat games stabilize during emphasis frames.
+
+---
+
+# 21. Final Visual Target
+
+The final result should feel like:
+
+- a single physically connected fighter
+
+- one coherent body mass
+
+- premium physics-assisted animation
+
+- readable modern platform fighter motion
+
+NOT:
+
+- layered sprites
+
+- cosmetic attachments
+
+- disconnected transforms
+
+- procedural math artifacts
+
+The player should never perceive:
+
+“animation + skin.”
+
+They should perceive:
+
+ONE living combatant.
