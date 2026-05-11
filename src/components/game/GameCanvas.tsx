@@ -415,13 +415,15 @@ function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "r
   const glow = isP1 ? "oklch(0.65 0.22 215)" : "oklch(0.65 0.28 340)";
   const pct = (p.hp / p.maxHp) * 100;
   return (
-    <div className={`flex-1 max-w-md ${side === "right" ? "items-end" : ""} flex flex-col gap-1.5`}>
+    <div className={`flex-1 max-w-md ${side === "right" ? "items-end pr-12 sm:pr-14" : ""} flex flex-col gap-1.5`}>
       <div className={`flex items-center gap-3 ${side === "right" ? "flex-row-reverse" : ""}`}>
-        <div className="font-mono text-[11px] sm:text-xs tracking-[0.2em] uppercase font-bold"
+        <div className="font-mono text-[11px] sm:text-xs tracking-[0.2em] uppercase font-bold whitespace-nowrap"
              style={{ color: accent, textShadow: `0 0 12px ${glow}` }}>
           {p.name}
         </div>
-        <div className="font-mono text-[10px] text-foreground/55">{Math.ceil(p.hp)} / {p.maxHp}</div>
+        <div className="font-mono text-[10px] text-foreground/55 tabular-nums" style={{ minWidth: "5.5ch", textAlign: side === "right" ? "left" : "right" }}>
+          {Math.ceil(p.hp)} / {p.maxHp}
+        </div>
       </div>
       <div className="relative h-3 sm:h-3.5 rounded-full overflow-hidden"
            style={{
