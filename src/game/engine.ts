@@ -5413,7 +5413,8 @@ export class GameEngine {
       retreating,
       lowPower: this.lowPower,
     });
-    return applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying);
+    const wob = applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying);
+    return applyRagdollPose(wob, f.rs, this.lowPower);
   }
 
   /**
