@@ -594,6 +594,7 @@ export class GameEngine {
   private elapsed = 0;
   private lastDt = 1 / 60; // smoothed visual dt for spring/render polish
   private lowPower = false;
+  private debugRig = false;
   private slowFrames = 0;
   private snapAccum = 0;
 
@@ -1648,6 +1649,8 @@ export class GameEngine {
   isTeleTargeting() { return this.teleTargeting; }
 
   setLowPower(v: boolean) { this.lowPower = v; }
+  /** Toggle pelvis/anchor debug overlay (gated by ?rig=1). */
+  setDebugRig(v: boolean) { this.debugRig = v; }
 
   private update(dt: number) {
     this.elapsed += dt;
@@ -2680,6 +2683,24 @@ export class GameEngine {
       (f as Fighter & { _prevAxVx?: number })._prevAxVx = f.vx;
       f.bodyLagX += f.bodyLagV * dt;
       f.bodyLagX = Math.max(-12, Math.min(12, f.bodyLagX));
+
+      // ---- Planted-foot lock during kick active window ----
+      // The kicking leg's extension implies the planted foot stays anchored.
+      // Hard-damp body lag (and the ragdoll spring's horizontal drift) so the
+      // torso doesn't slide off the standing leg, which was the loudest
+      // remaining "skin/skeleton drift" tell during high kicks.
+      if (f.comboKind === "kick" && f.comboT > 0) {
+        const u = f.comboT / Math.max(0.001, f.comboDur);
+        // Active window: chamber → impact → early recovery
+        if (u > 0.15 && u < 0.85) {
+          f.bodyLagX *= 0.55;
+          f.bodyLagV *= 0.35;
+          if (f.rs) {
+            f.rs.bodyOffX *= 0.55;
+            // vertical spring is fine (sells the kick power), only X locks
+          }
+        }
+      }
 
       // ---- Body roll from turn whip & impact ----
       // Underdamped so the torso visibly rocks, then settles.
@@ -5862,7 +5883,54 @@ export class GameEngine {
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
     // Sprite-based attack FX overlays (charge ring, slash arc, impact star, shockwave).
     drawFxPool(ctx, this.attackFx);
-    
+
+    // ---- Debug rig overlay (?rig=1) ----
+    // Visual-truth tool for tuning skin/skeleton cohesion. Draws hip pivot,
+    // pose limb anchors mapped through bodyToWorld, and recoil vector.
+    if (this.debugRig) {
+      for (const f of [this.p1, this.p2]) {
+        const pose = this.poseFor(f);
+        const [hipX, hipY] = this.bodyToWorld(f, 0, FIGHTER_H * 0.62);
+        ctx.save();
+        // hip pivot — magenta
+        ctx.fillStyle = "oklch(0.75 0.30 330)";
+        ctx.beginPath(); ctx.arc(hipX, hipY, 3.5, 0, Math.PI * 2); ctx.fill();
+        // limb anchors — yellow
+        ctx.fillStyle = "oklch(0.92 0.18 95)";
+        for (const key of ["handL","handR","footL","footR"] as const) {
+          const lp = pose[key];
+          const [wx, wy] = this.bodyToWorld(f, lp[0], lp[1]);
+          ctx.beginPath(); ctx.arc(wx, wy, 2.2, 0, Math.PI * 2); ctx.fill();
+        }
+        // weapon-trail anchor — green ring
+        const tlp = pose[f.weaponTrail.limb];
+        const [tx, ty] = this.bodyToWorld(f, tlp[0], tlp[1]);
+        ctx.strokeStyle = "oklch(0.85 0.20 145)";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(tx, ty, 5, 0, Math.PI * 2); ctx.stroke();
+        // recoil vector — orange
+        const t = this.getRootTransform(f);
+        if (t.dx || t.dy) {
+          ctx.strokeStyle = "oklch(0.78 0.22 45)";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(hipX, hipY);
+          ctx.lineTo(hipX + t.dx * 4, hipY + t.dy * 4); ctx.stroke();
+        }
+        // planted-foot lock indicator — red ring around stance foot during kick active
+        if (f.comboKind === "kick" && f.comboT > 0) {
+          const u = f.comboT / Math.max(0.001, f.comboDur);
+          if (u > 0.15 && u < 0.85) {
+            const stanceLp = pose[f.facing > 0 ? "footL" : "footR"];
+            const [sx, sy] = this.bodyToWorld(f, stanceLp[0], stanceLp[1]);
+            ctx.strokeStyle = "oklch(0.70 0.25 25)";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+    }
+
     // Web-swing tethers — silky double strand with glow + slight slack curve.
     for (const f of [this.p1, this.p2]) {
       if (!f.swing) continue;
