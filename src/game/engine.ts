@@ -207,6 +207,11 @@ interface Fighter {
   freezeT: number;
   // Generic stun (Solar Flare etc.) — locks input but body stays upright
   stunT: number;
+  // Defensive block reaction — arms raise to guard while still being shoved by vx.
+  // Triggered automatically when a hit lands and the fighter isn't in heavy ragdoll.
+  guardT: number;
+  guardDir: 1 | -1;   // direction force is coming FROM (lean away from this)
+  guardMag: number;   // 0..1, drives lean depth + arm tightness
   // Superman Heat-Vision: sustained beam time remaining
   heatVisionT: number;
   // Iron Man Unibeam: charge → fire phases
