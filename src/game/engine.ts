@@ -1926,6 +1926,7 @@ export class GameEngine {
           target.wobble.staggerDir = dir;
           target.wobble.staggerMag = 0.6;
           applyImpulse(target.wobble, dir, -0.35, 0.7);
+          applyHitReaction(target.rs, dir, -0.3, 0.35, 0, 0);
         }
         this.burst(pr.x, pr.y, pr.glow, 18);
         Sfx.play(pr.kind === "batarang" ? "punch" : (pr.kind === "web" ? "thud" : "punch"), 0.7);
