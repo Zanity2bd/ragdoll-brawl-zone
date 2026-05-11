@@ -118,6 +118,8 @@ export function resetRagdoll(rs: RagdollState): void {
   rs.seed = 1; rs.variantTwist = 0; rs.variantArch = 0;
   rs.propRing.fill(0);
   rs.poseHoldT = 0;
+  rs.incomingImpactT = 0; rs.incomingImpactStrength = 0; rs.incomingImpactDir = 0;
+  // breathPhase is free-running; do not reset to keep idles desynced.
 }
 
 // Deterministic seeded PRNG (mulberry32). Stateless: caller passes & receives.
