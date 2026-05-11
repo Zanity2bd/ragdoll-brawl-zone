@@ -475,40 +475,37 @@ export function applyRagdollPose(
   if (rs.incomingImpactT > 0 && rs.incomingImpactStrength > 0) {
     const a = Math.min(1, rs.incomingImpactT / 0.05) * rs.incomingImpactStrength;
     // Brace inward (opposite expected travel) → body coils.
-    antiX = -rs.incomingImpactDir * 2.4 * a;
-    antiY = -1.4 * a;
-    antiTilt = -rs.incomingImpactDir * 0.05 * a;
+    // Stronger inward brace: shoulders compress, knees brace, foot plants.
+    antiX = -rs.incomingImpactDir * 4.2 * a;
+    antiY = -2.4 * a;
+    antiTilt = -rs.incomingImpactDir * 0.10 * a;
   }
 
-  // Recovery breathing: gentle chest rise during low-tension settle (KO).
-  // Scales to 0 as tension recovers.
   let breathY = 0;
   const breathAmt = Math.max(0, 1 - rs.muscleTension) * (1 - Math.min(1, rs.recoveryT));
   if (breathAmt > 0.05) {
     breathY = Math.sin(rs.breathPhase * 2.4) * 0.8 * breathAmt;
   }
 
-  const bx = (rs.bodyOffX + antiX) * holdScale * slowMoScale;
-  const by = (rs.bodyOffY + antiY + breathY) * holdScale * slowMoScale;
-  const tilt = (rs.torsoAng + antiTilt) * holdScale * slowMoScale;
-  const hipTilt = rs.hipAng * holdScale * slowMoScale;
-  const headExtra = rs.headLagAng * holdScale * slowMoScale * 4;
+  // Visible amplitude — bigger silhouettes for mobile readability.
+  const bx = (rs.bodyOffX + antiX) * holdScale * slowMoScale * 1.35;
+  const by = (rs.bodyOffY + antiY + breathY) * holdScale * slowMoScale * 1.25;
+  const tilt = (rs.torsoAng + antiTilt) * holdScale * slowMoScale * 1.6;
+  const hipTilt = rs.hipAng * holdScale * slowMoScale * 1.3;
+  const headExtra = rs.headLagAng * holdScale * slowMoScale * 6;
 
-  // Spine flex / shoulder-hip counterbalance: when torso and hip diverge, add
-  // a small shoulder-roll correction so silhouette reads as one fluid spine
-  // rather than two stiff blocks.
-  const spineFlex = (tilt - hipTilt) * 0.5;
+  // Spine flex — full diagonal silhouette: shoulders one way, hips the other.
+  const spineFlex = (tilt - hipTilt) * 0.85;
 
-  // Motion clarity bias: amplify the limb leading the motion direction,
-  // damp the trailing one. Keeps silhouette readable in fast multi-hits.
+  // Motion clarity bias: stronger asymmetry between lead and trail arms.
   const lead = bx >= 0 ? 1 : -1;
-  const leadBoost = 1.15;
-  const trailDamp = 0.85;
+  const leadBoost = 1.35;
+  const trailDamp = 0.65;
   const armLBoost = lead < 0 ? leadBoost : trailDamp;
   const armRBoost = lead > 0 ? leadBoost : trailDamp;
 
   const L = rs.limb;
-  const ls = lowPower ? 0.5 : 1;
+  const ls = lowPower ? 0.6 : 1.2; // overall limb amplification
   const lsArmL = ls * armLBoost;
   const lsArmR = ls * armRBoost;
 
@@ -521,35 +518,34 @@ export function applyRagdollPose(
   const lRx = L[6 * LIMB_STRIDE + 2] * ls, lRy = L[6 * LIMB_STRIDE + 3] * ls;
   const fRx = L[7 * LIMB_STRIDE + 2] * ls, fRy = L[7 * LIMB_STRIDE + 3] * ls;
 
-  // Final epsilon filter on accumulated tiny offsets (anti-jitter polish).
   const e = (v: number) => (Math.abs(v) < 0.06 ? 0 : v);
 
   return {
     headOffsetY: p.headOffsetY + e(by * 0.6 + headExtra),
-    shoulderY: p.shoulderY + e(by * 0.8),
-    hipY: p.hipY + e(by * 0.4),
+    shoulderY: p.shoulderY + e(by * 0.9),
+    hipY: p.hipY + e(by * 0.35),
     legL: [
-      p.legL[0] + e(bx * 0.4), p.legL[1] + e(by * 0.4),
-      p.legL[2] + e(bx * 0.4 + lLx), p.legL[3] + e(by * 0.4 + lLy),
+      p.legL[0] + e(bx * 0.3), p.legL[1] + e(by * 0.35),
+      p.legL[2] + e(bx * 0.35 + lLx), p.legL[3] + e(by * 0.35 + lLy),
       p.legL[4] + e(fLx), p.legL[5] + e(fLy),
     ],
     legR: [
-      p.legR[0] + e(bx * 0.4), p.legR[1] + e(by * 0.4),
-      p.legR[2] + e(bx * 0.4 + lRx), p.legR[3] + e(by * 0.4 + lRy),
+      p.legR[0] + e(bx * 0.3), p.legR[1] + e(by * 0.35),
+      p.legR[2] + e(bx * 0.35 + lRx), p.legR[3] + e(by * 0.35 + lRy),
       p.legR[4] + e(fRx), p.legR[5] + e(fRy),
     ],
     armL: [
-      p.armL[0] + e(bx * 0.8), p.armL[1] + e(by * 0.8),
-      p.armL[2] + e(bx * 0.8 + aLx * 0.6), p.armL[3] + e(by * 0.8 + aLy * 0.6),
-      p.armL[4] + e(bx * 0.8 + hLx), p.armL[5] + e(by * 0.8 + hLy),
+      p.armL[0] + e(bx * 1.0), p.armL[1] + e(by * 0.9),
+      p.armL[2] + e(bx * 1.05 + aLx * 0.7), p.armL[3] + e(by * 0.9 + aLy * 0.7),
+      p.armL[4] + e(bx * 1.1 + hLx), p.armL[5] + e(by * 0.9 + hLy),
     ],
     armR: [
-      p.armR[0] + e(bx * 0.8), p.armR[1] + e(by * 0.8),
-      p.armR[2] + e(bx * 0.8 + aRx * 0.6), p.armR[3] + e(by * 0.8 + aRy * 0.6),
-      p.armR[4] + e(bx * 0.8 + hRx), p.armR[5] + e(by * 0.8 + hRy),
+      p.armR[0] + e(bx * 1.0), p.armR[1] + e(by * 0.9),
+      p.armR[2] + e(bx * 1.05 + aRx * 0.7), p.armR[3] + e(by * 0.9 + aRy * 0.7),
+      p.armR[4] + e(bx * 1.1 + hRx), p.armR[5] + e(by * 0.9 + hRy),
     ],
-    handL: [p.handL[0] + e(bx * 0.8 + hLx), p.handL[1] + e(by * 0.8 + hLy)],
-    handR: [p.handR[0] + e(bx * 0.8 + hRx), p.handR[1] + e(by * 0.8 + hRy)],
+    handL: [p.handL[0] + e(bx * 1.1 + hLx), p.handL[1] + e(by * 0.9 + hLy)],
+    handR: [p.handR[0] + e(bx * 1.1 + hRx), p.handR[1] + e(by * 0.9 + hRy)],
     footL: [p.footL[0] + e(fLx), p.footL[1] + e(fLy)],
     footR: [p.footR[0] + e(fRx), p.footR[1] + e(fRy)],
     lean: p.lean + e(tilt),
