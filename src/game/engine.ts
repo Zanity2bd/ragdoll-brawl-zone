@@ -4325,6 +4325,7 @@ export class GameEngine {
       t.wobble.staggerT = Math.max(t.wobble.staggerT, 0.18);
     }
     applyImpulse(t.wobble, dir, -0.5, isFinisher ? 1.0 : 0.45);
+    applyHitReaction(t.rs, dir as 1 | -1, isFinisher ? -0.5 : -0.2, isFinisher ? 1.0 : 0.4, 0, isFinisher ? (HR_FINISHER | HR_TELEGRAPHED) : 0);
     this.shake = Math.max(this.shake, isFinisher ? 22 : 9);
     this.hitstopT = Math.max(this.hitstopT, isFinisher ? 0.18 : 0.05);
     this.impactFlash = isFinisher ? 1 : 0.4;
