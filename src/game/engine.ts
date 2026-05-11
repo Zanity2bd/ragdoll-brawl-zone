@@ -3012,6 +3012,7 @@ export class GameEngine {
             if (target.ragdollT < (f.comboKind === "kick" ? 0.28 : 0.18)) {
               target.ragdollT = f.comboKind === "kick" ? 0.28 : 0.18;
             }
+            applyHitReaction(target.rs, f.facing, f.comboKind === "knee" ? -0.4 : -0.2, f.comboKind === "kick" ? 0.5 : 0.32, 0, 0);
             // Edge-biased FX placement — push outward along strike dir + slight lift
             // so the hit reads at the contact point, not over the victim's torso.
             const fx = f.facing as 1 | -1;
