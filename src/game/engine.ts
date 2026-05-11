@@ -3647,6 +3647,8 @@ export class GameEngine {
     // Soft-body wobble (secondary motion). Skipped during full ragdoll/downed/getup
     // because those branches return early above and own the body completely.
     stepWobble(f.wobble, dt, f.vx, f.vy, f.onGround, f.flying, this.lowPower, f.skin.id === "spiderman");
+    // AAA hit-reaction state machine — additive cinematic layer.
+    stepRagdoll(f.rs, dt, { airborne: !f.onGround, lowPower: this.lowPower });
 
     // Maintain afterimage trail for fast skins (and during Bamf strikes for depth motion-blur)
     const fast = f.skin.id === "flash" || f.skin.id === "atrain";
