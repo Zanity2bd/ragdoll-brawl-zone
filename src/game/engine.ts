@@ -178,6 +178,8 @@ interface Fighter {
   punchBufferT: number;
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
+  // AAA hit-reaction system (additive cinematic layer; gameplay-safe)
+  rs: RagdollState;
   // super-dash
   dash: null | {
     t: number;
