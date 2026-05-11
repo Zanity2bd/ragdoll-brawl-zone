@@ -405,27 +405,30 @@ function attackEnvelope(
   };
 
   if (kind === "kick") {
+    // Rotation values are larger here than for hip-pivoted attacks because
+    // the renderer pivots kicks around the planted foot — a small angle at
+    // the foot translates to a meaningful hip arc, which sells weight.
     if (u < 0.30) {
       phase = smooth(u / 0.30);
-      tx = -facing * 4 * phase;            // weight shifts back onto stance leg
-      ty = -1.5 * phase;                   // tiny rise on chamber
-      rot = -facing * 0.04 * phase;        // shoulder dips back
+      tx = -facing * 3 * phase;            // weight shifts back onto stance leg
+      ty = -2 * phase;                     // body drops slightly to chamber
+      rot = -facing * 0.10 * phase;        // lean BACK over planted foot
     } else if (u < 0.45) {
       phase = smooth((u - 0.30) / 0.15);
-      tx = -facing * 4 * (1 - phase) + facing * 8 * phase;
-      ty = -1.5 * (1 - phase) + 1.5 * phase;
-      rot = -facing * 0.04 * (1 - phase) + facing * 0.05 * phase;
+      tx = -facing * 3 * (1 - phase) + facing * 4 * phase;
+      ty = -2 * (1 - phase) + 1 * phase;
+      rot = -facing * 0.10 * (1 - phase) + facing * 0.14 * phase;  // lean FORWARD into hit
       sx = 1 + 0.04 * phase;               // forward stretch on snap
     } else if (u < 0.65) {
-      tx = facing * 8;
-      ty = 1.5;
-      rot = facing * 0.05;
+      tx = facing * 4;
+      ty = 1;
+      rot = facing * 0.14;
       sx = 1.04;
     } else {
       phase = smooth((u - 0.65) / 0.35);
-      tx = facing * 8 * (1 - phase);
-      ty = 1.5 * (1 - phase);
-      rot = facing * 0.05 * (1 - phase);
+      tx = facing * 4 * (1 - phase);
+      ty = 1 * (1 - phase);
+      rot = facing * 0.14 * (1 - phase);
       sx = 1 + 0.04 * (1 - phase);
     }
   } else if (kind === "knee") {
