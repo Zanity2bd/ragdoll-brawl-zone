@@ -425,66 +425,122 @@ export function stepRagdoll(
 
 /**
  * Compose ragdoll spring offsets onto the rendered pose.
- * Visual-only. Respects poseHoldT (lerp pause).
+ * Visual-only. Respects poseHoldT (lerp pause), incomingImpactT (anticipatory
+ * brace), recovery breathing, motion clarity bias, and time-scale (slow-mo
+ * amplitude compression). Final pass applies an epsilon filter so micro-jitter
+ * never reaches the renderer.
+ *
+ * @param timeScale  current sim time scale (1=normal, <1 slow-mo). Optional.
  */
-export function applyRagdollPose(p: Pose, rs: RagdollState, lowPower: boolean): Pose {
-  if (rs.state === "none" && Math.abs(rs.torsoAng) < 0.005 && Math.abs(rs.bodyOffX) < 0.05
-      && Math.abs(rs.headLagAng) < 0.005) {
-    return p;
-  }
-  // poseHoldT scales additive write strength up briefly (visual brace), then
-  // releases. This communicates impact without a real freeze.
+export function applyRagdollPose(
+  p: Pose,
+  rs: RagdollState,
+  lowPower: boolean,
+  timeScale: number = 1,
+): Pose {
+  // Anti-jitter epsilon — drop sub-perceptible writes entirely when fully calm.
+  const calm = rs.state === "none"
+    && Math.abs(rs.torsoAng) < 0.005
+    && Math.abs(rs.bodyOffX) < 0.05
+    && Math.abs(rs.bodyOffY) < 0.05
+    && Math.abs(rs.headLagAng) < 0.005
+    && rs.incomingImpactT <= 0
+    && rs.muscleTension > 0.9;
+  if (calm) return p;
+
+  // Slow-mo amplitude compression: when the world slows down, springs look
+  // exaggerated unless we damp visible amplitude. Keep at least 60% so motion
+  // never disappears entirely.
+  const slowMoScale = Math.max(0.6, Math.min(1, 0.6 + 0.4 * timeScale));
+
+  // poseHoldT briefly boosts additive write strength (visual brace).
   const holdScale = rs.poseHoldT > 0 ? 1.15 : 1;
 
-  const bx = rs.bodyOffX * holdScale;
-  const by = rs.bodyOffY * holdScale;
-  const tilt = rs.torsoAng * holdScale;
-  const hipTilt = rs.hipAng * holdScale;
-  const headExtra = rs.headLagAng * holdScale * 4; // ~px head sway
-  const L = rs.limb;
-  // Limb scale weakens in lowPower.
-  const ls = lowPower ? 0.5 : 1;
+  // Anticipatory impact compression: 1–2 frames inward brace before hit lands.
+  // Compresses torso toward incoming direction; releases on impact.
+  let antiX = 0, antiY = 0, antiTilt = 0;
+  if (rs.incomingImpactT > 0 && rs.incomingImpactStrength > 0) {
+    const a = Math.min(1, rs.incomingImpactT / 0.05) * rs.incomingImpactStrength;
+    // Brace inward (opposite expected travel) → body coils.
+    antiX = -rs.incomingImpactDir * 2.4 * a;
+    antiY = -1.4 * a;
+    antiTilt = -rs.incomingImpactDir * 0.05 * a;
+  }
 
-  // Map limb segments: 0=armL upper, 1=armL hand, 2=armR upper, 3=armR hand,
-  // 4=legL upper, 5=legL foot, 6=legR upper, 7=legR foot. Use offsets only.
-  const aLx = L[0 * LIMB_STRIDE + 2] * ls, aLy = L[0 * LIMB_STRIDE + 3] * ls;
-  const hLx = L[1 * LIMB_STRIDE + 2] * ls, hLy = L[1 * LIMB_STRIDE + 3] * ls;
-  const aRx = L[2 * LIMB_STRIDE + 2] * ls, aRy = L[2 * LIMB_STRIDE + 3] * ls;
-  const hRx = L[3 * LIMB_STRIDE + 2] * ls, hRy = L[3 * LIMB_STRIDE + 3] * ls;
+  // Recovery breathing: gentle chest rise during low-tension settle (KO).
+  // Scales to 0 as tension recovers.
+  let breathY = 0;
+  const breathAmt = Math.max(0, 1 - rs.muscleTension) * (1 - Math.min(1, rs.recoveryT));
+  if (breathAmt > 0.05) {
+    breathY = Math.sin(rs.breathPhase * 2.4) * 0.8 * breathAmt;
+  }
+
+  const bx = (rs.bodyOffX + antiX) * holdScale * slowMoScale;
+  const by = (rs.bodyOffY + antiY + breathY) * holdScale * slowMoScale;
+  const tilt = (rs.torsoAng + antiTilt) * holdScale * slowMoScale;
+  const hipTilt = rs.hipAng * holdScale * slowMoScale;
+  const headExtra = rs.headLagAng * holdScale * slowMoScale * 4;
+
+  // Spine flex / shoulder-hip counterbalance: when torso and hip diverge, add
+  // a small shoulder-roll correction so silhouette reads as one fluid spine
+  // rather than two stiff blocks.
+  const spineFlex = (tilt - hipTilt) * 0.5;
+
+  // Motion clarity bias: amplify the limb leading the motion direction,
+  // damp the trailing one. Keeps silhouette readable in fast multi-hits.
+  const lead = bx >= 0 ? 1 : -1;
+  const leadBoost = 1.15;
+  const trailDamp = 0.85;
+  const armLBoost = lead < 0 ? leadBoost : trailDamp;
+  const armRBoost = lead > 0 ? leadBoost : trailDamp;
+
+  const L = rs.limb;
+  const ls = lowPower ? 0.5 : 1;
+  const lsArmL = ls * armLBoost;
+  const lsArmR = ls * armRBoost;
+
+  const aLx = L[0 * LIMB_STRIDE + 2] * lsArmL, aLy = L[0 * LIMB_STRIDE + 3] * lsArmL;
+  const hLx = L[1 * LIMB_STRIDE + 2] * lsArmL, hLy = L[1 * LIMB_STRIDE + 3] * lsArmL;
+  const aRx = L[2 * LIMB_STRIDE + 2] * lsArmR, aRy = L[2 * LIMB_STRIDE + 3] * lsArmR;
+  const hRx = L[3 * LIMB_STRIDE + 2] * lsArmR, hRy = L[3 * LIMB_STRIDE + 3] * lsArmR;
   const lLx = L[4 * LIMB_STRIDE + 2] * ls, lLy = L[4 * LIMB_STRIDE + 3] * ls;
   const fLx = L[5 * LIMB_STRIDE + 2] * ls, fLy = L[5 * LIMB_STRIDE + 3] * ls;
   const lRx = L[6 * LIMB_STRIDE + 2] * ls, lRy = L[6 * LIMB_STRIDE + 3] * ls;
   const fRx = L[7 * LIMB_STRIDE + 2] * ls, fRy = L[7 * LIMB_STRIDE + 3] * ls;
 
+  // Final epsilon filter on accumulated tiny offsets (anti-jitter polish).
+  const e = (v: number) => (Math.abs(v) < 0.06 ? 0 : v);
+
   return {
-    headOffsetY: p.headOffsetY + by * 0.6 + headExtra,
-    shoulderY: p.shoulderY + by * 0.8,
-    hipY: p.hipY + by * 0.4,
+    headOffsetY: p.headOffsetY + e(by * 0.6 + headExtra),
+    shoulderY: p.shoulderY + e(by * 0.8),
+    hipY: p.hipY + e(by * 0.4),
     legL: [
-      p.legL[0] + bx * 0.4, p.legL[1] + by * 0.4,
-      p.legL[2] + bx * 0.4 + lLx, p.legL[3] + by * 0.4 + lLy,
-      p.legL[4] + fLx, p.legL[5] + fLy,
+      p.legL[0] + e(bx * 0.4), p.legL[1] + e(by * 0.4),
+      p.legL[2] + e(bx * 0.4 + lLx), p.legL[3] + e(by * 0.4 + lLy),
+      p.legL[4] + e(fLx), p.legL[5] + e(fLy),
     ],
     legR: [
-      p.legR[0] + bx * 0.4, p.legR[1] + by * 0.4,
-      p.legR[2] + bx * 0.4 + lRx, p.legR[3] + by * 0.4 + lRy,
-      p.legR[4] + fRx, p.legR[5] + fRy,
+      p.legR[0] + e(bx * 0.4), p.legR[1] + e(by * 0.4),
+      p.legR[2] + e(bx * 0.4 + lRx), p.legR[3] + e(by * 0.4 + lRy),
+      p.legR[4] + e(fRx), p.legR[5] + e(fRy),
     ],
     armL: [
-      p.armL[0] + bx * 0.8, p.armL[1] + by * 0.8,
-      p.armL[2] + bx * 0.8 + aLx * 0.6, p.armL[3] + by * 0.8 + aLy * 0.6,
-      p.armL[4] + bx * 0.8 + hLx, p.armL[5] + by * 0.8 + hLy,
+      p.armL[0] + e(bx * 0.8), p.armL[1] + e(by * 0.8),
+      p.armL[2] + e(bx * 0.8 + aLx * 0.6), p.armL[3] + e(by * 0.8 + aLy * 0.6),
+      p.armL[4] + e(bx * 0.8 + hLx), p.armL[5] + e(by * 0.8 + hLy),
     ],
     armR: [
-      p.armR[0] + bx * 0.8, p.armR[1] + by * 0.8,
-      p.armR[2] + bx * 0.8 + aRx * 0.6, p.armR[3] + by * 0.8 + aRy * 0.6,
-      p.armR[4] + bx * 0.8 + hRx, p.armR[5] + by * 0.8 + hRy,
+      p.armR[0] + e(bx * 0.8), p.armR[1] + e(by * 0.8),
+      p.armR[2] + e(bx * 0.8 + aRx * 0.6), p.armR[3] + e(by * 0.8 + aRy * 0.6),
+      p.armR[4] + e(bx * 0.8 + hRx), p.armR[5] + e(by * 0.8 + hRy),
     ],
-    handL: [p.handL[0] + bx * 0.8 + hLx, p.handL[1] + by * 0.8 + hLy],
-    handR: [p.handR[0] + bx * 0.8 + hRx, p.handR[1] + by * 0.8 + hRy],
-    footL: [p.footL[0] + fLx, p.footL[1] + fLy],
-    footR: [p.footR[0] + fRx, p.footR[1] + fRy],
-    lean: p.lean + tilt,
-    shoulderRoll: p.shoulderRoll + (tilt - hipTilt) * 0.5,
+    handL: [p.handL[0] + e(bx * 0.8 + hLx), p.handL[1] + e(by * 0.8 + hLy)],
+    handR: [p.handR[0] + e(bx * 0.8 + hRx), p.handR[1] + e(by * 0.8 + hRy)],
+    footL: [p.footL[0] + e(fLx), p.footL[1] + e(fLy)],
+    footR: [p.footR[0] + e(fRx), p.footR[1] + e(fRy)],
+    lean: p.lean + e(tilt),
+    shoulderRoll: p.shoulderRoll + e(spineFlex),
   };
 }
+
