@@ -623,17 +623,11 @@ export class GameEngine {
   private impactFlash = 0;
 
   private shake = 0;
-  // AoS5-style floating hit labels ("PUNCH!", "KICK!", "x3 COMBO!").
-  // Pure presentation; spawns next to impact, drifts up + fades.
-  private hitLabels: Array<{
-    x: number; y: number; text: string;
-    t: number; life: number;
-    vy: number; color: string; scale: number;
-    italic: boolean;
-  }> = [];
-  // Per-attacker combo tracking: counts consecutive landed hits within window.
-  private comboCount: Record<PlayerId, number> = { p1: 0, p2: 0 };
-  private comboCountT: Record<PlayerId, number> = { p1: 0, p2: 0 };
+  // Finisher cinematic — vignette + frame-step + extra FX during a KO blow.
+  private finisherT = 0;
+  private finisherDur = 0;
+  private finisherActive = false;
+  private finisherFrameSkipFlip = false;
   // Directional shake: punches the camera *toward* the strike direction
   // before settling, on top of the legacy omnidirectional random shake.
   private shakeDirX = 0;
