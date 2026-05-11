@@ -329,15 +329,16 @@ const JUMP_BUFFER_T = 0.11;        // press buffer
 const MAX_AIR_JUMPS = 1;            // double-jump for non-flyers
 const FIGHTER_H = 90;
 // Universal basic punch — sprite-driven (frames 11–14 + recovery 15).
-// Speed up frames 12–13 (impact window) for snap.
-const PUNCH_F11 = 0.05;  // windup    -> frame 10
-const PUNCH_F12 = 0.03;  // impact 1  -> frame 11 (hit active)
-const PUNCH_F13 = 0.03;  // impact 2  -> frame 12 (hit active)
-const PUNCH_F14 = 0.06;  // followthr -> frame 13
+// AoS5-style readability: snap into the impact pose and HOLD it for ~5 frames
+// so the player can clearly see what strike is being thrown.
+const PUNCH_F11 = 0.045; // windup    -> frame 10  (snappy chamber)
+const PUNCH_F12 = 0.05;  // impact 1  -> frame 11  (hit active, held)
+const PUNCH_F13 = 0.05;  // impact 2  -> frame 12  (hit active, held)
+const PUNCH_F14 = 0.07;  // followthr -> frame 13  (visible recoil)
 const PUNCH_DUR = PUNCH_F11 + PUNCH_F12 + PUNCH_F13 + PUNCH_F14;
 const PUNCH_RECOVERY = 0.05;  // frame 14, no hit
-const PUNCH_CD = 0.32;
-const PUNCH_RANGE = 60;
+const PUNCH_CD = 0.30;
+const PUNCH_RANGE = 64;
 const PUNCH_DMG = 1;
 const FIGHTER_W = 30;
 
