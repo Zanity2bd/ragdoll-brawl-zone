@@ -3039,6 +3039,7 @@ export class GameEngine {
             this.hitstopT = Math.max(this.hitstopT, 0.075);
             this.impactFlash = Math.max(this.impactFlash, 0.32);
             Sfx.play("punch", 0.9);
+            this.spawnHitLabel(f.id, "PUNCH", ix, iy - 6, f.facing as 1 | -1);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
