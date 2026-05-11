@@ -2053,6 +2053,7 @@ export class GameEngine {
             tgt.ragdollT = 0.5;
             tgt.ragdollEnergy = 1;
             tgt.ragdollAV = Math.sign(lo.vx || 1) * 5;
+            applyHitReaction(tgt.rs, Math.sign(lo.vx || 1), -0.5, 0.7, 0, HR_LAUNCHER);
           }
           this.shake = Math.max(this.shake, 32);
           this.impactFlash = Math.max(this.impactFlash, 1.0);
