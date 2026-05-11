@@ -3730,7 +3730,15 @@ export class GameEngine {
         case "crowbar":
         case "repulsor": {
           // Butcher's crowbar is a thrown projectile (handled in startMelee/projectiles)
-          if (m.kind === "crowbar" && f.skin.id === "butcher") break;
+          if (m.kind === "crowbar" && f.skin.id === "butcher") {
+            // Throw on first active frame (end of windup) — gives the player
+            // the full windup window to aim along the dotted trajectory.
+            if (inActive && !f.crowbarThrown && f.meleeHitMask.size === 0) {
+              this.throwCrowbar(f, m);
+              f.meleeHitMask.add(1);
+            }
+            break;
+          }
           if (inActive && f.meleeHitMask.size === 0) {
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
