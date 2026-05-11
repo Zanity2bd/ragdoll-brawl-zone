@@ -6580,6 +6580,17 @@ export class GameEngine {
   private drawFighterAt(f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
     const ctx = this.ctx;
     const skin = f.skin;
+    // ---- Pelvis-rooted transform integration ----
+    // Bake ragdoll spring body offset into the root coordinates so EVERY
+    // downstream visual layer (sprite body, procedural rig, cape, emblem,
+    // shadow, FX anchors) inherits it as a single root translation. Without
+    // this, the sprite path renders at raw (x,y) while the procedural rig
+    // applies springs only to limb offsets — causing visible skin/skeleton
+    // drift on recoil, kicks, and ragdoll spring-back.
+    if (!ghost && f.rs) {
+      x += f.rs.bodyOffX;
+      y += f.rs.bodyOffY;
+    }
 
     // ---- Sprite-sheet walk override ----
     // Replace the procedural body render with the imported walk sheet
