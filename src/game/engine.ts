@@ -2581,6 +2581,7 @@ export class GameEngine {
         target.ragdollEnergy = 1;
         target.ragdollAV = dir * 6;
         target.ragdollImmuneT = 1.5;
+        applyHitReaction(target.rs, dir, -0.55, 1.0, 0, HR_TELEGRAPHED | HR_FINISHER);
         this.shake = Math.max(this.shake, 36);
         this.hitstopT = Math.max(this.hitstopT, 0.18);
         this.slowmoT = Math.max(this.slowmoT, 0.45);
