@@ -1648,6 +1648,8 @@ export class GameEngine {
   isTeleTargeting() { return this.teleTargeting; }
 
   setLowPower(v: boolean) { this.lowPower = v; }
+  /** Toggle pelvis/anchor debug overlay (gated by ?rig=1). */
+  setDebugRig(v: boolean) { this.debugRig = v; }
 
   private update(dt: number) {
     this.elapsed += dt;
