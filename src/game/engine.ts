@@ -2635,12 +2635,21 @@ export class GameEngine {
       f.capeLift += (liftTarget - f.capeLift) * Math.min(1, dt * liftRate);
       if (impact > 0) f.capeLift = Math.min(1, f.capeLift + 0.35 * impact);
 
-      // ---- Body translation lag (impacts only) ----
+      // ---- Body translation lag (impacts + acceleration inertia) ----
       // Heavier mass: lower k, more damping → small but slow recoil shove.
       const bk = 55, bc = 9;
       const ba = (0 - f.bodyLagX) * bk - f.bodyLagV * bc;
       f.bodyLagV += ba * dt;
       if (impact > 0) f.bodyLagV += -f.facing * 130 * impact;
+      // Acceleration inertia: torso lags opposite to instantaneous accel so
+      // sprint starts/stops/direction changes have visible body weight.
+      // Read accel from lastVx snapshot (updated at the end of the per-fighter
+      // tick loop above, so it equals vx now — fall back to a local prev).
+      if (f.onGround && !f.flying) {
+        const ax = (f.vx - (f as Fighter & { _prevAxVx?: number })._prevAxVx!) || 0;
+        if (Number.isFinite(ax)) f.bodyLagV -= ax * 0.45;
+      }
+      (f as Fighter & { _prevAxVx?: number })._prevAxVx = f.vx;
       f.bodyLagX += f.bodyLagV * dt;
       f.bodyLagX = Math.max(-12, Math.min(12, f.bodyLagX));
 
