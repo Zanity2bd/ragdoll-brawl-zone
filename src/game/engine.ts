@@ -5815,7 +5815,9 @@ export class GameEngine {
         !f.meleeKind ||
         f.meleeKind !== "crowbar" ||
         f.crowbarThrown ||
-        f.meleeT >= f.move.windup
+        f.meleeT >= f.move.windup ||
+        // Hide the player-facing aim reticle when the CPU is throwing.
+        (this.cpuEnabled && f.id === "p2")
       ) continue;
       const l = this.crowbarLaunch(f);
       // Eased reveal: trajectory grows in over the first half of the windup.
