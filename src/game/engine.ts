@@ -7,6 +7,7 @@ import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
 import { Sfx } from "./sfx";
 import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, type WobbleState } from "./wobble";
+import { createRagdoll, stepRagdoll, applyHitReaction, applyRagdollPose, resetRagdoll, HR_TELEGRAPHED, HR_LAUNCHER, HR_FINISHER, HR_AIRBORNE, type RagdollState } from "./ragdoll";
 import { CpuController, type Difficulty } from "./ai";
 import {
   loadWalkSheet, isWalkSheetReady, drawWalkFrame,
@@ -177,6 +178,8 @@ interface Fighter {
   punchBufferT: number;
   // soft-body wobble + partial ragdoll (stagger)
   wobble: WobbleState;
+  // AAA hit-reaction system (additive cinematic layer; gameplay-safe)
+  rs: RagdollState;
   // super-dash
   dash: null | {
     t: number;
@@ -1035,6 +1038,7 @@ export class GameEngine {
       hitReactKind: null, hitReactT: 0, hitReactDur: 0, hitReactDir: 1, hitReactMag: 0,
       cancelOK: false, meleeBufferT: 0, punchBufferT: 0,
       wobble: createWobble(),
+      rs: createRagdoll(),
       dash: null,
       frenzy: null,
       frenzyCd: 0,
@@ -1877,6 +1881,7 @@ export class GameEngine {
           target.ragdollEnergy = 1;
           target.ragdollAV = dir * 7;
           target.ragdollImmuneT = 1.0;
+          applyHitReaction(target.rs, dir, -0.6, 0.95, 0, HR_TELEGRAPHED | HR_LAUNCHER);
           this.hitstopT = Math.max(this.hitstopT, 0.22);
           this.slowmoT = Math.max(this.slowmoT, 0.35);
           this.shake = Math.max(this.shake, 24);
@@ -1921,6 +1926,7 @@ export class GameEngine {
           target.wobble.staggerDir = dir;
           target.wobble.staggerMag = 0.6;
           applyImpulse(target.wobble, dir, -0.35, 0.7);
+          applyHitReaction(target.rs, dir, -0.3, 0.35, 0, 0);
         }
         this.burst(pr.x, pr.y, pr.glow, 18);
         Sfx.play(pr.kind === "batarang" ? "punch" : (pr.kind === "web" ? "thud" : "punch"), 0.7);
@@ -2047,6 +2053,7 @@ export class GameEngine {
             tgt.ragdollT = 0.5;
             tgt.ragdollEnergy = 1;
             tgt.ragdollAV = Math.sign(lo.vx || 1) * 5;
+            applyHitReaction(tgt.rs, Math.sign(lo.vx || 1), -0.5, 0.7, 0, HR_LAUNCHER);
           }
           this.shake = Math.max(this.shake, 32);
           this.impactFlash = Math.max(this.impactFlash, 1.0);
@@ -2446,6 +2453,7 @@ export class GameEngine {
               tgt.ragdollT = 0.6;
               tgt.ragdollEnergy = 1;
               tgt.ragdollAV = dir * 4;
+              applyHitReaction(tgt.rs, dir, -0.45, 0.6 + 0.3 * fall, 0, HR_LAUNCHER);
             }
             if (tgt.hp <= 0 && this.phase === "fight") { this.triggerKo(mb.owner); }
           }
@@ -2573,6 +2581,7 @@ export class GameEngine {
         target.ragdollEnergy = 1;
         target.ragdollAV = dir * 6;
         target.ragdollImmuneT = 1.5;
+        applyHitReaction(target.rs, dir, -0.55, 1.0, 0, HR_TELEGRAPHED | HR_FINISHER);
         this.shake = Math.max(this.shake, 36);
         this.hitstopT = Math.max(this.hitstopT, 0.18);
         this.slowmoT = Math.max(this.slowmoT, 0.45);
@@ -2851,6 +2860,7 @@ export class GameEngine {
         f.ragdollAng = 0; f.ragdollAV = 0; f.ragdollEnergy = 0;
         f.headLag = f.armLagL = f.armLagR = f.legLag = 0;
         resetWobble(f.wobble);
+        resetRagdoll(f.rs);
       }
       return;
     }
@@ -3003,6 +3013,7 @@ export class GameEngine {
             if (target.ragdollT < (f.comboKind === "kick" ? 0.28 : 0.18)) {
               target.ragdollT = f.comboKind === "kick" ? 0.28 : 0.18;
             }
+            applyHitReaction(target.rs, f.facing, f.comboKind === "knee" ? -0.4 : -0.2, f.comboKind === "kick" ? 0.5 : 0.32, 0, 0);
             // Edge-biased FX placement — push outward along strike dir + slight lift
             // so the hit reads at the contact point, not over the victim's torso.
             const fx = f.facing as 1 | -1;
@@ -3637,6 +3648,8 @@ export class GameEngine {
     // Soft-body wobble (secondary motion). Skipped during full ragdoll/downed/getup
     // because those branches return early above and own the body completely.
     stepWobble(f.wobble, dt, f.vx, f.vy, f.onGround, f.flying, this.lowPower, f.skin.id === "spiderman");
+    // AAA hit-reaction state machine — additive cinematic layer.
+    stepRagdoll(f.rs, dt, { airborne: !f.onGround, lowPower: this.lowPower });
 
     // Maintain afterimage trail for fast skins (and during Bamf strikes for depth motion-blur)
     const fast = f.skin.id === "flash" || f.skin.id === "atrain";
@@ -3983,6 +3996,7 @@ export class GameEngine {
                 target.ragdollEnergy = 1;
                 target.ragdollAV = dir * 5;
                 target.ragdollImmuneT = 1.0;
+                applyHitReaction(target.rs, dir, 0.5, 0.85, -1, HR_AIRBORNE | HR_LAUNCHER);
                 if (target.iframeT <= 0) {
                   const airDmg = Math.max(6, Math.round(m.damage * 0.35));
                   target.hp = Math.max(0, target.hp - airDmg);
@@ -4314,6 +4328,7 @@ export class GameEngine {
       t.wobble.staggerT = Math.max(t.wobble.staggerT, 0.18);
     }
     applyImpulse(t.wobble, dir, -0.5, isFinisher ? 1.0 : 0.45);
+    applyHitReaction(t.rs, dir as 1 | -1, isFinisher ? -0.5 : -0.2, isFinisher ? 1.0 : 0.4, 0, isFinisher ? (HR_FINISHER | HR_TELEGRAPHED) : 0);
     this.shake = Math.max(this.shake, isFinisher ? 22 : 9);
     this.hitstopT = Math.max(this.hitstopT, isFinisher ? 0.18 : 0.05);
     this.impactFlash = isFinisher ? 1 : 0.4;
@@ -4432,6 +4447,14 @@ export class GameEngine {
       target.wobble.staggerMag = mag;
       applyImpulse(target.wobble, f.facing, -0.45, mag);
     }
+    // AAA hit-reaction layer (additive, gameplay-safe)
+    {
+      const dmgN = Math.max(0.15, Math.min(1, m.damage / 22));
+      const isLauncher = m.ragdollT > 0 || m.knockbackY < -240;
+      const flags = (isLauncher ? HR_LAUNCHER : 0) | (wasAirborne ? HR_AIRBORNE : 0)
+        | (m.damage >= 14 ? HR_TELEGRAPHED : 0);
+      applyHitReaction(target.rs, f.facing, isLauncher ? -0.45 : -0.2, dmgN, 0, flags);
+    }
     // Hit-reaction profile: pick light/heavy/juggle based on context. Ragdoll
     // hits get no overlay (ragdoll renderer owns the body during that window).
     if (target.ragdollT <= 0) {
@@ -4486,6 +4509,7 @@ export class GameEngine {
     t.ragdollAng = 0;
     t.ragdollAV = dir * 6 + (Math.random() - 0.5) * 3;
     t.ragdollEnergy = 1;
+    applyHitReaction(t.rs, dir as 1 | -1, -0.5, 0.95, 0, HR_TELEGRAPHED | HR_LAUNCHER);
     this.shake = Math.max(this.shake, SUPER_SHAKE);
     this.hitstopT = SUPER_HITSTOP;
     this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
@@ -5390,7 +5414,8 @@ export class GameEngine {
       retreating,
       lowPower: this.lowPower,
     });
-    return applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying);
+    const wob = applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying);
+    return applyRagdollPose(wob, f.rs, this.lowPower);
   }
 
   /**

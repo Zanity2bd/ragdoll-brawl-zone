@@ -1,257 +1,206 @@
-# Facing + Animation System Overhaul — AAA Polish Pass\n\nRender/animation-only. No gameplay, hitbox, balance, AI, or combat-timing changes. Mobile-safe (Canvas2D, allocation-free, deterministic). Honors `lowPower`.\n\n**Files**\n- `src/game/engine.ts` — facing intent controller, spring/foot-plant/jump-phase fighter state, state hierarchy gate, low-FPS substep guard.\n- `src/game/animation.ts` — `springStep` helper, retreat branch, jump-phase blends, IK leg solve, arc/elbow recompute, silhouette clamps, yaw-squash hook.\n- `src/components/game/GameCanvas.tsx` — apply `facingSquash` horizontal scale during turn render only.\n\nNo new assets.\n\n---\n\n## 1. Intelligent Facing Controller (`engine.ts`)\n\nReplace the direct flip at lines 1693–1697 with an intent system.\n\n**New per-fighter state** (init in spawn + round reset):\n`facingTarget`, `facingVisual`, `facingVelocity`, `facingLockT`, `facingPersistT`, `facingReleaseT`, `lastStableFacing`, `facingSquash` (0..1, render-only).\n\n**Per-tick logic** (when `canFlip` allows):\n1. `dx = opp.x - self.x`; `desired = dx >= 0 ? 1 : -1`.\n2. **Deadzone**: skip if `|dx| < 28`.\n3. **Persistence threshold** (seconds opponent must remain on opposite side):\n   - grounded `0.12`, airborne `0.20`, retreating `0.28`, predicted dash crossover `0.32`.\n   - Increment `facingPersistT` while `desired !== facing`, reset on flip.\n4. **Retreat guard**: `retreating = sign(vx) === -facing && |vx| > 80`. Skip flip while retreating AND `|dx| < 90`.\n5. **Attack lock**: on attack/combo/jump-startup, `facingLockT = max(facingLockT, 0.18..0.25)`. While `>0`, no changes.\n6. **Predictive crossover**: if `|opp.vx| > 380` and `(opp.x + opp.vx*0.05)` crosses self.x, hold for `0.32s`.\n7. On commit: `facingTarget = desired`, `facingPersistT = 0`, `lastStableFacing = facingTarget`, set `facingSquash = 1` (decays).\n\n**Visual interp** — replace existing `facingT` lerp with critically-damped spring (k=140, d≈2√k):\n`\nfacingVelocity += ((facingTarget - facingVisual)*k - facingVelocity*d) * dt\nfacingVisual   += facingVelocity * dt\n`\n`facing` (gameplay 1|-1) is updated alongside `facingTarget` so combat code is unchanged. `facingT` (existing render reader) is replaced by `facingVisual`.\n\n**Yaw squash**: while `|facingVisual - facingTarget| > 0.05`, write a 0..1 amount into `facingSquash`. Decays with `facingSquash -= dt * 4`.\n\n## 2. Locomotion Layering (`animation.ts`)\n\nIn the grounded walk branch, add on top of the baked walk-cycle sample:\n- **Torso counter-rotation** opposite hipSway (`shoulderRoll -= hipSwayX * 0.04`).\n- **Momentum lean**: blend current lean toward `sign(ax) * clamp(|vx|/420, 0, 0.18)` where `ax` is delta-vx (engine writes per-tick into a fighter `lastVx`).\n- **Stride extension**: scale baked foot X amplitude by `1 + 0.15 * (|vx|/maxRunVx)`.\n- **Arm drag**: handled by springs in §4 — targets stay baked; springs lag.\n- **Plant stabilization**: handled by §3.\n\n## 3. Strict Foot Planting + IK Leg Solve\n\n**Engine state** per fighter: `plantL`, `plantR` each `{ active: bool, worldX: number, worldY: number, holdT: number, releaseStrideT: number }`.\n\n**Plant rule**: when the baked cycle's foot Y reaches ground contact (cycle-phase based, already implicit in current `legPose`), set `active=true`, snapshot world position. Release when:\n- swing phase begins (cycle phase advances past contact arc), OR\n- horizontal stride from plant exceeds `strideMax` (≈ 18px), OR\n- jump/airborne/attack/ragdoll state activates.\n\n**Drift clamp**: while planted, force foot world X within `±3px` of `worldX`.\n\n**IK solve** in `animation.ts` (new `solveLeg(hip, foot, segLen, bend) → knee`):\n- Two-link analytic IK using law of cosines.\n- `segLen` = upper = lower = `(H - hipY) * 0.55` (matches current rig proportions).\n- Knee bend direction = `facing` (forward bend).\n- Clamp foot distance to `< 2*segLen - 1` to avoid singularity.\n\nReplace the baked foot/knee writes with: foot = (planted ? plantPos : baked); knee = `solveLeg(...)`. Hip stays baked.\n\n## 4. Spring-Damped Secondary Motion\n\n**Per-fighter spring states** (engine-owned, allocation-free, all `{ pos, vel }`):\n- `sLean`, `sShoulderRoll`, `sHead` (scalars).\n- `sHandL`, `sHandR`, `sFootL`, `sFootR`, `sElbowL`, `sElbowR`, `sKneeL`, `sKneeR` (2D).\n\n**Helper** in `animation.ts`:\n`\nspringStep(s, target, dt, k, d) {\n  s.vel += ((target - s.pos) * k - s.vel * d) * dt\n  s.pos += s.vel * dt\n}\n`\n\n**Tuning** (critically damped, d ≈ 2√k):\n- Hands k=180, d=27 (loose). Airborne d=14 (float).\n- Feet k=260, d=32 (tight). Disabled while planted.\n- Lean / shoulder roll k=120, d=22.\n- Head k=200, d=28.\n\n**Apply** as a post-process on the `Pose` returned by `computeWalkPose`, before the renderer reads it. Engine threads spring state in via a new optional `springs` arg or applies post-call.\n\n**Safety clamps** (after spring step, before write-back):\n- hand offset from baked target ≤ 10px\n- foot offset ≤ 8px\n- lean magnitude ≤ 0.12 rad\n- head offset ≤ 6px\n- elbow/knee offset derived from arc recompute (see §5), not springed independently when limits are hit.\n\n**Low-FPS substep**: in engine, if `dt > 0.05`, run spring updates in `ceil(dt/0.025)` fixed substeps of `≤0.025s`. Pose sampling stays single-shot.\n\n## 5. Animation Arc System\n\nAfter hand/foot springs settle, recompute elbow/knee:\n`\nmid = (shoulder + hand) / 2\nperp = unit(perpendicular(hand - shoulder))\ncurve = clamp(|handVel| * 0.012, 0, 6)  // px\nelbow = mid + perp * curve * facing\n`\nSame shape for knees with `kneeBendSign = facing` for legs (forward bend).\n\nReplaces any linear interpolation between joints. Velocity-derived `curve` gives natural arc intensity scaling.\n\n## 6. Retreat Branch (`animation.ts`)\n\nDetect `retreating = sign(vx) === -facing && |vx| > 60`. Apply **before** spring post-process:\n- arm swing amplitude × 1.25\n- `shoulderRoll *= 1.4`, `hipSwayX *= 1.3`\n- `lean -= facing * 0.05 * amp` (backward weight)\n- raise trailing-arm hand Y by 2px so it doesn't clip\n- head only: bias `headOffsetX` (new field) toward `facing * 1.5px` so the glance reads\n- locomotion uses `sign(vx)`, not `facing`, for foot phase direction → no mirrored walk\n\n## 7. Jump Phase System\n\nEngine adds `jumpPhase: 'none'|'anticipation'|'launch'|'ascent'|'apex'|'descent'|'landing'|'recovery'` and timers `crouchT`, `landSquashT`, `recoverT`.\n\n**Transitions**:\n- jump-press → `anticipation` (0.07s, vy=0, hipY drops up to 4px, knees bend).\n- timer → `launch` (apply existing jump impulse).\n- `vy < -120` → `ascent`. `|vy| < 120` → `apex`. `vy > 120` → `descent`.\n- ground contact with `prevVy > 200` → `landing` (`landSquashT = 0.12s`, hipY dips up to 6px).\n- timer → `recovery` (0.10s blend back to grounded).\n\n`computeWalkPose` reads phase + timers and blends pose offsets accordingly. Spring float damping (§4) auto-handles arm drag.\n\n## 8. Airborne Inertia\n\nWhile airborne, bias hand/foot **spring targets** (not baked pose) by:\n- `dx = -vx * 0.04`, `dy = -vy * 0.03`, clamped to `±10` (hands) / `±8` (feet).\n\nResult: limbs trail real motion. Springs do the smoothing.\n\n## 9. State Hierarchy Gate (`engine.ts` pose pipeline)\n\nBefore applying retreat / locomotion / spring layers, check current state and skip layers that conflict:\n\n`\npriority = ragdoll > hitstun > attackAnim > airborne > retreat > grounded > idle\n`\n\nEach lower layer only writes fields the higher layer hasn't claimed. Implemented as a small bitmask `poseClaimed` set per call. Prevents pose fighting.\n\n## 10. Render Stability\n\n- All time-based math uses real `dt`; no hidden frame counters.\n- Spring substep guard (§4) handles dt spikes.\n- No `Math.random()` in animation code paths (audit + remove if any slipped in via secondary motion).\n- All clamps applied post-spring, pre-render.\n\n## 11. Silhouette Rules (enforced in animation.ts)\n\nAfter all layers + clamps:\n- arm hand X distance from torso center ≥ 4px (push out if violated).\n- airborne pose: legs forced asymmetric (if `|legL.footY - legR.footY| < 3`, nudge by 3px based on `vx` sign).\n- head X offset ≥ 2px from torso center while moving.\n\n## 12. Camera Cohesion\n\nRead facing-change events from §1 to add a tiny camera nudge (`camTargetX += (newFacing - oldFacing) * 4`) lerped via existing camera system. No shake, no zoom. Skipped during finisher cinematic.\n\n## 13. LowPower Mode\n\nWhen `this.lowPower`:\n- Springs use only `sLean`, `sShoulderRoll`, `sHandL`, `sHandR` (skip head/feet/elbow/knee springs).\n- Skip airborne velocity bias (§8).\n- Skip arc curve recompute (§5) — use baked midpoint.\n- Keep facing controller + foot planting (cheap, high impact).\n\n## 14. Yaw-Squash Render (`GameCanvas.tsx`)\n\nWhere the fighter is drawn, multiply horizontal scale by `1 - 0.18 * facingSquash` while `facingSquash > 0`. Single multiply per fighter per frame. No new transforms otherwise.\n\n## 15. Verification\n\n- `bunx tsc --noEmit`.\n- Manual checklist: sprint crossover (no flicker), retreat (stable orientation, no moonwalk), jump (anticipation→squash→float→landing), slow-mo finisher (springs stable), throttled CPU (no exploding offsets), feet never slide, silhouettes stay readable on 393×583 mobile preview.\n\n## Out of scope\n\nHitboxes, damage, AI, networking, attack-pose timing, sprite sheets, ragdoll math, FX systems, finisher cinematic.\n
+# Ragdoll + Hit-Reaction Overhaul — Merged Phased Plan
 
-&nbsp;
+Render/physics-response polish only. Gameplay (hitboxes, damage, AI, timers, hitstop, movement physics) is untouched. All work is allocation-free, deterministic, dt-correct, mobile-first, and `lowPower`-aware.
 
-ADDITIONAL AAA POLISH LAYERS
+## Files
 
-1. Animation Authority System
+- `src/game/ragdoll.ts` — NEW. State machine, `RagdollState`, `applyHitReaction`, `stepRagdoll`, `applyRagdollPose`. Allocation-free (`Float32Array` for limbs + ring buffers).
+- `src/game/engine.ts` — replace existing knockback/ragdoll call sites and per-tick stepping with the new API. Add `incomingImpactT/Strength/Dir` setter on telegraphed attacks. No combat-balance edits.
+- `src/game/animation.ts` — pose blend hook so ragdoll/reaction layer composes cleanly with the existing wobble + walk pipeline (priority gate).
+- `src/game/wobble.ts` — keep as-is for idle/locomotion secondary motion. Ragdoll layer takes authority when `state !== none` and wobble is suppressed.
+- `src/components/game/GameCanvas.tsx` — render reads `applyRagdollPose` output; supports cinematic pose-hold (visual-only freeze of pose write, NOT of `f.x/f.vx/timers`).
 
-Add per-body-part ownership so multiple animation layers never fight each other.
+## Global Architecture Decisions
 
-poseAuthority = {
+1. `**muscleTension: 0..1` is the master scalar.** Drives spring stiffness, damping ratio, stabilization, head lag, limb spread, secondary wobble amplitude, and recovery blend. Removes the per-state ζ table — each state sets a *target* tension + transition rate, not raw ζ values. KO = monotonic tension decay then re-rise during recovery.
+2. **Cinematic pose preservation is visual-only.** A `poseHoldT` (20–40ms) freezes/interpolates only the pose buffer the renderer reads. `f.x`, `f.vx`, hitstun timers, AI, input — all continue normally.
+3. **Anticipatory impact compression is telegraph-aware.** New per-fighter fields `incomingImpactT`, `incomingImpactStrength`, `incomingImpactDir` are written by the *attacker's* startup phase for telegraphed heavies/launchers/finishers only. Compression = 1–2 frames inward brace before release. Skipped for jabs, DOT, instant collisions.
+4. **Propagation delays use preallocated ring buffers.** `Float32Array` per fighter, fixed size (8 slots @ ~4ms each → 32ms window). Torso → shoulders (12ms) → hips (22ms) → legs (32ms), head settles last via lag spring. Zero runtime allocation.
 
-  torso,
+## Phase A — Core Foundation
 
-  head,
+Replace the rigid ragdoll with a stable premium base. Ship and verify before Phase B.
 
-  armL,
+`**ragdoll.ts` exports**
 
-  armR,
+- `RagdollState` — `state`, `muscleTension`, `targetTension`, `tensionRate`, `torsoAng/AV`, `hipAng/AV`, `headLagAng`, `limb: Float32Array(32)` (8 segments × 4: ang, angV, posOffX, posOffY), `bodyVelX/Y`, `recoveryT`, `immuneT`, `bounceCount`, `seed`, `variantTwist`, `variantArch`, `propRing: Float32Array(N*3)`, `poseHoldT`.
+- `createRagdoll()`, `resetRagdoll(rs)`.
+- `applyHitReaction(rs, dirX, dirY, dirZ, power, height, flags)` — primitives only; picks state, seeds variation, writes torso impulse + queues propagation, sets `targetTension`, optionally sets `poseHoldT`.
+- `stepRagdoll(rs, dt, env)` — fixed substeps `ceil(dt/0.0167)`, capped 4 (2 in `lowPower`); integrates springs, drains ring buffer, handles airborne/ground/bounce/KO transitions, decays tension toward target.
+- `applyRagdollPose(pose, rs, lowPower)` — composes onto baked pose; respects `poseHoldT` (lerp-pause writes).
 
-  legL,
+**State machine** (9 states): `none`, `lightHit`, `heavyHit`, `launcher`, `airborneSpin`, `wallBounce`, `groundBounce`, `knockoutCollapse`, `finalKO`. Transitions driven by `power`, `dir`, `height`, vImpact, bounceCount.
 
-  legR
+**Procedural momentum propagation**
 
-}
+- Torso receives full linear impulse → `bodyVelX/Y` and AV from `rHit × impulse`.
+- Hip AV scheduled via ring buffer (one slot ahead). Legs scheduled later. Head uses lag spring against torso.
+- Per-limb seeded angular kick × counter-swing multiplier (deterministic via mulberry32 of `seed`).
 
-Priority:
+**Spring-based limb physics**
 
-ragdoll > finisher > hitstun > attack > airborne > locomotion > idle
+- 8 segments, 1-DOF angular spring + 2-DOF positional offset spring driven by torso linear accel.
+- `k` and `ζ` derived from `muscleTension`: `k = kMin + (kMax-kMin)*tension`, `ζ = 0.45 + 0.55*tension`.
 
-Higher-priority layers fully own their regions until released.
+**Airborne**: linear `g*dt`, angular damping `^dt`, spin decay ∝ residual energy.
+**Ground impact**: `bounceCoef` from state, squash impulse, radial outward limb kick, head backward lag, `bounceCount++`.
+**KO collapse**: `targetTension` ramps 0.45 → 1.0 over `recoveryT` (0.6–1.2s); 1–2 micro-bounces if `vImpact > 80`.
 
-2. Transition Buffer System
-
-Add buffered pose blending between major animation states.
-
-New fields:
-
-transitionT
-
-transitionFrom
-
-transitionTo
-
-transitionCurve
-
-Blend duration:
-
-60–140ms
-
-Applies to:
-
-- grounded → airborne
-
-- airborne → landing
-
-- retreat → idle
-
-- attack → locomotion
-
-- hitstun → recovery
-
-Use cubic / critically-damped easing to remove pose popping.
-
-3. Velocity Momentum Inheritance
-
-Add render-only momentum propagation through the body.
-
-New fields:
-
-poseMomentumX
-
-poseMomentumY
-
-Derived from:
-
-- acceleration
-
-- landing force
-
-- recoil
-
-- direction changes
-
-Distribute into:
-
-- torso lag
-
-- shoulder drag
-
-- hip delay
-
-- head inertia
-
-- arm inertia
-
-Creates real body mass feeling.
-
-4. Root Motion Illusion Layer
-
-Add subtle render-only pelvis/chest drift without touching gameplay physics.
-
-Offsets:
-
-1–3px max.
-
-Apply:
-
-- pelvis drift
-
-- chest lead
-
-- spine compression
-
-- shoulder counter-motion
-
-Improves perceived movement quality massively.
-
-5. Dynamic Pose Compression
-
-Add squash/stretch principles during high-energy motion.
-
-Compress:
-
-- sprint acceleration
-
-- jump anticipation
-
-- heavy attack windup
-
-Extend:
-
-- attack release
-
-- jump launch
-
-- impacts
-
-Small controlled amounts only.
-
-Silhouette readability must remain intact.
-
-6. Motion Clarity Bias
-
-During fast movement:
-
-- exaggerate leading limbs slightly
-
-- simplify trailing limbs slightly
-
-Examples:
-
-- attacking arm extends more
-
-- opposite arm reduced motion
-
-- front leg emphasized during sprint
-
-Optimized for mobile readability.
-
-7. Perceptual Frame Stabilization
-
-Add smoothed visual dt separate from gameplay dt.
-
-visualPoseDt = lerp(prevDt, dt, 0.12)
-
-Use only for:
-
-- animation interpolation
-
-- spring smoothing
-
-- secondary motion
-
-Never affects gameplay simulation.
-
-Removes micro jitter during mobile FPS spikes.
-
-8. Dynamic Center of Mass
-
-Add:
-
-centerOfMassX
-
-centerOfMassY
-
-Shift COM based on:
-
-- speed
-
-- jump phase
-
-- landing
-
-- attack direction
-
-Hips, shoulders, and head follow COM subtly.
-
-Prevents disconnected limb feeling.
-
-9. Contact Pose Holds
-
-On:
-
-- foot plants
-
-- attack impacts
-
-- hard landings
-
-Apply tiny visual hold:
-
-25–50ms
-
-Visual-only.
-
-No gameplay freeze.
-
-Creates stronger impact readability and premium weight.
-
-10. Animation Noise Filtering
-
-Final animation pass:
-
-if (delta < epsilon) ignore
-
-Filter:
-
-- tiny hand drift
-
-- head jitter
-
-- spring micro movement
-
-Keeps animation stable and premium.
-
-11. Performance Rules
-
-- All systems allocation-free.
-
-- No per-frame object creation.
-
-- All math deterministic.
-
-- All springs dt-correct.
-
-- LowPower mode skips:
-
-  - elbow/knee spring layers
-
-  - advanced arc recompute
-
-  - COM secondary offsets
-
-  - airborne inertia bias
-
-Facing system, foot planting, and transition buffers remain active even in lowPower because they are high visual impact and cheap.
+**Dynamic surface friction**: `groundFriction^dt` on `bodyVelX` while grounded ragdoll, scaled by tension.
+
+**Deterministic variation**: per-hit `seed`, `variantTwist∈{-1,0,1}`, `variantArch∈{-1,0,1}`, per-limb whip ∈ [0.7,1.3].
+
+**Stability clamps**: `|torsoAng-hipAng|≤0.5 rad`, `|AV|≤14 rad/s`, pos offset ≤12 px, head lag ≤0.4 rad, overlap scaling.
+
+**LowPower**: 4 limbs, skip pos-offset springs, substeps capped 2, no propagation ring (direct apply).
+
+**Recovery blending**: tension rising → spring stiffness rises → pose naturally settles toward locomotion baseline. No discrete state pop.
+
+**Silhouette protection**: post-spring clamps; if torso vs hip silhouette collapses, push hip outward by 2px along facing.
+
+**Engine integration** (`engine.ts`): replace ~5 knockback/ragdoll call sites (lines ~1871, 1920, 2046, 2445, 2566) with `applyHitReaction(...)`. Replace `if (f.ragdollT > 0) {...}` block with `stepRagdoll(f.rs, dt, env)`. Wobble layer is bypassed when `f.rs.state !== 'none'`.
+
+**Phase A success criteria**
+
+- No stiff/repeated poses; varied per hit.
+- Believable weight; torso leads, limbs follow.
+- Fluid airborne arcs; natural ground bounces.
+- Stable in slow-mo and at 30 FPS throttle.
+- No exploding limbs, no NaN, readable silhouettes on 393×583.
+- `bunx tsc --noEmit` clean.
+
+## Phase B — AAA Polish Layer
+
+Only after Phase A is stable in playtest.
+
+- Anticipatory impact compression (telegraph-aware, 1–2 frames).
+- Cinematic pose preservation (`poseHoldT`, visual-only).
+- Spine flex layer (extra DOF between torso and hip springs).
+- Shoulder/hip counterbalance torque.
+- Animation rhythm offsets (per-fighter phase seed).
+- Dynamic recovery poses (state-aware get-up bias).
+- Motion clarity bias (lead limb amplified, trail limb damped).
+- Micro secondary motion (sub-pixel sway gated by tension).
+- Energy conservation accounting across bounces.
+- Perceptual motion cleanup (epsilon filter on tiny offsets).
+- Slow-mo motion compression (reduced amplitude when timeScale<0.6).
+- Contact pose holds (25–50ms, visual-only).
+- Recovery breathing (chest rise during `finalKO` settle).
+
+## Phase C — Final Cinematic Tuning
+
+Polish-only, no new systems unless a gap is found.
+
+- Direction-aware collapse (forward vs backward fall bias).
+- Recovery intelligence (face-up/face-down resolution).
+- Body-chain timing refinement (ring buffer slot tuning).
+- Advanced motion filtering (low-pass on micro-jitter).
+- Final tuning pass: damping curves, stiffness ranges, momentum transfer ratios, bounce coefficients, KO settle times, airborne looseness.  
+
+
+## Auto-Scaling Safety Rule
+
+Any subsystem that hurts gameplay readability, silhouette clarity, mobile FPS, or input responsiveness is scaled back automatically (gated by `lowPower`, FPS sample, or fighter-state). Premium feel > simulation complexity.
+
+## Out of Scope
+
+Hitboxes, damage, AI, balance, FX, camera shake, finisher cinematic flow, networking.
+
+## Verification
+
+- `bunx tsc --noEmit` after each phase.
+- Manual: light jab, heavy launcher, aerial spin, wall bounce, repeated KO variation, slow-motion finisher, mobile viewport readability, low FPS throttle, rapid combo chains.  
+  
+Production Safety + Tuning Layer
+  Add these final production-level constraints and tuning systems before implementation begins.
+  1. Global Simulation Budget Guard
+  Add a lightweight runtime budget monitor for ragdoll/update cost.
+  If frame budget exceeds threshold:
+  - reduce substeps
+  - reduce limb spring iterations
+  - reduce secondary wobble amplitude
+  - reduce micro-motion updates
+  - preserve:
+    1. torso momentum
+    2. silhouette readability
+    3. major limb arcs
+  Never sacrifice gameplay responsiveness or readability for simulation detail.
+  2. Motion Priority Stack
+  When multiple motion systems compete:  
+  priority order is:
+  1. gameplay readability
+  2. torso/body line
+  3. attack/reaction silhouette
+  4. momentum continuity
+  5. secondary wobble
+  6. micro motion
+  Lower-priority systems automatically damp/reduce themselves when conflict is detected.
+  3. Anti-Jitter Stabilization
+  Add final-pass stabilization:
+  - epsilon filtering
+  - low-pass smoothing
+  - angular deadzones
+  - micro-motion damping
+  Especially for:
+  - low FPS spikes
+  - slow-motion
+  - repeated wall bounces
+  - rapid combo hits
+  Goal:  
+  motion should always feel intentional and premium,  
+  never noisy or unstable.
+  4. Visual Readability Bias
+  At all times:
+  - preserve clean action silhouettes
+  - preserve readable body curves
+  - avoid tangled limbs
+  - avoid visual clutter during multi-hit combos
+  When readability conflicts with realism:  
+  readability always wins.
+  5. Momentum Continuity Rules
+  Momentum should never:
+  - stop abruptly
+  - reverse unnaturally
+  - snap to zero
+  All settling should:
+  - decay naturally
+  - transfer through body chains
+  - preserve directional flow
+  6. Recovery Readability Constraint
+  Recovery transitions must:
+  - remain readable on small mobile screens
+  - clearly communicate:
+    - grounded
+    - stunned
+    - recovering
+    - KO
+    - airborne
+  Avoid overly subtle recovery states.
+  7. Tunable Debug Controls
+  Add optional debug toggles:
+  - ragdoll springs
+  - muscle tension visualization
+  - propagation delay visualization
+  - pose hold visualization
+  - collision/bounce debug
+  - lowPower simulation preview
+  Developer-only.  
+  No shipping UI.
+  8. Final Design Rule
+  The system should feel:
+  - cinematic
+  - heavy
+  - fluid
+  - reactive
+  - expensive
+  - controlled
+  Never:
+  - floppy
+  - chaotic
+  - over-simulated
+  - jelly-like
+  - noisy
+  - difficult to read
+  The goal is not “real physics.”
+  The goal is:  
+  high-end fighting-game motion quality with believable body weight and premium readability.
