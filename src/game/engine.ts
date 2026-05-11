@@ -1658,6 +1658,8 @@ export class GameEngine {
     for (const pr of this.projectiles) {
       // Frozen: projectiles owned by frozen player are paused.
       if (freezeActive && pr.owner !== this.timeFreezer) continue;
+      // Crowbar at rest sits on the ground until picked up — skip physics.
+      if (pr.kind === "crowbar" && pr.rested) continue;
       if (pr.kind === "batarang" && pr.homing) {
         const target = pr.owner === "p1" ? this.p2 : this.p1;
         const dx = target.x - pr.x, dy = target.y + 30 - pr.y;
@@ -1668,7 +1670,31 @@ export class GameEngine {
         const cap = 720;
         if (sp > cap) { pr.vx = pr.vx / sp * cap; pr.vy = pr.vy / sp * cap; }
       }
+      if (pr.kind === "crowbar") {
+        // Iron bar — gravity arcs the throw, spin reads as tumbling steel.
+        pr.vy += 720 * sdt;
+        pr.rot = (pr.rot ?? 0) + (pr.spin ?? 0) * sdt;
+      }
       pr.x += pr.vx * sdt; pr.y += pr.vy * sdt; pr.life -= dt;
+      // Crowbar settles on cover or ground instead of vanishing.
+      if (pr.kind === "crowbar" && !pr.rested) {
+        for (const pl of this.platforms) {
+          if (pl.destroyed || pl.kind !== "cover") continue;
+          if (pr.x > pl.x && pr.x < pl.x + pl.w && pr.y > pl.y - 4 && pr.y < pl.y + pl.h) {
+            pr.y = pl.y - 2; pr.vx = 0; pr.vy = 0; pr.spin = 0;
+            pr.rested = true; pr.life = 999;
+            Sfx.play("thud", 0.55);
+            break;
+          }
+        }
+        if (!pr.rested && pr.y >= GROUND_Y - 4) {
+          pr.y = GROUND_Y - 4; pr.vx = 0; pr.vy = 0; pr.spin = 0;
+          pr.rot = Math.PI / 2; // lies flat
+          pr.rested = true; pr.life = 999;
+          this.shake = Math.max(this.shake, 4);
+          Sfx.play("thud", 0.6);
+        }
+      }
       // Cover blocks projectiles (web/batarang excluded — web is a tether, batarang homes)
       if (pr.kind === "bolt") {
         for (const pl of this.platforms) {
