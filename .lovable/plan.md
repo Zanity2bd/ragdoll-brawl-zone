@@ -1,65 +1,181 @@
-# Combat Jumps + Ragdoll Overhaul
+# Combat Readability + Finisher Cinematic Pass
 
-Foundational systems pass. Both currently work but feel cheap — flat arcs, plank ragdolls, snappy get-ups. Fix is a structured rewrite of jump physics + air pose + ragdoll articulation, split into 3 shippable sub-batches so the game stays playable after each.
+Modernize combat presentation so hits feel readable, weighty, and cinematic without cluttering visibility or hurting mobile performance.
 
----
+## 1. Remove combat text noise (`src/game/engine.ts`)
 
-## Sub-batch A — Jump physics rewrite
+Delete entirely:
 
-**Goal:** weighty, decisive arcs with anticipation and recovery.
+- `hitLabels`, `comboCount`, `comboCountT` state
+- `spawnHitLabel()`, `drawHitLabels()`
+- All label spawn calls (punch, combo kick/knee, crowbar)
+- The render-pass `drawHitLabels()` invocation
 
-1. **Anticipation crouch** (60–90ms). On jump press, enter a `preJump` state with hip dip + knee bend; takeoff velocity applied at end of crouch. Cancellable into block but not into another move.
-2. **Variable jump height.** Track `jumpHeld`. Releasing jump while `vy < 0` clamps `vy *= 0.45` (Mario-style). Encodes player skill into the arc.
-3. **Stronger gravity + faster falls.** Bump base gravity ~25%, then apply a `1.6× gravity` multiplier once `vy > 0` (apex-cut). Removes the floaty hang.
-4. **Coyote time + jump buffer** (already partially there — verify and tune to 90ms / 110ms).
-5. **Landing recovery.** On touchdown with significant `|vy|`, enter `landSquash` for 100–140ms scaled by impact velocity. Movement-locked but cancel into attack (combat snappiness).
+Combo logic itself stays intact internally — only the floating UI text is removed. Impact will read through animation, hitstop, recoil, sound, camera, and particles.
 
-## Sub-batch B — Air pose system
+## 2. FX readability pass (`src/game/engine.ts`, `src/game/attackFx.ts`)
 
-**Goal:** silhouette reads as "human jumping" not "stick stuck mid-frame".
+**Edge-biased placement** — spawn impact FX at `contactPoint + outwardNormal * 18px` (slightly above center mass) instead of victim center, so the strike frames the body.
 
-1. **Phase from vy.** Replace the single air pose with phases:
-   - `takeoff` (vy < -300): legs extending, arms swinging up
-   - `tuck` (-300 ≤ vy ≤ 200): knees up to chest, arms in
-   - `fall` (vy > 200): legs reaching down for landing, arms out for balance
-2. **Per-phase pose offsets** in `poseFor()` driven by interpolated `vy → phase` weights so transitions blend (no snap).
-3. **Facing-aware lean.** Apply small forward torso lean during horizontal air movement (atan2 of vx/vy clamped to ±15°).
-4. **Land-impact pose.** During `landSquash`, knees bent 40°, torso compressed 12%, arms forward for balance.
+**Sizing rebalance**
 
-## Sub-batch C — Ragdoll articulation + settle + rise
+- `impactStar`: size 36 → 26, shorter life, sharper alpha falloff, brighter first ~40ms
+- `slashArc`: lower alpha peak, shorter trail, less torso/head overlap
+- `shockRing`: keep heavy radius but thinner ring, faster fade, stronger ground anchor
 
-**Goal:** floppy limbs, body settles convincingly, get-up looks heavy.
+**Victim rim flash** — replace current full-body flash with a directional rim-light highlight offset along impact direction, preserving silhouette readability.
 
-1. **Per-limb wobble during ragdoll.** Currently rotates as one rigid body with rotation `ragdollAng`. Add 4 sub-rotations (`headLag`, `armLagL`, `armLagR`, `legLag`) integrated against `ragdollAV` with damping → limbs trail the torso instead of moving with it.
-2. **Ground friction + settle threshold.** When `onGround && |vx| < 40 && |ragdollAV| < 0.6`, accelerate decay of `ragdollT`. Damping factor 0.88/frame on `vx` while ragdolled and grounded. Stops the slide.
-3. **Body roll on landing.** First ground contact while ragdolled adds one impact rotation pulse (`ragdollAV += dir × |vy| × 0.01`) — the body tumbles into a stop instead of pancaking.
-4. **Smoother rise blend.** The 6 phases (`gather → press → kneel → coil → drive → settle`) are good in concept but the local→lift curve snaps between phases. Replace with a single smoothstep applied across phase boundaries (lerp neighbouring lift values when within ±0.04 of a boundary).
-5. **Get-up weight cues.** Add subtle camera shake (1–2 trauma) on `drive→settle` transition, and a faint dust scuff at feet on the same beat (reuses existing `groundDecals`).
+## 3. Directional recoil (render-only)
 
----
+Add to fighter render state (no physics/hitbox change):
 
-## Files touched
+- `displayRecoilX`, `displayRecoilY`, `displayTilt`
 
-- `src/game/engine.ts` — jump state machine, gravity/landing, ragdoll integration, settle, rise blend
-- `src/game/wobble.ts` (or wherever pose lives) — air phase pose, land squash pose, per-limb ragdoll lag
-- New ragdoll fields on `Fighter` interface: `preJumpT`, `landSquashT`, `headLag`, `armLagL`, `armLagR`, `legLag`
+On hit:
 
-No new assets, no schema changes.
+- Victim snaps 4–8px backward + slight rotation away, springs back
+- Attacker lunges forward slightly during the impact frame
 
----
+## 4. Hitstop tier rebalance
 
-## Risks
+- Light hit: `0.045s`
+- Heavy hit: `0.07s`
+- Finisher hit: `0.12s`
 
-- **Jump anticipation can feel laggy** if too long. I'll start at 70ms and tune from preview.
-- **Per-limb ragdoll on mobile**: 4 extra angles × 2 fighters = 8 lerps/frame. Negligible, but I'll keep wobble integration in the existing `stepWobble` loop to avoid extra function calls.
-- **Variable jump height changes feel of every existing combo** that relies on a fixed apex. I'll tune apex height to match the current max height when jump is held, so existing combos still connect.
+Heavy, not laggy.
 
----
+## 5. Finisher cinematic — trigger
 
-## Order of operations
+Fires when `victim.hp > 0 && victim.hp - dmg <= 0` AND damage source is direct melee, crowbar, or physical projectile.
 
-1. Sub-batch A first (physics is the foundation — pose only matters if the arc is right).
-2. Then B (pose uses phase data from A).
-3. Then C (ragdoll is independent but biggest risk — last so previous batches are stable).
+**Excluded**: DOT, laser tick damage, environmental damage.
 
-Each is a single commit, fully playable. I'll typecheck after each.
+**Fires on every round-ending KO** (best-of-3 → triggers up to 3 times per match).
+
+## 6. Finisher state (`engine.ts`)
+
+Add: `finisherT`, `finisherActive`, `finisherVictim`, `finisherAttacker`.
+
+## 7. Slow motion
+
+- `slowmoT = 0.65`
+- `slowmoScale = 0.28`
+
+(Avoid extreme freeze — keeps motion legible.)
+
+## 8. Camera cinematic (inline in `engine.ts`, no new file)
+
+Add `camTargetZoom`, `camTargetX`, `camTargetY` fields next to existing `camZoom`/`camX`/`camY`. Lerp every tick at `~6 * dt` toward targets.
+
+**Finisher behavior**
+
+- Zoom: 1.0 → 1.22 with ease-out + slight overshoot, smooth settle
+- Focus: midpoint between attacker strike origin and victim torso/head
+- Reset targets to defaults on finisher end — no hard snaps
+
+## 9. Cinematic overlay
+
+Canvas-only (no CSS filters) during finisher window:
+
+- Soft radial vignette (dark edges)
+- Subtle desaturation tint
+- Opacity curve: 0 → 0.28 → 0
+
+## 10. Finisher FX burst
+
+On the KO impact frame:
+
+- Oversized `impactStar` (size 52)
+- `shockRing` (size 72)
+- Directional debris streaks along impact vector
+- Lower-pitched bass impact SFX variant
+- Slightly longer shake decay
+
+## 11. Stepped frame rendering during finisher
+
+During slow-mo only, render the visual frame snapped to ~30fps stepping (gameplay sim runs normally). Adds cinematic "frame weight" — visual-only, near-zero cost.
+
+## 12. Camera shake refinement
+
+Replace random shake with a damped directional impulse:
+
+```text
+shakeX += impactDirX * magnitude
+shakeY += upwardKick
+```
+
+Decay exponentially.
+
+## Performance constraints
+
+Mobile-first — Canvas2D, 60Hz, low-end GPU safe. No shaders, no expensive post-processing. Only transforms, lerps, and overlays.
+
+## Files
+
+Edit:
+
+- `src/game/engine.ts`
+- `src/game/attackFx.ts`
+- `src/game/sfx.ts` (low-pitch finisher impact variant)
+
+(Camera state stays inline in `engine.ts` — no new `camera.ts`.)
+
+No new assets required.
+
+## Out of scope
+
+AI, combat balance, hitbox math, movement physics, animation timing rewrites, networking, shaders.
+
+## Verification
+
+- `bunx tsc --noEmit`
+- Visual checklist in preview:
+  - Silhouettes stay readable through impacts
+  - FX no longer cover fighters
+  - Recoil clearly visible
+  - Combat feels cleaner + heavier
+  - Finisher zoom + slow-mo + vignette feel cinematic
+  - Camera returns smoothly, ragdoll transition intact 
+  13. Presentation safety rules
+  To preserve gameplay readability and avoid cinematic spam:
+  - Finisher effects cannot stack or retrigger while finisherActive is true
+  - Camera zoom is clamped to max 1.25
+  - Combined shake magnitude is clamped to prevent nausea on mobile
+  - FX alpha automatically scales down when >6 active combat FX exist simultaneously
+  - During lowPower mode:
+    - vignette disabled
+    - stepped-frame rendering disabled
+    - debris streak count reduced
+    - all gameplay logic unchanged
+  14. Animation + camera easing
+  All cinematic transitions must use smooth easing curves:
+  - zoom: easeOutCubic
+  - shake decay: exponential damping
+  - recoil return: spring-damped interpolation
+  - vignette opacity: easeInOutQuad
+  Avoid linear interpolation for cinematic motion.
+  15. Render/gameplay separation
+  Gameplay simulation remains full-rate at all times.
+  Slow-motion affects:
+  - render interpolation
+  - animation playback
+  - FX timing
+  - camera motion
+  - audio pitch
+  Slow-motion must NOT affect:
+  - hit detection
+  - collision
+  - physics stability
+  - AI tick rate
+  - input polling
+  16. Impact direction system
+  All recoil, shake, FX placement, and directional rim-lighting derive from a normalized impact vector:
+  impactDir = normalize(victimCenter - strikeOrigin)
+  This single source drives:
+  - victim recoil
+  - attacker lunge
+  - camera impulse
+  - FX outward offset
+  - debris direction
+  - rim-light direction
+  This keeps all feedback visually coherent.
