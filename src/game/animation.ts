@@ -628,26 +628,37 @@ export function applySpringPolish(
   }
 
   // Compute clamped offsets (current spring pos vs target).
+  // Noise filter: ignore sub-pixel/sub-radian wobble so idle poses are dead-still.
   const clamp = (v: number, lim: number) => Math.max(-lim, Math.min(lim, v));
-  const hLx = clamp(s.sHandLX.p - tHandLX, 10);
-  const hLy = clamp(s.sHandLY.p - tHandLY, 10);
-  const hRx = clamp(s.sHandRX.p - tHandRX, 10);
-  const hRy = clamp(s.sHandRY.p - tHandRY, 10);
-  const fLx = opts.lowPower ? 0 : clamp(s.sFootLX.p - tFootLX, 8);
-  const fLy = opts.lowPower ? 0 : clamp(s.sFootLY.p - tFootLY, 8);
-  const fRx = opts.lowPower ? 0 : clamp(s.sFootRX.p - tFootRX, 8);
-  const fRy = opts.lowPower ? 0 : clamp(s.sFootRY.p - tFootRY, 8);
+  const nf = (v: number, eps: number) => (Math.abs(v) < eps ? 0 : v);
+  const hLx = nf(clamp(s.sHandLX.p - tHandLX, 10), 0.35);
+  const hLy = nf(clamp(s.sHandLY.p - tHandLY, 10), 0.35);
+  const hRx = nf(clamp(s.sHandRX.p - tHandRX, 10), 0.35);
+  const hRy = nf(clamp(s.sHandRY.p - tHandRY, 10), 0.35);
+  const fLx = opts.lowPower ? 0 : nf(clamp(s.sFootLX.p - tFootLX, 8), 0.4);
+  const fLy = opts.lowPower ? 0 : nf(clamp(s.sFootLY.p - tFootLY, 8), 0.4);
+  const fRx = opts.lowPower ? 0 : nf(clamp(s.sFootRX.p - tFootRX, 8), 0.4);
+  const fRy = opts.lowPower ? 0 : nf(clamp(s.sFootRY.p - tFootRY, 8), 0.4);
   // Foot planting (soft anchor): on ground + slow vx, suppress foot drift.
   const planted = opts.onGround && Math.abs(opts.vx) < 60;
   const footScale = planted ? 0.25 : 1;
 
-  const leanOffset = clamp(s.sLean.p - tLean, 0.12);
-  const rollOffset = clamp(s.sShoulderRoll.p - tRoll, 0.12);
-  const headOffset = opts.lowPower ? 0 : clamp(s.sHead.p - tHead, 6);
+  const leanOffset = nf(clamp(s.sLean.p - tLean, 0.12), 0.004);
+  const rollOffset = nf(clamp(s.sShoulderRoll.p - tRoll, 0.12), 0.004);
+  const headOffset = opts.lowPower ? 0 : nf(clamp(s.sHead.p - tHead, 6), 0.3);
 
-  // Retreat: widen arm arc, deepen shoulder roll, add backward weight.
+  // Retreat: widen arm arc, deepen shoulder roll, add backward weight + head glance.
   if (opts.retreating) {
     pose.shoulderRoll *= 1.25;
+    pose.lean -= opts.facing * 0.04;
+    // Widen trailing-arm hand outward so the silhouette reads as backpedal,
+    // and lift it slightly so it doesn't clip the torso.
+    pose.handR[0] += opts.facing * 1.5;
+    pose.handR[1] -= 1.5;
+    pose.handL[0] -= opts.facing * 1.5;
+    pose.handL[1] -= 1.5;
+    // Subtle head glance forward (toward opponent / movement-opposite side).
+    pose.headOffsetY -= 0.5;
   }
 
   // Write polished values back to the pose.
