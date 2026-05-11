@@ -429,7 +429,7 @@ export class CpuController {
     const inBrawl =
       adx <= BRAWL_RANGE &&
       meR.onGround && oppR.onGround &&
-      !meR.meleeKind && !meR.dash &&
+      !meR.meleeKind &&
       Math.abs(oppR.y - meR.y) < 60;
     if (inBrawl) {
       // Face & micro-space the opponent
