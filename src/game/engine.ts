@@ -7,7 +7,7 @@ import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
 import { Sfx } from "./sfx";
 import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, type WobbleState } from "./wobble";
-import { createRagdoll, stepRagdoll, applyHitReaction, applyRagdollPose, resetRagdoll, HR_TELEGRAPHED, HR_LAUNCHER, HR_FINISHER, HR_AIRBORNE, type RagdollState } from "./ragdoll";
+import { createRagdoll, stepRagdoll, applyHitReaction, applyAnticipation, applyRagdollPose, resetRagdoll, HR_TELEGRAPHED, HR_LAUNCHER, HR_FINISHER, HR_AIRBORNE, type RagdollState } from "./ragdoll";
 import { CpuController, type Difficulty } from "./ai";
 import {
   loadWalkSheet, isWalkSheetReady, drawWalkFrame,
@@ -2954,7 +2954,22 @@ export class GameEngine {
 
     // Active melee progresses regardless of input
     if (f.meleeKind) {
+      const prevMT = f.meleeT;
       f.meleeT += dt;
+      // Phase C: anticipatory impact compression — telegraph the target ~30ms
+      // before the windup ends, but only for heavy/launcher moves. Visual-only.
+      const m = f.move;
+      if (m && m.damage >= 12) {
+        const cue = Math.max(0, m.windup - 0.04);
+        if (prevMT < cue && f.meleeT >= cue) {
+          const opp = f.id === "p1" ? this.p2 : this.p1;
+          const dx = opp.x - f.x;
+          if (Math.abs(dx) < (m.range ?? 80) + 30) {
+            const strength = Math.min(1, m.damage / 22);
+            applyAnticipation(opp.rs, 0.04, strength, f.facing);
+          }
+        }
+      }
       // Speed flurry creates afterimages constantly
       if (f.meleeKind === "speedFlurry" && !this.lowPower) {
         if (f.trail.length === 0 || f.trail[f.trail.length - 1].phase !== f.walkPhase) {
