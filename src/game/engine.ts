@@ -5849,12 +5849,13 @@ export class GameEngine {
       if (f.weaponTrail.active <= 0 && f.weaponTrail.samples.length === 0) continue;
       const pose = this.poseFor(f);
       const lp = pose[f.weaponTrail.limb];
-      // Inherit the same root body-offset the renderer applies — without
-      // this the trail anchor stays in raw world space while the body
-      // visibly shifts under ragdoll springs, producing a detached ribbon.
-      const rOffX = f.rs ? f.rs.bodyOffX : 0;
-      const rOffY = f.rs ? f.rs.bodyOffY : 0;
-      sampleTrail(f.weaponTrail, f.x + lp[0] + rOffX, f.y + lp[1] + rOffY);
+      // Route the limb anchor through the SAME root transform stack used by
+      // the visible body (hit-reaction translate/rotate/scale around hip,
+      // torso tilt, ragdoll spring offset). Without this the ribbon stays
+      // pinned to raw world space and visibly detaches from the hand/foot
+      // during recoil, kicks, and airborne hits.
+      const [wx, wy] = this.bodyToWorld(f, lp[0], lp[1]);
+      sampleTrail(f.weaponTrail, wx, wy);
       drawTrail(ctx, f.weaponTrail);
     }
     if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
