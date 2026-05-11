@@ -3681,30 +3681,39 @@ export class GameEngine {
         kind: "web", damage: m.damage,
       });
     }
-    // Butcher hurls his iconic crowbar instead of swinging it. The bar spins
-    // through the air, knocks the victim into a ragdoll on hit, then settles
-    // wherever it lands. Butcher must walk over and pick it up to use again.
-    if (m.kind === "crowbar" && f.skin.id === "butcher") {
-      const throwY = f.y + 30;
-      this.projectiles.push({
-        owner: f.id,
-        x: f.x + f.facing * 22,
-        y: throwY,
-        vx: f.facing * 760,
-        vy: -120,
-        life: 4.0,
-        color: "oklch(0.78 0.02 80)",
-        glow: "oklch(0.85 0.04 80)",
-        kind: "crowbar",
-        damage: m.damage,
-        rot: 0,
-        spin: f.facing * 22,
-      });
-      f.crowbarThrown = true;
-      // Lock the special until the crowbar is recovered.
-      f.meleeCd = 999;
-      Sfx.play("whoosh", 0.7);
-    }
+    // Butcher's crowbar is now thrown at the END of windup so the player
+    // sees the dotted aim trajectory first (rendered each frame from his
+    // current facing/position). Throw is fired in resolveMelees().
+  }
+
+  /** Initial throw vector for butcher's crowbar — used by both the live
+   *  projectile and the dotted aim preview so they always agree. */
+  private crowbarLaunch(f: Fighter): { x: number; y: number; vx: number; vy: number } {
+    return {
+      x: f.x + f.facing * 22,
+      y: f.y + 30,
+      vx: f.facing * 760,
+      vy: -120,
+    };
+  }
+
+  /** Spawn the actual crowbar projectile at end of windup. */
+  private throwCrowbar(f: Fighter, m: MoveSpec) {
+    const l = this.crowbarLaunch(f);
+    this.projectiles.push({
+      owner: f.id,
+      x: l.x, y: l.y, vx: l.vx, vy: l.vy,
+      life: 4.0,
+      color: "oklch(0.78 0.02 80)",
+      glow: "oklch(0.85 0.04 80)",
+      kind: "crowbar",
+      damage: m.damage,
+      rot: 0,
+      spin: f.facing * 22,
+    });
+    f.crowbarThrown = true;
+    f.meleeCd = 999;
+    Sfx.play("whoosh", 0.85);
   }
 
   private resolveMelees(dt: number = 1 / 60) {
@@ -3721,7 +3730,15 @@ export class GameEngine {
         case "crowbar":
         case "repulsor": {
           // Butcher's crowbar is a thrown projectile (handled in startMelee/projectiles)
-          if (m.kind === "crowbar" && f.skin.id === "butcher") break;
+          if (m.kind === "crowbar" && f.skin.id === "butcher") {
+            // Throw on first active frame (end of windup) — gives the player
+            // the full windup window to aim along the dotted trajectory.
+            if (inActive && !f.crowbarThrown && f.meleeHitMask.size === 0) {
+              this.throwCrowbar(f, m);
+              f.meleeHitMask.add(1);
+            }
+            break;
+          }
           if (inActive && f.meleeHitMask.size === 0) {
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
@@ -5782,6 +5799,109 @@ export class GameEngine {
         ctx.beginPath();
         ctx.moveTo(victim.x + Math.cos(a) * r1, victim.y + 40 + Math.sin(a) * r1);
         ctx.lineTo(victim.x + Math.cos(a) * r2, victim.y + 40 + Math.sin(a) * r2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Butcher crowbar aim trajectory — shown during the windup so the player
+    // can read the parabolic throw before release. Smooth dotted polyline that
+    // simulates the projectile physics (gravity 720, ground/cover collide),
+    // fades from bright at the muzzle to soft near the landing point with a
+    // gentle marching-ants animation for a premium "targeting reticle" feel.
+    for (const f of [this.p1, this.p2]) {
+      if (
+        f.skin.id !== "butcher" ||
+        !f.meleeKind ||
+        f.meleeKind !== "crowbar" ||
+        f.crowbarThrown ||
+        f.meleeT >= f.move.windup
+      ) continue;
+      const l = this.crowbarLaunch(f);
+      // Eased reveal: trajectory grows in over the first half of the windup.
+      const wp = Math.min(1, f.meleeT / Math.max(0.001, f.move.windup * 0.55));
+      const reveal = wp * wp * (3 - 2 * wp); // smoothstep
+      // Sample the parabola.
+      const pts: Array<{ x: number; y: number }> = [];
+      let px = l.x, py = l.y, pvx = l.vx, pvy = l.vy;
+      const step = 1 / 120;
+      const maxT = 1.6;
+      let landed: { x: number; y: number } | null = null;
+      for (let t = 0; t < maxT; t += step) {
+        pvy += 720 * step;
+        px += pvx * step;
+        py += pvy * step;
+        // Ground / cover hit
+        let hit = false;
+        if (py >= GROUND_Y - 4) { py = GROUND_Y - 4; hit = true; }
+        if (!hit) {
+          for (const pl of this.platforms) {
+            if (pl.destroyed || pl.kind !== "cover") continue;
+            if (px > pl.x && px < pl.x + pl.w && py > pl.y - 4 && py < pl.y + pl.h) {
+              py = pl.y - 2; hit = true; break;
+            }
+          }
+        }
+        if (px < -20 || px > W + 20) hit = true;
+        pts.push({ x: px, y: py });
+        if (hit) { landed = { x: px, y: py }; break; }
+      }
+      const total = pts.length;
+      const lastIdx = Math.max(1, Math.floor(total * reveal));
+      const march = (this.elapsed * 36) % 14; // pixels per cycle
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      // Soft glow underlay for premium feel
+      ctx.lineCap = "round";
+      ctx.setLineDash([1.4, 7]);
+      ctx.lineDashOffset = -march;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = "rgba(255, 215, 120, 0.14)";
+      ctx.beginPath();
+      ctx.moveTo(l.x, l.y);
+      for (let i = 0; i < lastIdx; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      // Crisp dotted aim line
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = "rgba(255, 235, 170, 0.85)";
+      ctx.beginPath();
+      ctx.moveTo(l.x, l.y);
+      for (let i = 0; i < lastIdx; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      // Tiny travelling chevrons every few samples for "flow" toward target
+      ctx.setLineDash([]);
+      const chevStep = 6;
+      for (let i = chevStep; i < lastIdx; i += chevStep) {
+        const a = pts[i];
+        const b = pts[Math.min(lastIdx - 1, i + 1)];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len, uy = dy / len;
+        const sz = 2.6;
+        ctx.fillStyle = `rgba(255, 240, 190, ${(0.55 * (i / lastIdx) + 0.25).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.moveTo(a.x + ux * sz, a.y + uy * sz);
+        ctx.lineTo(a.x - uy * sz * 0.55, a.y + ux * sz * 0.55);
+        ctx.lineTo(a.x + uy * sz * 0.55, a.y - ux * sz * 0.55);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // Landing reticle: pulsing concentric rings + crosshair
+      if (landed && reveal > 0.4) {
+        const pulse = 1 + Math.sin(this.elapsed * 8) * 0.12;
+        const baseR = 9 * pulse * Math.min(1, (reveal - 0.4) / 0.4);
+        ctx.strokeStyle = "rgba(255, 220, 140, 0.85)";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(landed.x, landed.y - 2, baseR, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = "rgba(255, 220, 140, 0.45)";
+        ctx.beginPath(); ctx.arc(landed.x, landed.y - 2, baseR * 1.7, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = "rgba(255, 240, 190, 0.95)";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(landed.x - baseR * 1.4, landed.y - 2); ctx.lineTo(landed.x - baseR * 0.6, landed.y - 2);
+        ctx.moveTo(landed.x + baseR * 0.6, landed.y - 2); ctx.lineTo(landed.x + baseR * 1.4, landed.y - 2);
+        ctx.moveTo(landed.x, landed.y - 2 - baseR * 1.4); ctx.lineTo(landed.x, landed.y - 2 - baseR * 0.6);
+        ctx.moveTo(landed.x, landed.y - 2 + baseR * 0.6); ctx.lineTo(landed.x, landed.y - 2 + baseR * 1.4);
         ctx.stroke();
       }
       ctx.restore();
