@@ -2681,6 +2681,24 @@ export class GameEngine {
       f.bodyLagX += f.bodyLagV * dt;
       f.bodyLagX = Math.max(-12, Math.min(12, f.bodyLagX));
 
+      // ---- Planted-foot lock during kick active window ----
+      // The kicking leg's extension implies the planted foot stays anchored.
+      // Hard-damp body lag (and the ragdoll spring's horizontal drift) so the
+      // torso doesn't slide off the standing leg, which was the loudest
+      // remaining "skin/skeleton drift" tell during high kicks.
+      if (f.comboKind === "kick" && f.comboT > 0) {
+        const u = f.comboT / Math.max(0.001, f.comboDur);
+        // Active window: chamber → impact → early recovery
+        if (u > 0.15 && u < 0.85) {
+          f.bodyLagX *= 0.55;
+          f.bodyLagV *= 0.35;
+          if (f.rs) {
+            f.rs.bodyOffX *= 0.55;
+            // vertical spring is fine (sells the kick power), only X locks
+          }
+        }
+      }
+
       // ---- Body roll from turn whip & impact ----
       // Underdamped so the torso visibly rocks, then settles.
       const rk = 38, rc = 6.5;
