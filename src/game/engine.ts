@@ -623,17 +623,11 @@ export class GameEngine {
   private impactFlash = 0;
 
   private shake = 0;
-  // AoS5-style floating hit labels ("PUNCH!", "KICK!", "x3 COMBO!").
-  // Pure presentation; spawns next to impact, drifts up + fades.
-  private hitLabels: Array<{
-    x: number; y: number; text: string;
-    t: number; life: number;
-    vy: number; color: string; scale: number;
-    italic: boolean;
-  }> = [];
-  // Per-attacker combo tracking: counts consecutive landed hits within window.
-  private comboCount: Record<PlayerId, number> = { p1: 0, p2: 0 };
-  private comboCountT: Record<PlayerId, number> = { p1: 0, p2: 0 };
+  // Finisher cinematic — vignette + frame-step + extra FX during a KO blow.
+  private finisherT = 0;
+  private finisherDur = 0;
+  private finisherActive = false;
+  private finisherFrameSkipFlip = false;
   // Directional shake: punches the camera *toward* the strike direction
   // before settling, on top of the legacy omnidirectional random shake.
   private shakeDirX = 0;
@@ -871,9 +865,7 @@ export class GameEngine {
     this.teleTargeting = null;
     this.slowmoT = 0; this.slowmoMode = null;
     this.hitstopT = 0; this.impactFlash = 0;
-    this.hitLabels = [];
-    this.comboCount = { p1: 0, p2: 0 };
-    this.comboCountT = { p1: 0, p2: 0 };
+    this.finisherT = 0; this.finisherDur = 0; this.finisherActive = false;
     this.shake = 0;
     this.shakeDirX = 0; this.shakeDirY = 0; this.shakeDirT = 0; this.shakeDirDur = 0;
     this.zoomPunch = 0; this.zoomPunchT = 0; this.zoomPunchDur = 0;
@@ -948,85 +940,46 @@ export class GameEngine {
     // KO: heaviest possible zoom punch + lateral kick toward the loser.
     const koDir = winnerId === "p1" ? 1 : -1;
     this.impact({ intensity: 1.0, dirX: koDir, dirY: -0.5, zoom: 0.09, flash: 0, hitstop: 0 });
+    // Finisher cinematic overlay — vignette + frame-step during the slow-mo window.
+    this.triggerFinisher();
+    // Oversized FX burst on the KO contact point.
+    const fxX = loser.x + koDir * 22;
+    const fxY = loser.y + FIGHTER_H * 0.4;
+    spawnFx(this.attackFx, "impactStar", fxX, fxY, { size: 52, life: 0.45, grow: 60, spin: 4, facing: koDir as 1 | -1 });
+    spawnFx(this.attackFx, "shockRing", loser.x, loser.y + FIGHTER_H * 0.5, { size: 24, life: 0.55, grow: 200, blend: "lighter" });
+    // Directional debris streaks along the impact vector
+    for (let i = 0; i < 22; i++) {
+      const spread = (Math.random() - 0.5) * 0.9;
+      const sp = 320 + Math.random() * 360;
+      this.particles.push({
+        x: fxX + (Math.random() - 0.5) * 10,
+        y: fxY + (Math.random() - 0.5) * 12,
+        vx: koDir * sp * (0.7 + Math.random() * 0.5) + spread * 80,
+        vy: -120 - Math.random() * 280 + spread * 60,
+        life: 0.55 + Math.random() * 0.25, maxLife: 0.8,
+        color: i % 3 === 0 ? "oklch(0.96 0.16 80)" : "oklch(0.55 0.04 60)",
+        size: 1.5 + Math.random() * 2.4,
+        grav: 0.8,
+      });
+    }
     // Finisher blood burst at the loser's torso — sells the kill.
     this.spawnBlood(loser.x, loser.y + FIGHTER_H * 0.45, koDir as 1 | -1, 1);
     this.spawnBlood(loser.x, loser.y + FIGHTER_H * 0.30, koDir as 1 | -1, 0.85);
     Sfx.play("boom", 0.9);
+    Sfx.play("heavy", 0.85); // low-pitched bass layer for finisher weight
+    Sfx.play("thud", 0.75);
   }
 
   /**
-   * AoS5-style hit confirmation: pop a punchy label near the impact and
-   * bump the attacker's combo counter. Pure presentation; no balance impact.
-   * Call EVERY time a strike connects — combo escalates automatically.
+   * Activate the finisher cinematic — vignette overlay + frame-step rendering
+   * during the slow-mo window already started by triggerKo. Pure presentation;
+   * the gameplay impact is handled by triggerKo.
    */
-  private spawnHitLabel(attacker: PlayerId, kind: "PUNCH" | "KICK" | "KNEE" | "CROWBAR" | "SLAM" | "SPECIAL", x: number, y: number, facing: 1 | -1) {
-    // bump combo
-    this.comboCount[attacker] = Math.min(99, this.comboCount[attacker] + 1);
-    this.comboCountT[attacker] = 1.4; // window resets on each new hit
-    const n = this.comboCount[attacker];
-    // Per-kind palette + slight scale to convey weight
-    const palette: Record<typeof kind, { color: string; scale: number }> = {
-      PUNCH:   { color: "oklch(0.97 0.16 85)",  scale: 1.0 },
-      KICK:    { color: "oklch(0.92 0.20 55)",  scale: 1.15 },
-      KNEE:    { color: "oklch(0.90 0.22 35)",  scale: 1.2 },
-      CROWBAR: { color: "oklch(0.95 0.18 75)",  scale: 1.35 },
-      SLAM:    { color: "oklch(0.92 0.22 25)",  scale: 1.3 },
-      SPECIAL: { color: "oklch(0.85 0.24 320)", scale: 1.25 },
-    };
-    const pal = palette[kind];
-    // Stagger labels so combo doesn't stack on top of itself
-    const jitterX = facing * (8 + (n % 3) * 6);
-    const jitterY = -((n % 3) * 14);
-    this.hitLabels.push({
-      x: x + jitterX, y: y - 18 + jitterY, text: kind + "!",
-      t: 0, life: 0.55,
-      vy: -110, color: pal.color, scale: pal.scale, italic: true,
-    });
-    // Combo counter — shows from x2 onward
-    if (n >= 2) {
-      const comboText = n >= 4 ? `x${n} COMBO!` : `x${n}`;
-      this.hitLabels.push({
-        x: x + jitterX * 0.5, y: y - 42 + jitterY,
-        text: comboText, t: 0, life: 0.7,
-        vy: -75, color: n >= 5 ? "oklch(0.95 0.24 25)" : "oklch(0.95 0.18 320)",
-        scale: 0.85 + Math.min(0.6, n * 0.07), italic: false,
-      });
-    }
-  }
-
-  private drawHitLabels(ctx: CanvasRenderingContext2D) {
-    if (this.hitLabels.length === 0) return;
-    ctx.save();
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    for (const hl of this.hitLabels) {
-      const u = hl.t / hl.life;
-      // Pop-in: snap up to 1.15x then settle to 1.0
-      const pop = u < 0.15 ? (u / 0.15) * 1.15 : (1.15 - 0.15 * Math.min(1, (u - 0.15) / 0.2));
-      const s = hl.scale * pop;
-      const alpha = u < 0.7 ? 1 : Math.max(0, 1 - (u - 0.7) / 0.3);
-      const fontPx = Math.round(22 * s);
-      ctx.font = `900 ${hl.italic ? "italic " : ""}${fontPx}px "Inter", "Arial Black", system-ui, sans-serif`;
-      // Heavy black outline for legibility over any background
-      ctx.lineJoin = "round";
-      ctx.miterLimit = 2;
-      ctx.lineWidth = Math.max(4, 5 * s);
-      ctx.strokeStyle = `oklch(0.12 0.02 60 / ${alpha})`;
-      ctx.fillStyle = hl.color.replace(")", ` / ${alpha})`).replace(" / ", " / ");
-      // Soft glow
-      ctx.shadowColor = hl.color;
-      ctx.shadowBlur = 14 * s;
-      // Slight italic-skew slant pop for impact words
-      ctx.translate(hl.x, hl.y);
-      if (hl.italic) ctx.transform(1, 0, -0.18, 1, 0, 0);
-      ctx.strokeText(hl.text, 0, 0);
-      ctx.shadowBlur = 0;
-      // Re-extract color with alpha (oklch / alpha syntax)
-      ctx.fillStyle = hl.color.replace(/\)$/, ` / ${alpha})`);
-      ctx.fillText(hl.text, 0, 0);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-    }
-    ctx.restore();
+  private triggerFinisher() {
+    if (this.finisherActive) return; // no stack/retrigger while active
+    this.finisherDur = 0.65;
+    this.finisherT = this.finisherDur;
+    this.finisherActive = true;
   }
 
   private makeFighter(id: PlayerId, x: number, skin: Skin): Fighter {
@@ -1088,7 +1041,15 @@ export class GameEngine {
       if (dt > 1 / 45) this.slowFrames++; else this.slowFrames = Math.max(0, this.slowFrames - 1);
       if (!this.lowPower && this.slowFrames > 30) this.lowPower = true;
       this.update(dt);
-      this.render();
+      // Stepped-frame rendering during finisher slow-mo: gameplay sim runs full
+      // rate, but the visible frame is held every other tick for cinematic weight.
+      // Disabled in lowPower so weak devices still get smooth motion.
+      let shouldRender = true;
+      if (this.finisherActive && !this.lowPower) {
+        this.finisherFrameSkipFlip = !this.finisherFrameSkipFlip;
+        shouldRender = this.finisherFrameSkipFlip;
+      }
+      if (shouldRender) this.render();
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
@@ -1853,9 +1814,13 @@ export class GameEngine {
           this.slowmoT = Math.max(this.slowmoT, 0.35);
           this.shake = Math.max(this.shake, 24);
           this.impactFlash = Math.max(this.impactFlash, 0.85);
-          // Bright impact star + sparks at contact
-          spawnFx(this.attackFx, "impactStar", pr.x, pr.y, { size: 40, life: 0.32, grow: 90, spin: 5 });
-          spawnFx(this.attackFx, "shockRing", pr.x, pr.y, { size: 22, life: 0.32, grow: 90, blend: "lighter" });
+          // Bright impact star + sparks at contact — biased outward along strike dir
+          // so the body silhouette stays readable through the hit.
+          const fxX = pr.x + dir * 18;
+          const fxY = pr.y - 14;
+          spawnFx(this.attackFx, "impactStar", fxX, fxY, { size: 30, life: 0.22, grow: 60, spin: 5, facing: dir });
+          spawnFx(this.attackFx, "shockRing", pr.x, pr.y + 4, { size: 18, life: 0.24, grow: 110, blend: "lighter" });
+          spawnFx(this.attackFx, "slashArc", pr.x - dir * 6, pr.y - 8, { size: 52, life: 0.16, facing: dir, rot: -0.25 * dir });
           for (let i = 0; i < 14; i++) {
             this.particles.push({
               x: pr.x + (Math.random() - 0.5) * 14, y: pr.y + (Math.random() - 0.5) * 10,
@@ -1865,7 +1830,6 @@ export class GameEngine {
             });
           }
           Sfx.play("thud", 0.95);
-          this.spawnHitLabel(pr.owner, "CROWBAR", pr.x, pr.y - 10, dir);
           // Crowbar drops at impact location and rests on the ground.
           pr.vx = 0; pr.vy = 0; pr.spin = 0;
           pr.y = GROUND_Y - 4;
@@ -1968,19 +1932,10 @@ export class GameEngine {
     }
     this.shockwaves = this.shockwaves.filter(s => s.life > 0);
     tickFx(this.attackFx, dt);
-    // Tick floating hit labels — drift up + fade.
-    for (const hl of this.hitLabels) {
-      hl.t += dt;
-      hl.y += hl.vy * dt;
-      hl.vy += -90 * dt; // mild upward ease-out (gravity-like deceleration of upward drift)
-    }
-    this.hitLabels = this.hitLabels.filter(h => h.t < h.life);
-    // Decay combo windows
-    for (const id of ["p1", "p2"] as PlayerId[]) {
-      if (this.comboCountT[id] > 0) {
-        this.comboCountT[id] = Math.max(0, this.comboCountT[id] - dt);
-        if (this.comboCountT[id] === 0) this.comboCount[id] = 0;
-      }
+    // Tick finisher cinematic timer
+    if (this.finisherT > 0) {
+      this.finisherT = Math.max(0, this.finisherT - dt);
+      if (this.finisherT === 0) this.finisherActive = false;
     }
     for (const b of this.beams) {
       if (freezeActive && b.owner !== this.timeFreezer) continue;
@@ -2972,27 +2927,32 @@ export class GameEngine {
             if (target.ragdollT < (f.comboKind === "kick" ? 0.28 : 0.18)) {
               target.ragdollT = f.comboKind === "kick" ? 0.28 : 0.18;
             }
-            const ix = target.x;
+            // Edge-biased FX placement — push outward along strike dir + slight lift
+            // so the hit reads at the contact point, not over the victim's torso.
+            const fx = f.facing as 1 | -1;
+            const ix = target.x - fx * 6;
             const iy = target.y + (f.comboKind === "knee" ? 50 : 36);
-            // Bright AoS5-style impact star + shock ring + slash arc
-            spawnFx(this.attackFx, "impactStar", ix, iy, {
-              size: f.comboKind === "kick" ? 50 : 40, life: 0.22,
-              spin: 6, grow: 30, facing: f.facing as 1 | -1,
+            const fxX = ix + fx * 20;
+            const fxY = iy - 8;
+            // Trim sizes so silhouettes stay readable; sharper alpha falloff via shorter life.
+            spawnFx(this.attackFx, "impactStar", fxX, fxY, {
+              size: f.comboKind === "kick" ? 30 : 24, life: 0.16,
+              spin: 6, grow: 22, facing: fx,
             });
-            spawnFx(this.attackFx, "shockRing", ix, iy, {
-              size: 16, life: 0.26, grow: 110, facing: f.facing as 1 | -1,
+            spawnFx(this.attackFx, "shockRing", ix, iy + 6, {
+              size: 12, life: 0.2, grow: 130, facing: fx,
             });
-            spawnFx(this.attackFx, "slashArc", ix - f.facing * 8, iy - 6, {
-              size: 46, life: 0.18, facing: f.facing as 1 | -1, rot: -0.3 * f.facing,
+            spawnFx(this.attackFx, "slashArc", ix - fx * 8, iy - 6, {
+              size: 40, life: 0.14, facing: fx, rot: -0.3 * fx,
             });
             this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 56, life: 0.22, maxLife: 0.22, color: "oklch(0.95 0.05 80)" });
-            this.burst(ix, iy, "oklch(0.95 0.06 80)", 14);
-            this.shake = Math.max(this.shake, f.comboKind === "kick" ? 14 : 11);
-            // Strong AoS5-style hitstop — freeze for ~6 frames so the strike lands
-            this.hitstopT = Math.max(this.hitstopT, f.comboKind === "kick" ? 0.12 : 0.10);
+            this.burst(fxX, fxY, "oklch(0.95 0.06 80)", 12);
+            // Directional camera kick toward strike vector (uses impact() funnel)
+            this.impact({ intensity: f.comboKind === "kick" ? 0.7 : 0.6, dirX: fx, dirY: -0.25, hitstop: 0.07, flash: 0.3 });
+            // Hitstop tier rebalance — heavy, not laggy.
+            this.hitstopT = Math.max(this.hitstopT, 0.07);
             this.impactFlash = Math.max(this.impactFlash, 0.42);
             Sfx.play("attackImpact", 1.0);
-            this.spawnHitLabel(f.id, f.comboKind === "kick" ? "KICK" : "KNEE", ix, iy - 8, f.facing as 1 | -1);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
@@ -3025,23 +2985,24 @@ export class GameEngine {
             // Stronger send-back so a jab visibly rocks the opponent (AoS5)
             target.vx += f.facing * 170;
             target.vy -= 70;
-            const ix = target.x;
+            const fx = f.facing as 1 | -1;
+            const ix = target.x - fx * 6;
             const iy = target.y + 40;
-            // Bright impact star + shock ring at contact — clearest possible "HIT"
-            spawnFx(this.attackFx, "impactStar", ix, iy, {
-              size: 34, life: 0.18, spin: 5, grow: 26, facing: f.facing as 1 | -1,
+            const fxX = ix + fx * 18;
+            const fxY = iy - 6;
+            // Edge-biased: spark frames the contact instead of covering the body.
+            spawnFx(this.attackFx, "impactStar", fxX, fxY, {
+              size: 22, life: 0.13, spin: 5, grow: 22, facing: fx,
             });
-            spawnFx(this.attackFx, "shockRing", ix, iy, {
-              size: 12, life: 0.2, grow: 80, facing: f.facing as 1 | -1,
+            spawnFx(this.attackFx, "shockRing", ix, iy + 4, {
+              size: 10, life: 0.16, grow: 100, facing: fx,
             });
             this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 38, life: 0.18, maxLife: 0.18, color: "oklch(0.95 0.04 80)" });
-            this.burst(ix, iy, "oklch(0.95 0.06 80)", 10);
-            this.shake = Math.max(this.shake, 9);
-            // Punchy 4-frame hitstop on every jab — the AoS5 secret sauce
-            this.hitstopT = Math.max(this.hitstopT, 0.075);
+            this.burst(fxX, fxY, "oklch(0.95 0.06 80)", 8);
+            // Light-tier impact via funnel (directional shake, smaller hitstop).
+            this.impact({ intensity: 0.4, dirX: fx, dirY: -0.2, hitstop: 0.045, flash: 0.28 });
             this.impactFlash = Math.max(this.impactFlash, 0.32);
             Sfx.play("punch", 0.9);
-            this.spawnHitLabel(f.id, "PUNCH", ix, iy - 6, f.facing as 1 | -1);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
@@ -5689,7 +5650,7 @@ export class GameEngine {
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
     // Sprite-based attack FX overlays (charge ring, slash arc, impact star, shockwave).
     drawFxPool(ctx, this.attackFx);
-    this.drawHitLabels(ctx);
+    
     // Web-swing tethers — silky double strand with glow + slight slack curve.
     for (const f of [this.p1, this.p2]) {
       if (!f.swing) continue;
@@ -6119,6 +6080,27 @@ export class GameEngine {
     // Impact flash vignette
     if (this.impactFlash > 0) {
       ctx.fillStyle = `oklch(0.99 0.05 80 / ${this.impactFlash * 0.35})`;
+      ctx.fillRect(0, 0, cw, ch);
+    }
+
+    // Finisher cinematic overlay — soft radial vignette + slight desat tint.
+    // Disabled in lowPower for mobile safety.
+    if (this.finisherActive && this.finisherDur > 0 && !this.lowPower) {
+      const u = 1 - this.finisherT / this.finisherDur; // 0 → 1
+      // easeInOutQuad bell — fades up to ~0.28 then back down
+      const bell = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+      const alpha = bell * 0.28;
+      const cx = cw / 2, cy = ch / 2;
+      const inner = Math.min(cw, ch) * 0.22;
+      const outer = Math.max(cw, ch) * 0.78;
+      const vg = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer);
+      vg.addColorStop(0, "rgba(0,0,0,0)");
+      vg.addColorStop(0.55, `rgba(8,4,12,${(alpha * 0.55).toFixed(3)})`);
+      vg.addColorStop(1, `rgba(0,0,0,${alpha.toFixed(3)})`);
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, cw, ch);
+      // Subtle warm desat tint (sepia-ish) — sells the "moment".
+      ctx.fillStyle = `rgba(40,18,8,${(alpha * 0.18).toFixed(3)})`;
       ctx.fillRect(0, 0, cw, ch);
     }
 
