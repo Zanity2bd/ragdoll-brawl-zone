@@ -7116,7 +7116,64 @@ function drawFist(ctx: CanvasRenderingContext2D, p: [number, number], color: str
   ctx.fill();
 }
 
-function drawBoot(ctx: CanvasRenderingContext2D, p: [number, number], facing: 1 | -1, color: string) {
+/**
+ * Butcher's iconic crowbar. Drawn around the local origin pointing along +x
+ * (the rotating projectile uses ctx.rotate before calling). Hooked claw at
+ * the head end, chisel taper at the heel — all in dark forged steel with a
+ * specular highlight stripe so it reads at small scale.
+ */
+function drawCrowbar(ctx: CanvasRenderingContext2D, x: number, y: number, facing: 1 | -1) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(facing, 1);
+  // Shaft
+  const shaftLen = 26;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "oklch(0.32 0.012 60)";
+  ctx.lineWidth = 3.2;
+  ctx.beginPath();
+  ctx.moveTo(-shaftLen * 0.55, 0);
+  ctx.lineTo(shaftLen * 0.45, 0);
+  ctx.stroke();
+  // Highlight stripe along the shaft
+  ctx.strokeStyle = "oklch(0.62 0.012 70)";
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(-shaftLen * 0.55 + 1, -0.9);
+  ctx.lineTo(shaftLen * 0.45 - 1, -0.9);
+  ctx.stroke();
+  // Hooked claw end (curves up and back to a forked tip)
+  ctx.strokeStyle = "oklch(0.28 0.012 60)";
+  ctx.lineWidth = 3.0;
+  ctx.beginPath();
+  ctx.moveTo(shaftLen * 0.45, 0);
+  ctx.quadraticCurveTo(shaftLen * 0.62, -1.5, shaftLen * 0.62, -5.5);
+  ctx.stroke();
+  // Forked nail-puller notch
+  ctx.fillStyle = "oklch(0.22 0.012 60)";
+  ctx.beginPath();
+  ctx.moveTo(shaftLen * 0.55, -5.5);
+  ctx.lineTo(shaftLen * 0.7, -5.5);
+  ctx.lineTo(shaftLen * 0.66, -3.2);
+  ctx.lineTo(shaftLen * 0.59, -3.2);
+  ctx.closePath();
+  ctx.fill();
+  // Chisel heel: short bend down at the grip end
+  ctx.strokeStyle = "oklch(0.28 0.012 60)";
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(-shaftLen * 0.55, 0);
+  ctx.lineTo(-shaftLen * 0.62, 2.2);
+  ctx.stroke();
+  // Grip wrap (subtle)
+  ctx.strokeStyle = "oklch(0.18 0.02 30)";
+  ctx.lineWidth = 3.6;
+  ctx.beginPath();
+  ctx.moveTo(-shaftLen * 0.45, 0);
+  ctx.lineTo(-shaftLen * 0.2, 0);
+  ctx.stroke();
+  ctx.restore();
+}
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.ellipse(p[0] + facing * 2, p[1] - 1, 5, 2.6, 0, 0, Math.PI * 2);
