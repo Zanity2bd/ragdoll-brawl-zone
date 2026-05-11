@@ -2453,6 +2453,7 @@ export class GameEngine {
               tgt.ragdollT = 0.6;
               tgt.ragdollEnergy = 1;
               tgt.ragdollAV = dir * 4;
+              applyHitReaction(tgt.rs, dir, -0.45, 0.6 + 0.3 * fall, 0, HR_LAUNCHER);
             }
             if (tgt.hp <= 0 && this.phase === "fight") { this.triggerKo(mb.owner); }
           }
