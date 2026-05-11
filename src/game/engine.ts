@@ -2991,6 +2991,7 @@ export class GameEngine {
             this.hitstopT = Math.max(this.hitstopT, f.comboKind === "kick" ? 0.12 : 0.10);
             this.impactFlash = Math.max(this.impactFlash, 0.42);
             Sfx.play("attackImpact", 1.0);
+            this.spawnHitLabel(f.id, f.comboKind === "kick" ? "KICK" : "KNEE", ix, iy - 8, f.facing as 1 | -1);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
