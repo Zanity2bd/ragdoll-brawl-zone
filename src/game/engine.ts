@@ -2895,27 +2895,32 @@ export class GameEngine {
             if (target.ragdollT < (f.comboKind === "kick" ? 0.28 : 0.18)) {
               target.ragdollT = f.comboKind === "kick" ? 0.28 : 0.18;
             }
-            const ix = target.x;
+            // Edge-biased FX placement — push outward along strike dir + slight lift
+            // so the hit reads at the contact point, not over the victim's torso.
+            const fx = f.facing as 1 | -1;
+            const ix = target.x - fx * 6;
             const iy = target.y + (f.comboKind === "knee" ? 50 : 36);
-            // Bright AoS5-style impact star + shock ring + slash arc
-            spawnFx(this.attackFx, "impactStar", ix, iy, {
-              size: f.comboKind === "kick" ? 50 : 40, life: 0.22,
-              spin: 6, grow: 30, facing: f.facing as 1 | -1,
+            const fxX = ix + fx * 20;
+            const fxY = iy - 8;
+            // Trim sizes so silhouettes stay readable; sharper alpha falloff via shorter life.
+            spawnFx(this.attackFx, "impactStar", fxX, fxY, {
+              size: f.comboKind === "kick" ? 30 : 24, life: 0.16,
+              spin: 6, grow: 22, facing: fx,
             });
-            spawnFx(this.attackFx, "shockRing", ix, iy, {
-              size: 16, life: 0.26, grow: 110, facing: f.facing as 1 | -1,
+            spawnFx(this.attackFx, "shockRing", ix, iy + 6, {
+              size: 12, life: 0.2, grow: 130, facing: fx,
             });
-            spawnFx(this.attackFx, "slashArc", ix - f.facing * 8, iy - 6, {
-              size: 46, life: 0.18, facing: f.facing as 1 | -1, rot: -0.3 * f.facing,
+            spawnFx(this.attackFx, "slashArc", ix - fx * 8, iy - 6, {
+              size: 40, life: 0.14, facing: fx, rot: -0.3 * fx,
             });
             this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 56, life: 0.22, maxLife: 0.22, color: "oklch(0.95 0.05 80)" });
-            this.burst(ix, iy, "oklch(0.95 0.06 80)", 14);
-            this.shake = Math.max(this.shake, f.comboKind === "kick" ? 14 : 11);
-            // Strong AoS5-style hitstop — freeze for ~6 frames so the strike lands
-            this.hitstopT = Math.max(this.hitstopT, f.comboKind === "kick" ? 0.12 : 0.10);
+            this.burst(fxX, fxY, "oklch(0.95 0.06 80)", 12);
+            // Directional camera kick toward strike vector (uses impact() funnel)
+            this.impact({ intensity: f.comboKind === "kick" ? 0.7 : 0.6, dirX: fx, dirY: -0.25, hitstop: 0.07, flash: 0.3 });
+            // Hitstop tier rebalance — heavy, not laggy.
+            this.hitstopT = Math.max(this.hitstopT, 0.07);
             this.impactFlash = Math.max(this.impactFlash, 0.42);
             Sfx.play("attackImpact", 1.0);
-            this.spawnHitLabel(f.id, f.comboKind === "kick" ? "KICK" : "KNEE", ix, iy - 8, f.facing as 1 | -1);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
