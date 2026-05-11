@@ -1006,6 +1006,12 @@ export class GameEngine {
     return {
       id, x, y: GROUND_Y - FIGHTER_H,
       vx: 0, vy: 0, facing: 1, facingT: 1,
+      facingPersistT: 0, facingLockT: 0, facingVel: 0, lastVx: 0,
+      sLean: { p: 0, v: 0 }, sShoulderRoll: { p: 0, v: 0 }, sHead: { p: 0, v: 0 },
+      sHandLX: { p: 0, v: 0 }, sHandLY: { p: 0, v: 0 },
+      sHandRX: { p: 0, v: 0 }, sHandRY: { p: 0, v: 0 },
+      sFootLX: { p: 0, v: 0 }, sFootLY: { p: 0, v: 0 },
+      sFootRX: { p: 0, v: 0 }, sFootRY: { p: 0, v: 0 },
       onGround: true, hp: 100, hitFlash: 0,
       fireCd: 0, teleCd: 0, teleporting: false,
       name: skin.name,
