@@ -6816,6 +6816,18 @@ export class GameEngine {
       drawFist(ctx, pose.handL, skin.gloves);
       drawFist(ctx, pose.handR, skin.gloves);
     }
+    // Butcher's iconic crowbar — held in his right hand whenever it isn't
+    // mid-flight or lying on the ground.
+    if (skin.id === "butcher" && !f.crowbarThrown) {
+      const hx = pose.handR[0];
+      const hy = pose.handR[1];
+      // Hangs slightly forward and down from the grip, scaled by current facing
+      ctx.save();
+      ctx.translate(hx, hy + 2);
+      ctx.rotate(0.55);
+      drawCrowbar(ctx, 0, 0, 1);
+      ctx.restore();
+    }
 
     // Torso (uses sized torsoW)
     ctx.strokeStyle = bodyColor;
