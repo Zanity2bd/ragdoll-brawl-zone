@@ -5360,6 +5360,21 @@ export class GameEngine {
       base.armL[4] += renderFacing * 4 * squash;
       base.armR[4] += renderFacing * 4 * squash;
     }
+    // Spring-damped secondary motion: trailing inertia on hands/feet/lean,
+    // airborne float, soft foot planting, elbow/knee arc recompute. Skipped
+    // for ragdoll/downed/getup branches above (those returned early).
+    const retreating = Math.sign(f.vx) === -f.facing && Math.abs(f.vx) > 60;
+    applySpringPolish(base, {
+      sLean: f.sLean, sShoulderRoll: f.sShoulderRoll, sHead: f.sHead,
+      sHandLX: f.sHandLX, sHandLY: f.sHandLY, sHandRX: f.sHandRX, sHandRY: f.sHandRY,
+      sFootLX: f.sFootLX, sFootLY: f.sFootLY, sFootRX: f.sFootRX, sFootRY: f.sFootRY,
+    }, this.lastDt, {
+      onGround: f.onGround && !f.flying,
+      facing: renderFacing,
+      vx: f.vx, vy: f.vy,
+      retreating,
+      lowPower: this.lowPower,
+    });
     return applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying);
   }
 
