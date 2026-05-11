@@ -190,49 +190,67 @@ export function applyHitReaction(
   // Snap tension partially down at moment of impact (sudden go-limp).
   rs.muscleTension = Math.min(rs.muscleTension, rs.targetTension * 0.5 + 0.3);
 
-  // Torso linear impulse (visual additive).
-  const impMag = 60 + 220 * p;
-  rs.bodyVelX += dirX * impMag * 0.12;
-  rs.bodyVelY += dirY * impMag * 0.10 - p * 18;
+  // Torso linear impulse (visual additive). Sharper, more violent acceleration.
+  const impMag = 90 + 320 * p;
+  const airborne = (flags & HR_AIRBORNE) !== 0;
+  const launcher = (flags & HR_LAUNCHER) !== 0;
+  rs.bodyVelX += dirX * impMag * 0.18;
+  rs.bodyVelY += dirY * impMag * 0.13 - p * 26;
 
-  // Torso angular impulse from r×F (rHit ≈ chest height ≈ -0.4, vertical).
-  const torque = (dirX * 0.4 - dirY * 0.05) * (5 + 8 * p);
+  // Torso angular impulse from r×F. Significantly stronger torque so the
+  // shoulder leads visibly. Asymmetric multiplier from variantTwist breaks
+  // mirror symmetry between similar hits.
+  const twistBias = 1 + rs.variantTwist * 0.25; // 0.75 / 1.0 / 1.25
+  const torque = (dirX * 0.55 - dirY * 0.05) * (9 + 16 * p) * twistBias;
   rs.torsoAV += torque;
+  // Direct shoulder-roll bias via headLag opposite sign — sells the lead.
+  // (handled below).
 
-  // Schedule hip/leg propagation — torso first, hips ~22ms, legs ~32ms.
-  // Find empty slot.
+  // Propagation: torso → hips (delayed) → legs (more delayed). Bigger gap so
+  // hips visibly drag behind torso. Hips also receive smaller magnitude so
+  // spine bend reads.
   for (let i = 0; i < PROP_SLOTS; i++) {
     const o = i * PROP_STRIDE;
     if (rs.propRing[o] <= 0) {
-      rs.propRing[o] = 0.022;          // hip delay
-      rs.propRing[o + 1] = torque * 0.65;
+      rs.propRing[o] = 0.045;          // hip delay (was 22ms → 45ms)
+      rs.propRing[o + 1] = torque * 0.45; // less than torso → spine bend
       rs.propRing[o + 2] = 0;
-      // legs in next slot if present
       const ni = (i + 1) % PROP_SLOTS;
       const no = ni * PROP_STRIDE;
       if (rs.propRing[no] <= 0) {
-        rs.propRing[no] = 0.034;
+        rs.propRing[no] = 0.075;        // legs further behind (was 34ms → 75ms)
         rs.propRing[no + 1] = 0;
-        rs.propRing[no + 2] = torque * 0.35;
+        rs.propRing[no + 2] = torque * 0.55;
       }
       break;
     }
   }
 
-  // Head lag — opposite to body movement (whiplash).
-  rs.headLagAV -= dirX * (1.8 + 2.6 * p);
-  if (height > 0) rs.headLagAV -= 1.5 * p; // upcup: bigger backward snap
+  // Head lag — last to react (whiplash). Stronger + asymmetric.
+  rs.headLagAV -= dirX * (3.2 + 4.8 * p) * twistBias;
+  if (height > 0) rs.headLagAV -= 2.6 * p;
 
-  // Per-limb angular kick + position kick. Counter-swing multiplier.
+  // Per-limb angular kick + position kick. Asymmetric: lead side gets bigger
+  // kick than trail; arms react before legs (handled by wider whip range).
   const sref2 = { s: rs.seed };
   for (let i = 0; i < LIMB_COUNT; i++) {
     const o = i * LIMB_STRIDE;
     const counter = (i & 1) ? -1 : 1;
-    const whip = srand(sref2, 0.7, 1.3);
-    const archBias = rs.variantArch * 0.15;
-    rs.limb[o + 1] += (dirX * counter + archBias) * (3.5 + 5 * p) * whip;
-    rs.limb[o + 2] += dirX * (4 + 8 * p) * whip * 0.4;
-    rs.limb[o + 3] += dirY * (3 + 6 * p) * whip * 0.3;
+    const whip = srand(sref2, 0.55, 1.55); // wider asymmetry
+    const archBias = rs.variantArch * 0.22;
+    // Arms (i<4) react bigger than legs (i>=4); legs delayed via propRing.
+    const limbScale = i < 4 ? 1.4 : 0.7;
+    // Lead-side amplification: limbs on the side the body is moving toward.
+    const leadAmp = ((i & 2) ? 1 : -1) * dirX > 0 ? 1.35 : 0.75;
+    rs.limb[o + 1] += (dirX * counter + archBias) * (5 + 8 * p) * whip * limbScale * leadAmp;
+    rs.limb[o + 2] += dirX * (6 + 12 * p) * whip * 0.55 * limbScale;
+    rs.limb[o + 3] += dirY * (4 + 9 * p) * whip * 0.45 * limbScale;
+  }
+  // Airborne: add off-axis spin & uneven rotation so bodies tumble, not float.
+  if (airborne || launcher) {
+    rs.torsoAV += (rs.variantTwist || 1) * (4 + 6 * p);
+    rs.hipAV   -= (rs.variantTwist || 1) * (2 + 3 * p); // counter-rotate hips
+    rs.headLagAV += (rs.variantArch || 1) * 1.5 * p;
   }
   rs.seed = sref2.s;
 
