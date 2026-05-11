@@ -1029,6 +1029,7 @@ export class GameEngine {
     ctx.restore();
   }
 
+  private makeFighter(id: PlayerId, x: number, skin: Skin): Fighter {
     const move = MOVES[skin.id];
     const canFly = skin.id === "homelander" || skin.id === "superman";
     return {
