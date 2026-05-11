@@ -2705,9 +2705,10 @@ export class GameEngine {
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
       // Angular: torque from horizontal speed; damp gradually
-      const targetAV = Math.sign(f.vx) * Math.min(12, Math.abs(f.vx) * 0.02);
-      f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 2);
-      f.ragdollAV *= Math.pow(0.94, dt * 60);
+      // Bigger torque target + slower decay → body keeps spinning, momentum sells weight.
+      const targetAV = Math.sign(f.vx) * Math.min(18, Math.abs(f.vx) * 0.035);
+      f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 1.4);
+      f.ragdollAV *= Math.pow(0.965, dt * 60);
       f.ragdollAng += f.ragdollAV * dt;
       // Per-limb rotational lag — each limb chases ragdollAV with its own time
       // constant so head/arms/legs flop with offset phase, never lockstep.
