@@ -1892,6 +1892,20 @@ export class GameEngine {
     }
     this.shockwaves = this.shockwaves.filter(s => s.life > 0);
     tickFx(this.attackFx, dt);
+    // Tick floating hit labels — drift up + fade.
+    for (const hl of this.hitLabels) {
+      hl.t += dt;
+      hl.y += hl.vy * dt;
+      hl.vy += -90 * dt; // mild upward ease-out (gravity-like deceleration of upward drift)
+    }
+    this.hitLabels = this.hitLabels.filter(h => h.t < h.life);
+    // Decay combo windows
+    for (const id of ["p1", "p2"] as PlayerId[]) {
+      if (this.comboCountT[id] > 0) {
+        this.comboCountT[id] = Math.max(0, this.comboCountT[id] - dt);
+        if (this.comboCountT[id] === 0) this.comboCount[id] = 0;
+      }
+    }
     for (const b of this.beams) {
       if (freezeActive && b.owner !== this.timeFreezer) continue;
       b.life -= dt;
