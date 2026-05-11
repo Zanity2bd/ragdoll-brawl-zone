@@ -5279,7 +5279,7 @@ export class GameEngine {
       const [aLx, aLy] = sw(f.armLagL, 7);
       const [aRx, aRy] = sw(f.armLagR, 7);
       const [lx, ly] = sw(f.legLag, 5);
-      return {
+      const legacyPose: Pose = {
         ...p,
         headOffsetY: p.headOffsetY + hy,
         handL: [p.handL[0] + aLx, p.handL[1] + aLy],
@@ -5293,6 +5293,10 @@ export class GameEngine {
         // Override lean with physical body angle for stable visual; add tiny head bias.
         lean: f.ragdollAng + hx * 0.01,
       };
+      // Layer the new spring/momentum/anticipation/breath system ON TOP of the
+      // legacy tumble pose so cinematic ragdoll polish is visible during the
+      // actual hit reactions (this is when it matters most).
+      return applyRagdollPose(legacyPose, f.rs, this.lowPower, this.slowmoT > 0 ? 0.18 : 1);
     }
     if (f.downedT > 0) {
       const targetAng = f.ragdollAng >= 0 ? Math.PI / 2 : -Math.PI / 2;
