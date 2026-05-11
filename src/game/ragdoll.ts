@@ -190,49 +190,67 @@ export function applyHitReaction(
   // Snap tension partially down at moment of impact (sudden go-limp).
   rs.muscleTension = Math.min(rs.muscleTension, rs.targetTension * 0.5 + 0.3);
 
-  // Torso linear impulse (visual additive).
-  const impMag = 60 + 220 * p;
-  rs.bodyVelX += dirX * impMag * 0.12;
-  rs.bodyVelY += dirY * impMag * 0.10 - p * 18;
+  // Torso linear impulse (visual additive). Sharper, more violent acceleration.
+  const impMag = 90 + 320 * p;
+  const airborne = (flags & HR_AIRBORNE) !== 0;
+  const launcher = (flags & HR_LAUNCHER) !== 0;
+  rs.bodyVelX += dirX * impMag * 0.18;
+  rs.bodyVelY += dirY * impMag * 0.13 - p * 26;
 
-  // Torso angular impulse from r×F (rHit ≈ chest height ≈ -0.4, vertical).
-  const torque = (dirX * 0.4 - dirY * 0.05) * (5 + 8 * p);
+  // Torso angular impulse from r×F. Significantly stronger torque so the
+  // shoulder leads visibly. Asymmetric multiplier from variantTwist breaks
+  // mirror symmetry between similar hits.
+  const twistBias = 1 + rs.variantTwist * 0.25; // 0.75 / 1.0 / 1.25
+  const torque = (dirX * 0.55 - dirY * 0.05) * (9 + 16 * p) * twistBias;
   rs.torsoAV += torque;
+  // Direct shoulder-roll bias via headLag opposite sign — sells the lead.
+  // (handled below).
 
-  // Schedule hip/leg propagation — torso first, hips ~22ms, legs ~32ms.
-  // Find empty slot.
+  // Propagation: torso → hips (delayed) → legs (more delayed). Bigger gap so
+  // hips visibly drag behind torso. Hips also receive smaller magnitude so
+  // spine bend reads.
   for (let i = 0; i < PROP_SLOTS; i++) {
     const o = i * PROP_STRIDE;
     if (rs.propRing[o] <= 0) {
-      rs.propRing[o] = 0.022;          // hip delay
-      rs.propRing[o + 1] = torque * 0.65;
+      rs.propRing[o] = 0.045;          // hip delay (was 22ms → 45ms)
+      rs.propRing[o + 1] = torque * 0.45; // less than torso → spine bend
       rs.propRing[o + 2] = 0;
-      // legs in next slot if present
       const ni = (i + 1) % PROP_SLOTS;
       const no = ni * PROP_STRIDE;
       if (rs.propRing[no] <= 0) {
-        rs.propRing[no] = 0.034;
+        rs.propRing[no] = 0.075;        // legs further behind (was 34ms → 75ms)
         rs.propRing[no + 1] = 0;
-        rs.propRing[no + 2] = torque * 0.35;
+        rs.propRing[no + 2] = torque * 0.55;
       }
       break;
     }
   }
 
-  // Head lag — opposite to body movement (whiplash).
-  rs.headLagAV -= dirX * (1.8 + 2.6 * p);
-  if (height > 0) rs.headLagAV -= 1.5 * p; // upcup: bigger backward snap
+  // Head lag — last to react (whiplash). Stronger + asymmetric.
+  rs.headLagAV -= dirX * (3.2 + 4.8 * p) * twistBias;
+  if (height > 0) rs.headLagAV -= 2.6 * p;
 
-  // Per-limb angular kick + position kick. Counter-swing multiplier.
+  // Per-limb angular kick + position kick. Asymmetric: lead side gets bigger
+  // kick than trail; arms react before legs (handled by wider whip range).
   const sref2 = { s: rs.seed };
   for (let i = 0; i < LIMB_COUNT; i++) {
     const o = i * LIMB_STRIDE;
     const counter = (i & 1) ? -1 : 1;
-    const whip = srand(sref2, 0.7, 1.3);
-    const archBias = rs.variantArch * 0.15;
-    rs.limb[o + 1] += (dirX * counter + archBias) * (3.5 + 5 * p) * whip;
-    rs.limb[o + 2] += dirX * (4 + 8 * p) * whip * 0.4;
-    rs.limb[o + 3] += dirY * (3 + 6 * p) * whip * 0.3;
+    const whip = srand(sref2, 0.55, 1.55); // wider asymmetry
+    const archBias = rs.variantArch * 0.22;
+    // Arms (i<4) react bigger than legs (i>=4); legs delayed via propRing.
+    const limbScale = i < 4 ? 1.4 : 0.7;
+    // Lead-side amplification: limbs on the side the body is moving toward.
+    const leadAmp = ((i & 2) ? 1 : -1) * dirX > 0 ? 1.35 : 0.75;
+    rs.limb[o + 1] += (dirX * counter + archBias) * (5 + 8 * p) * whip * limbScale * leadAmp;
+    rs.limb[o + 2] += dirX * (6 + 12 * p) * whip * 0.55 * limbScale;
+    rs.limb[o + 3] += dirY * (4 + 9 * p) * whip * 0.45 * limbScale;
+  }
+  // Airborne: add off-axis spin & uneven rotation so bodies tumble, not float.
+  if (airborne || launcher) {
+    rs.torsoAV += (rs.variantTwist || 1) * (4 + 6 * p);
+    rs.hipAV   -= (rs.variantTwist || 1) * (2 + 3 * p); // counter-rotate hips
+    rs.headLagAV += (rs.variantArch || 1) * 1.5 * p;
   }
   rs.seed = sref2.s;
 
@@ -335,14 +353,15 @@ export function stepRagdoll(
   // Tension-derived spring constants.
   const tens = rs.muscleTension;
   // Critically damped baseline; lower tension = looser & more whippy.
-  const kBody = 80 + 220 * tens;
-  const dBody = 2 * Math.sqrt(kBody) * (0.55 + 0.45 * tens);
-  const kHead = 60 + 180 * tens;
-  const dHead = 2 * Math.sqrt(kHead) * (0.5 + 0.5 * tens);
-  const kLimbAng = 40 + 160 * tens;
-  const dLimbAng = 2 * Math.sqrt(kLimbAng) * (0.55 + 0.45 * tens);
-  const kLimbPos = 90 + 220 * tens;
-  const dLimbPos = 2 * Math.sqrt(kLimbPos) * (0.55 + 0.45 * tens);
+  // Reduced base stiffness so impulses ride longer (momentum carry).
+  const kBody = 55 + 180 * tens;
+  const dBody = 2 * Math.sqrt(kBody) * (0.42 + 0.5 * tens);
+  const kHead = 38 + 140 * tens;
+  const dHead = 2 * Math.sqrt(kHead) * (0.38 + 0.5 * tens);
+  const kLimbAng = 28 + 130 * tens;
+  const dLimbAng = 2 * Math.sqrt(kLimbAng) * (0.45 + 0.5 * tens);
+  const kLimbPos = 70 + 200 * tens;
+  const dLimbPos = 2 * Math.sqrt(kLimbPos) * (0.5 + 0.5 * tens);
 
   // Body friction (only meaningful when not airborne).
   const groundFriction = env.airborne ? 1 : Math.pow(0.55 + 0.4 * tens, h * 60);
@@ -354,49 +373,43 @@ export function stepRagdoll(
     // Torso angular spring → 0.
     rs.torsoAV += (-kBody * rs.torsoAng - dBody * rs.torsoAV) * h;
     rs.torsoAng += rs.torsoAV * h;
-    // Hip angular spring → torso (so chain doesn't drift independently).
-    const hipTarget = rs.torsoAng * 0.7;
-    rs.hipAV += (-kBody * (rs.hipAng - hipTarget) - dBody * rs.hipAV) * h;
+    // Hip follows torso loosely (factor 0.4 vs 0.7) and with weaker spring →
+    // visible spine bend & delayed hip follow-through.
+    const hipTarget = rs.torsoAng * 0.4;
+    rs.hipAV += (-kBody * 0.55 * (rs.hipAng - hipTarget) - dBody * 0.7 * rs.hipAV) * h;
     rs.hipAng += rs.hipAV * h;
-    // Head lag → 0 (lag spring; lower tension = bigger overshoot).
     rs.headLagAV += (-kHead * rs.headLagAng - dHead * rs.headLagAV) * h;
     rs.headLagAng += rs.headLagAV * h;
 
-    // Body offset spring → 0.
-    rs.bodyVelX += (-kBody * 0.4 * rs.bodyOffX - dBody * 0.6 * rs.bodyVelX) * h;
-    rs.bodyVelY += (-kBody * 0.4 * rs.bodyOffY - dBody * 0.6 * rs.bodyVelY) * h;
-    if (env.airborne) rs.bodyVelY += 200 * h * (1 - tens * 0.5); // mild gravity bias when limp airborne
+    rs.bodyVelX += (-kBody * 0.32 * rs.bodyOffX - dBody * 0.5 * rs.bodyVelX) * h;
+    rs.bodyVelY += (-kBody * 0.32 * rs.bodyOffY - dBody * 0.5 * rs.bodyVelY) * h;
+    if (env.airborne) rs.bodyVelY += 240 * h * (1 - tens * 0.5);
     rs.bodyOffX += rs.bodyVelX * h;
     rs.bodyOffY += rs.bodyVelY * h;
     rs.bodyVelX *= groundFriction;
 
-    // Limb integration.
     for (let i = 0; i < limbN; i++) {
       const o = i * LIMB_STRIDE;
-      // Angular spring → 0 (rest pose).
       rs.limb[o + 1] += (-kLimbAng * rs.limb[o] - dLimbAng * rs.limb[o + 1]) * h;
       rs.limb[o] += rs.limb[o + 1] * h;
       if (!skipPosSpring) {
-        // Pos offset springs (X = limb[o+2], we reuse limb[o+1] for both
-        // angVel and posVelX/Y by storing posVel implicitly via decay — to
-        // stay allocation-free without growing the array we use a simple
-        // exponential pull on offsets here).
-        rs.limb[o + 2] *= Math.pow(0.6, h * 60 * (0.5 + 0.5 * tens));
-        rs.limb[o + 3] *= Math.pow(0.6, h * 60 * (0.5 + 0.5 * tens));
+        rs.limb[o + 2] *= Math.pow(0.72, h * 60 * (0.4 + 0.6 * tens));
+        rs.limb[o + 3] *= Math.pow(0.72, h * 60 * (0.4 + 0.6 * tens));
       }
     }
   }
 
-  // Stability clamps (post-substep).
-  // Torso/hip silhouette.
+  // Stability clamps (post-substep). Wider torso/hip diff cap → bigger spine bend.
   const diff = rs.torsoAng - rs.hipAng;
-  if (diff > 0.5) rs.hipAng = rs.torsoAng - 0.5;
-  else if (diff < -0.5) rs.hipAng = rs.torsoAng + 0.5;
-  if (rs.torsoAV > 14) rs.torsoAV = 14; else if (rs.torsoAV < -14) rs.torsoAV = -14;
-  if (rs.hipAV > 14) rs.hipAV = 14; else if (rs.hipAV < -14) rs.hipAV = -14;
-  if (rs.headLagAng > 0.4) rs.headLagAng = 0.4; else if (rs.headLagAng < -0.4) rs.headLagAng = -0.4;
-  if (rs.bodyOffX > 12) rs.bodyOffX = 12; else if (rs.bodyOffX < -12) rs.bodyOffX = -12;
-  if (rs.bodyOffY > 12) rs.bodyOffY = 12; else if (rs.bodyOffY < -12) rs.bodyOffY = -12;
+  if (diff > 0.95) rs.hipAng = rs.torsoAng - 0.95;
+  else if (diff < -0.95) rs.hipAng = rs.torsoAng + 0.95;
+  if (rs.torsoAV > 22) rs.torsoAV = 22; else if (rs.torsoAV < -22) rs.torsoAV = -22;
+  if (rs.hipAV > 22) rs.hipAV = 22; else if (rs.hipAV < -22) rs.hipAV = -22;
+  if (rs.headLagAng > 0.7) rs.headLagAng = 0.7; else if (rs.headLagAng < -0.7) rs.headLagAng = -0.7;
+  if (rs.torsoAng > 1.4) rs.torsoAng = 1.4; else if (rs.torsoAng < -1.4) rs.torsoAng = -1.4;
+  if (rs.hipAng > 1.2) rs.hipAng = 1.2; else if (rs.hipAng < -1.2) rs.hipAng = -1.2;
+  if (rs.bodyOffX > 18) rs.bodyOffX = 18; else if (rs.bodyOffX < -18) rs.bodyOffX = -18;
+  if (rs.bodyOffY > 18) rs.bodyOffY = 18; else if (rs.bodyOffY < -18) rs.bodyOffY = -18;
   for (let i = 0; i < LIMB_COUNT; i++) {
     const o = i * LIMB_STRIDE;
     if (rs.limb[o] > 1.2) rs.limb[o] = 1.2; else if (rs.limb[o] < -1.2) rs.limb[o] = -1.2;
@@ -462,40 +475,37 @@ export function applyRagdollPose(
   if (rs.incomingImpactT > 0 && rs.incomingImpactStrength > 0) {
     const a = Math.min(1, rs.incomingImpactT / 0.05) * rs.incomingImpactStrength;
     // Brace inward (opposite expected travel) → body coils.
-    antiX = -rs.incomingImpactDir * 2.4 * a;
-    antiY = -1.4 * a;
-    antiTilt = -rs.incomingImpactDir * 0.05 * a;
+    // Stronger inward brace: shoulders compress, knees brace, foot plants.
+    antiX = -rs.incomingImpactDir * 4.2 * a;
+    antiY = -2.4 * a;
+    antiTilt = -rs.incomingImpactDir * 0.10 * a;
   }
 
-  // Recovery breathing: gentle chest rise during low-tension settle (KO).
-  // Scales to 0 as tension recovers.
   let breathY = 0;
   const breathAmt = Math.max(0, 1 - rs.muscleTension) * (1 - Math.min(1, rs.recoveryT));
   if (breathAmt > 0.05) {
     breathY = Math.sin(rs.breathPhase * 2.4) * 0.8 * breathAmt;
   }
 
-  const bx = (rs.bodyOffX + antiX) * holdScale * slowMoScale;
-  const by = (rs.bodyOffY + antiY + breathY) * holdScale * slowMoScale;
-  const tilt = (rs.torsoAng + antiTilt) * holdScale * slowMoScale;
-  const hipTilt = rs.hipAng * holdScale * slowMoScale;
-  const headExtra = rs.headLagAng * holdScale * slowMoScale * 4;
+  // Visible amplitude — bigger silhouettes for mobile readability.
+  const bx = (rs.bodyOffX + antiX) * holdScale * slowMoScale * 1.35;
+  const by = (rs.bodyOffY + antiY + breathY) * holdScale * slowMoScale * 1.25;
+  const tilt = (rs.torsoAng + antiTilt) * holdScale * slowMoScale * 1.6;
+  const hipTilt = rs.hipAng * holdScale * slowMoScale * 1.3;
+  const headExtra = rs.headLagAng * holdScale * slowMoScale * 6;
 
-  // Spine flex / shoulder-hip counterbalance: when torso and hip diverge, add
-  // a small shoulder-roll correction so silhouette reads as one fluid spine
-  // rather than two stiff blocks.
-  const spineFlex = (tilt - hipTilt) * 0.5;
+  // Spine flex — full diagonal silhouette: shoulders one way, hips the other.
+  const spineFlex = (tilt - hipTilt) * 0.85;
 
-  // Motion clarity bias: amplify the limb leading the motion direction,
-  // damp the trailing one. Keeps silhouette readable in fast multi-hits.
+  // Motion clarity bias: stronger asymmetry between lead and trail arms.
   const lead = bx >= 0 ? 1 : -1;
-  const leadBoost = 1.15;
-  const trailDamp = 0.85;
+  const leadBoost = 1.35;
+  const trailDamp = 0.65;
   const armLBoost = lead < 0 ? leadBoost : trailDamp;
   const armRBoost = lead > 0 ? leadBoost : trailDamp;
 
   const L = rs.limb;
-  const ls = lowPower ? 0.5 : 1;
+  const ls = lowPower ? 0.6 : 1.2; // overall limb amplification
   const lsArmL = ls * armLBoost;
   const lsArmR = ls * armRBoost;
 
@@ -508,35 +518,34 @@ export function applyRagdollPose(
   const lRx = L[6 * LIMB_STRIDE + 2] * ls, lRy = L[6 * LIMB_STRIDE + 3] * ls;
   const fRx = L[7 * LIMB_STRIDE + 2] * ls, fRy = L[7 * LIMB_STRIDE + 3] * ls;
 
-  // Final epsilon filter on accumulated tiny offsets (anti-jitter polish).
   const e = (v: number) => (Math.abs(v) < 0.06 ? 0 : v);
 
   return {
     headOffsetY: p.headOffsetY + e(by * 0.6 + headExtra),
-    shoulderY: p.shoulderY + e(by * 0.8),
-    hipY: p.hipY + e(by * 0.4),
+    shoulderY: p.shoulderY + e(by * 0.9),
+    hipY: p.hipY + e(by * 0.35),
     legL: [
-      p.legL[0] + e(bx * 0.4), p.legL[1] + e(by * 0.4),
-      p.legL[2] + e(bx * 0.4 + lLx), p.legL[3] + e(by * 0.4 + lLy),
+      p.legL[0] + e(bx * 0.3), p.legL[1] + e(by * 0.35),
+      p.legL[2] + e(bx * 0.35 + lLx), p.legL[3] + e(by * 0.35 + lLy),
       p.legL[4] + e(fLx), p.legL[5] + e(fLy),
     ],
     legR: [
-      p.legR[0] + e(bx * 0.4), p.legR[1] + e(by * 0.4),
-      p.legR[2] + e(bx * 0.4 + lRx), p.legR[3] + e(by * 0.4 + lRy),
+      p.legR[0] + e(bx * 0.3), p.legR[1] + e(by * 0.35),
+      p.legR[2] + e(bx * 0.35 + lRx), p.legR[3] + e(by * 0.35 + lRy),
       p.legR[4] + e(fRx), p.legR[5] + e(fRy),
     ],
     armL: [
-      p.armL[0] + e(bx * 0.8), p.armL[1] + e(by * 0.8),
-      p.armL[2] + e(bx * 0.8 + aLx * 0.6), p.armL[3] + e(by * 0.8 + aLy * 0.6),
-      p.armL[4] + e(bx * 0.8 + hLx), p.armL[5] + e(by * 0.8 + hLy),
+      p.armL[0] + e(bx * 1.0), p.armL[1] + e(by * 0.9),
+      p.armL[2] + e(bx * 1.05 + aLx * 0.7), p.armL[3] + e(by * 0.9 + aLy * 0.7),
+      p.armL[4] + e(bx * 1.1 + hLx), p.armL[5] + e(by * 0.9 + hLy),
     ],
     armR: [
-      p.armR[0] + e(bx * 0.8), p.armR[1] + e(by * 0.8),
-      p.armR[2] + e(bx * 0.8 + aRx * 0.6), p.armR[3] + e(by * 0.8 + aRy * 0.6),
-      p.armR[4] + e(bx * 0.8 + hRx), p.armR[5] + e(by * 0.8 + hRy),
+      p.armR[0] + e(bx * 1.0), p.armR[1] + e(by * 0.9),
+      p.armR[2] + e(bx * 1.05 + aRx * 0.7), p.armR[3] + e(by * 0.9 + aRy * 0.7),
+      p.armR[4] + e(bx * 1.1 + hRx), p.armR[5] + e(by * 0.9 + hRy),
     ],
-    handL: [p.handL[0] + e(bx * 0.8 + hLx), p.handL[1] + e(by * 0.8 + hLy)],
-    handR: [p.handR[0] + e(bx * 0.8 + hRx), p.handR[1] + e(by * 0.8 + hRy)],
+    handL: [p.handL[0] + e(bx * 1.1 + hLx), p.handL[1] + e(by * 0.9 + hLy)],
+    handR: [p.handR[0] + e(bx * 1.1 + hRx), p.handR[1] + e(by * 0.9 + hRy)],
     footL: [p.footL[0] + e(fLx), p.footL[1] + e(fLy)],
     footR: [p.footR[0] + e(fRx), p.footR[1] + e(fRy)],
     lean: p.lean + e(tilt),
