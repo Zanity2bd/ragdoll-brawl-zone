@@ -584,6 +584,7 @@ export class GameEngine {
   private raf = 0;
   private running = false;
   private elapsed = 0;
+  private lastDt = 1 / 60; // smoothed visual dt for spring/render polish
   private lowPower = false;
   private slowFrames = 0;
   private snapAccum = 0;
