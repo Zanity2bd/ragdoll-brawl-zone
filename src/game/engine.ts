@@ -4505,6 +4505,7 @@ export class GameEngine {
     t.ragdollAng = 0;
     t.ragdollAV = dir * 6 + (Math.random() - 0.5) * 3;
     t.ragdollEnergy = 1;
+    applyHitReaction(t.rs, dir as 1 | -1, -0.5, 0.95, 0, HR_TELEGRAPHED | HR_LAUNCHER);
     this.shake = Math.max(this.shake, SUPER_SHAKE);
     this.hitstopT = SUPER_HITSTOP;
     this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
