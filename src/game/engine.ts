@@ -106,6 +106,8 @@ interface Fighter {
   // afterimage trail
   trail: Array<{ x: number; y: number; phase: number; vx: number; onGround: boolean; vy: number; facing: 1 | -1; pose: Pose }>;
   skin: Skin;
+  // butcher: true while his iconic crowbar is mid-flight or resting on the ground
+  crowbarThrown?: boolean;
   // flight
   canFly: boolean;
   flying: boolean;
