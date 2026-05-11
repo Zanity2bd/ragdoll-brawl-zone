@@ -1041,7 +1041,15 @@ export class GameEngine {
       if (dt > 1 / 45) this.slowFrames++; else this.slowFrames = Math.max(0, this.slowFrames - 1);
       if (!this.lowPower && this.slowFrames > 30) this.lowPower = true;
       this.update(dt);
-      this.render();
+      // Stepped-frame rendering during finisher slow-mo: gameplay sim runs full
+      // rate, but the visible frame is held every other tick for cinematic weight.
+      // Disabled in lowPower so weak devices still get smooth motion.
+      let shouldRender = true;
+      if (this.finisherActive && !this.lowPower) {
+        this.finisherFrameSkipFlip = !this.finisherFrameSkipFlip;
+        shouldRender = this.finisherFrameSkipFlip;
+      }
+      if (shouldRender) this.render();
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
