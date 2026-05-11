@@ -5348,7 +5348,13 @@ export class GameEngine {
     // Landing squash: depth scales with cached landImpact (0..1), ease-out.
     if (f.landSquashT > 0 && f.onGround) {
       const dur = 0.08 + f.landImpact * 0.16;
-      const u = 1 - Math.min(1, f.landSquashT / Math.max(0.001, dur)); // 0 just landed → 1 recovered
+      // Contact pose hold: on heavy landings, freeze the squash extreme for a
+      // brief window before recovery starts. Visual-only, no gameplay freeze.
+      const holdT = f.landImpact > 0.4 ? 0.03 + f.landImpact * 0.04 : 0;
+      const elapsed = Math.max(0, dur - f.landSquashT);
+      const recoverElapsed = Math.max(0, elapsed - holdT);
+      const recoverDur = Math.max(0.001, dur - holdT);
+      const u = Math.min(1, recoverElapsed / recoverDur); // 0 held → 1 recovered
       const squash = (1 - u) * (0.45 + 0.55 * f.landImpact);
       base.hipY += 7 * squash;
       base.shoulderY += 5 * squash;
