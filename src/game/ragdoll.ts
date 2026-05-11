@@ -74,6 +74,16 @@ export interface RagdollState {
   // Cinematic visual pose hold (seconds remaining). Renderer interpolates
   // toward the held pose for this duration. Does NOT pause gameplay.
   poseHoldT: number;
+
+  // Anticipatory impact compression (Phase B). Set by attacker telegraph.
+  // 1-2 frames inward brace before the hit lands. Visual-only.
+  incomingImpactT: number;
+  incomingImpactStrength: number;
+  incomingImpactDir: number; // -1..1 (sign + small magnitude)
+
+  // Recovery breathing phase (Phase B). Free-running counter for chest rise
+  // during low-tension settle.
+  breathPhase: number;
 }
 
 export function createRagdoll(): RagdollState {
