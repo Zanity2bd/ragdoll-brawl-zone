@@ -2627,6 +2627,19 @@ export class GameEngine {
       const impact = f.hitFlash > f.prevHitFlash + 0.05 ? Math.min(1, f.hitFlash) : 0;
       f.prevHitFlash = f.hitFlash;
 
+      // Defensive guard: when a light/medium hit lands and the fighter isn't
+      // already in heavy ragdoll/down/getup/stun, arms snap up to block while
+      // the existing vx pushback continues to shove them backward. Heavy hits
+      // (which set ragdollT) bypass this — the tumble owns the silhouette.
+      if (impact > 0 && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.stunT <= 0) {
+        const dir = (Math.sign(f.vx) || (f.facing as number) || 1) as 1 | -1;
+        f.guardT = Math.max(f.guardT, 0.34);
+        f.guardDir = dir;
+        f.guardMag = Math.max(f.guardMag * 0.6, Math.min(1, impact + 0.25));
+      }
+      f.guardT = Math.max(0, f.guardT - dt);
+      if (f.guardT <= 0) f.guardMag = 0;
+
       // ---- Cape horizontal swing ----
       // Wind drag target: trails opposite the velocity direction. Stronger
       // weighting to vx so the cape lags behind during sprints / flight.
