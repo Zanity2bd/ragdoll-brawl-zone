@@ -1023,30 +1023,46 @@ export class GameEngine {
     flash?: number;
     hitstop?: number;
     zoom?: number;
+    /** 0..1 — adds extra hitstop without inflating shake/zoom/flash. */
+    weight?: number;
   }) {
     const i = Math.max(0, Math.min(1, opts.intensity));
-    // Directional shake: decays over ~120-220ms scaled by intensity.
+    // Quadratic curve: light hits stay snappy, heavy hits land WAY harder.
+    // Linear curves made every hit feel the same — quadratic gives readable
+    // weight contrast that AAA fighters depend on.
+    const i2 = i * i;
+    const w = Math.max(0, Math.min(1, opts.weight ?? 0));
+    // Directional shake: longer + harder kick on heavy hits.
     const dx = opts.dirX ?? 0;
     const dy = opts.dirY ?? 0;
     const len = Math.hypot(dx, dy) || 1;
-    const kickStrength = 6 + i * 18; // px at peak, in screen space
+    const kickStrength = 4 + i2 * 24; // px at peak, in screen space
     this.shakeDirX = (dx / len) * kickStrength;
     this.shakeDirY = (dy / len) * kickStrength;
-    this.shakeDirDur = 0.12 + i * 0.10;
+    this.shakeDirDur = 0.10 + i2 * 0.16;
     this.shakeDirT = this.shakeDirDur;
-    // Zoom-punch: 1.0 → 1+kick → 1.0 over ~180ms. Heavy hits punch harder.
-    const z = opts.zoom ?? (0.02 + i * 0.045);
+    // Schedule a small reverse-rebound kick after the primary settles, so the
+    // camera reads as "punched and snapped back" instead of just drifting to
+    // rest. ~25% magnitude, opposite direction, fires when primary expires.
+    if (i >= 0.5) {
+      const rebound = kickStrength * 0.28;
+      this.shakeReboundX = -(dx / len) * rebound;
+      this.shakeReboundY = -(dy / len) * rebound;
+      this.shakeReboundT = this.shakeDirDur + 0.02;
+      this.shakeReboundDur = 0.08 + i2 * 0.06;
+    }
+    // Zoom-punch: quadratic — light=barely visible, heavy=cinematic.
+    const z = opts.zoom ?? (0.012 + i2 * 0.07);
     this.zoomPunch = Math.max(this.zoomPunch, z);
-    this.zoomPunchDur = 0.18 + i * 0.08;
+    this.zoomPunchDur = 0.14 + i2 * 0.12;
     this.zoomPunchT = this.zoomPunchDur;
-    // Layer hit-stop and white flash on top of existing scalars (max so we
-    // never *reduce* what other code already set this frame).
-    const hs = opts.hitstop ?? (0.04 + i * 0.10);
+    // Hit-stop: quadratic + weight bonus. Heavy hits FREEZE; light hits flicker.
+    const hs = opts.hitstop ?? (0.025 + i2 * 0.20 + w * 0.06);
     this.hitstopT = Math.max(this.hitstopT, hs);
-    const fl = opts.flash ?? (0.25 + i * 0.55);
+    const fl = opts.flash ?? (0.18 + i2 * 0.62);
     this.impactFlash = Math.max(this.impactFlash, fl);
-    // Background omni-shake floor scales with intensity.
-    this.shake = Math.max(this.shake, 8 + i * 28);
+    // Background omni-shake floor scales with intensity (quadratic).
+    this.shake = Math.max(this.shake, 6 + i2 * 32);
   }
 
   /**
