@@ -1641,6 +1641,9 @@ export class GameEngine {
 
   private update(dt: number) {
     this.elapsed += dt;
+    // Smoothed visual dt for spring/animation post-process. Damps mobile FPS
+    // micro-jitter without affecting gameplay simulation.
+    this.lastDt = this.lastDt + (dt - this.lastDt) * 0.25;
     // Fire any deferred SFX whose scheduled engine-time has passed.
     if (this.pendingSfx.length) {
       const due = this.pendingSfx.filter(p => p.at <= this.elapsed);
