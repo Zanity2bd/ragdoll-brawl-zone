@@ -2894,7 +2894,7 @@ export class GameEngine {
         f.punchCd = PUNCH_CD;
         f.cancelOK = false;
         Sfx.play("whoosh", 0.5);
-        armTrail(f.weaponTrail, 0.32, { limb: "footR", rgb: "200,230,255", width: 8 });
+        armTrail(f.weaponTrail, 0.34, { limb: "footR", rgb: "210,235,255", width: 13 });
       } else if (f.recoverT === 0) {
         f.punchT = 0.0001;
         f.punchHit = false;
