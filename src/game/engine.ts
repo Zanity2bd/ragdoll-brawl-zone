@@ -237,9 +237,13 @@ interface Projectile {
   life: number;
   color: string;
   glow: string;
-  kind: "bolt" | "batarang" | "web";
+  kind: "bolt" | "batarang" | "web" | "crowbar";
   damage?: number;
   homing?: boolean;
+  // crowbar-only: spinning iron bar in flight, settles on ground/cover
+  rested?: boolean;
+  rot?: number;
+  spin?: number;
 }
 
 interface Particle {
