@@ -7028,13 +7028,26 @@ export class GameEngine {
       if (f.justLandedT > 0 || f.landSquashT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
 
       // ---- Combo swing (high kick / knee finisher) ----
+      // Frame interpolation pass: bitmap frames are discrete (chamber → hit
+      // is a 2-frame swap), so we synthesize the in-between motion as a
+      // procedural transform envelope wrapped around the sprite. Reads as
+      // anticipation → snap-extension → follow-through without crossfading
+      // the line-art frames (project rule: never alpha-blend stickman frames).
       if (f.comboKind && f.comboT > 0) {
         const u = f.comboT / Math.max(0.001, f.comboDur);
-        if (f.comboKind === "kick") {
-          drawFrame(u < 0.4 ? KICK_CHAMBER_FRAME : KICK_HIT_FRAME);
-        } else {
-          drawFrame(u < 0.4 ? KNEE_CHAMBER_FRAME : KNEE_HIT_FRAME);
-        }
+        const env = attackEnvelope(f.comboKind, u, renderFacing);
+        const swingIdx = f.comboKind === "kick"
+          ? (u < 0.4 ? KICK_CHAMBER_FRAME : KICK_HIT_FRAME)
+          : (u < 0.4 ? KNEE_CHAMBER_FRAME : KNEE_HIT_FRAME);
+        const hipPx = x + f.bodyLagX;
+        const hipPy = y + FIGHTER_H * 0.62;
+        ctx.save();
+        ctx.translate(hipPx + env.tx, hipPy + env.ty);
+        ctx.rotate(env.rot);
+        ctx.scale(env.sx, env.sy);
+        ctx.translate(-hipPx, -hipPy);
+        drawFrame(swingIdx);
+        ctx.restore();
         return;
       }
 
@@ -7046,7 +7059,17 @@ export class GameEngine {
         else if (pt < PUNCH_F11 + PUNCH_F12) pIdx = 1;
         else if (pt < PUNCH_F11 + PUNCH_F12 + PUNCH_F13) pIdx = 2;
         else pIdx = 3;
+        const punchU = 1 - (pt / PUNCH_DUR); // 0 → 1 across the punch
+        const env = attackEnvelope("punch", punchU, renderFacing);
+        const hipPx = x + f.bodyLagX;
+        const hipPy = y + FIGHTER_H * 0.62;
+        ctx.save();
+        ctx.translate(hipPx + env.tx, hipPy + env.ty);
+        ctx.rotate(env.rot);
+        ctx.scale(env.sx, env.sy);
+        ctx.translate(-hipPx, -hipPy);
         drawFrame(PUNCH_FRAME_START + pIdx);
+        ctx.restore();
         return;
       }
 
