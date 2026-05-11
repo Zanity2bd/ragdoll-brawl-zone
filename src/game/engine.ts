@@ -1782,9 +1782,13 @@ export class GameEngine {
           this.slowmoT = Math.max(this.slowmoT, 0.35);
           this.shake = Math.max(this.shake, 24);
           this.impactFlash = Math.max(this.impactFlash, 0.85);
-          // Bright impact star + sparks at contact
-          spawnFx(this.attackFx, "impactStar", pr.x, pr.y, { size: 40, life: 0.32, grow: 90, spin: 5 });
-          spawnFx(this.attackFx, "shockRing", pr.x, pr.y, { size: 22, life: 0.32, grow: 90, blend: "lighter" });
+          // Bright impact star + sparks at contact — biased outward along strike dir
+          // so the body silhouette stays readable through the hit.
+          const fxX = pr.x + dir * 18;
+          const fxY = pr.y - 14;
+          spawnFx(this.attackFx, "impactStar", fxX, fxY, { size: 30, life: 0.22, grow: 60, spin: 5, facing: dir });
+          spawnFx(this.attackFx, "shockRing", pr.x, pr.y + 4, { size: 18, life: 0.24, grow: 110, blend: "lighter" });
+          spawnFx(this.attackFx, "slashArc", pr.x - dir * 6, pr.y - 8, { size: 52, life: 0.16, facing: dir, rot: -0.25 * dir });
           for (let i = 0; i < 14; i++) {
             this.particles.push({
               x: pr.x + (Math.random() - 0.5) * 14, y: pr.y + (Math.random() - 0.5) * 10,
@@ -1794,7 +1798,6 @@ export class GameEngine {
             });
           }
           Sfx.play("thud", 0.95);
-          this.spawnHitLabel(pr.owner, "CROWBAR", pr.x, pr.y - 10, dir);
           // Crowbar drops at impact location and rests on the ground.
           pr.vx = 0; pr.vy = 0; pr.spin = 0;
           pr.y = GROUND_Y - 4;
