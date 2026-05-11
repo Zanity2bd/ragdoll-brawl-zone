@@ -162,7 +162,7 @@ export function applyHitReaction(
   rs.seed = sref.s;
 
   // Target tension by state.
-  switch (state) {
+  switch (state as RagdollStateName) {
     case "lightHit":          rs.targetTension = 0.78; rs.tensionRate = 5.5; break;
     case "heavyHit":          rs.targetTension = 0.55; rs.tensionRate = 3.8; break;
     case "launcher":          rs.targetTension = 0.42; rs.tensionRate = 2.6; break;
