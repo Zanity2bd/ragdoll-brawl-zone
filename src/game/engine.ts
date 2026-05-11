@@ -947,78 +947,15 @@ export class GameEngine {
   }
 
   /**
-   * AoS5-style hit confirmation: pop a punchy label near the impact and
-   * bump the attacker's combo counter. Pure presentation; no balance impact.
-   * Call EVERY time a strike connects — combo escalates automatically.
+   * Activate the finisher cinematic — vignette overlay + frame-step rendering
+   * during the slow-mo window already started by triggerKo. Pure presentation;
+   * the gameplay impact is handled by triggerKo.
    */
-  private spawnHitLabel(attacker: PlayerId, kind: "PUNCH" | "KICK" | "KNEE" | "CROWBAR" | "SLAM" | "SPECIAL", x: number, y: number, facing: 1 | -1) {
-    // bump combo
-    this.comboCount[attacker] = Math.min(99, this.comboCount[attacker] + 1);
-    this.comboCountT[attacker] = 1.4; // window resets on each new hit
-    const n = this.comboCount[attacker];
-    // Per-kind palette + slight scale to convey weight
-    const palette: Record<typeof kind, { color: string; scale: number }> = {
-      PUNCH:   { color: "oklch(0.97 0.16 85)",  scale: 1.0 },
-      KICK:    { color: "oklch(0.92 0.20 55)",  scale: 1.15 },
-      KNEE:    { color: "oklch(0.90 0.22 35)",  scale: 1.2 },
-      CROWBAR: { color: "oklch(0.95 0.18 75)",  scale: 1.35 },
-      SLAM:    { color: "oklch(0.92 0.22 25)",  scale: 1.3 },
-      SPECIAL: { color: "oklch(0.85 0.24 320)", scale: 1.25 },
-    };
-    const pal = palette[kind];
-    // Stagger labels so combo doesn't stack on top of itself
-    const jitterX = facing * (8 + (n % 3) * 6);
-    const jitterY = -((n % 3) * 14);
-    this.hitLabels.push({
-      x: x + jitterX, y: y - 18 + jitterY, text: kind + "!",
-      t: 0, life: 0.55,
-      vy: -110, color: pal.color, scale: pal.scale, italic: true,
-    });
-    // Combo counter — shows from x2 onward
-    if (n >= 2) {
-      const comboText = n >= 4 ? `x${n} COMBO!` : `x${n}`;
-      this.hitLabels.push({
-        x: x + jitterX * 0.5, y: y - 42 + jitterY,
-        text: comboText, t: 0, life: 0.7,
-        vy: -75, color: n >= 5 ? "oklch(0.95 0.24 25)" : "oklch(0.95 0.18 320)",
-        scale: 0.85 + Math.min(0.6, n * 0.07), italic: false,
-      });
-    }
-  }
-
-  private drawHitLabels(ctx: CanvasRenderingContext2D) {
-    if (this.hitLabels.length === 0) return;
-    ctx.save();
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    for (const hl of this.hitLabels) {
-      const u = hl.t / hl.life;
-      // Pop-in: snap up to 1.15x then settle to 1.0
-      const pop = u < 0.15 ? (u / 0.15) * 1.15 : (1.15 - 0.15 * Math.min(1, (u - 0.15) / 0.2));
-      const s = hl.scale * pop;
-      const alpha = u < 0.7 ? 1 : Math.max(0, 1 - (u - 0.7) / 0.3);
-      const fontPx = Math.round(22 * s);
-      ctx.font = `900 ${hl.italic ? "italic " : ""}${fontPx}px "Inter", "Arial Black", system-ui, sans-serif`;
-      // Heavy black outline for legibility over any background
-      ctx.lineJoin = "round";
-      ctx.miterLimit = 2;
-      ctx.lineWidth = Math.max(4, 5 * s);
-      ctx.strokeStyle = `oklch(0.12 0.02 60 / ${alpha})`;
-      ctx.fillStyle = hl.color.replace(")", ` / ${alpha})`).replace(" / ", " / ");
-      // Soft glow
-      ctx.shadowColor = hl.color;
-      ctx.shadowBlur = 14 * s;
-      // Slight italic-skew slant pop for impact words
-      ctx.translate(hl.x, hl.y);
-      if (hl.italic) ctx.transform(1, 0, -0.18, 1, 0, 0);
-      ctx.strokeText(hl.text, 0, 0);
-      ctx.shadowBlur = 0;
-      // Re-extract color with alpha (oklch / alpha syntax)
-      ctx.fillStyle = hl.color.replace(/\)$/, ` / ${alpha})`);
-      ctx.fillText(hl.text, 0, 0);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-    }
-    ctx.restore();
+  private triggerFinisher() {
+    if (this.finisherActive) return; // no stack/retrigger while active
+    this.finisherDur = 0.65;
+    this.finisherT = this.finisherDur;
+    this.finisherActive = true;
   }
 
   private makeFighter(id: PlayerId, x: number, skin: Skin): Fighter {
