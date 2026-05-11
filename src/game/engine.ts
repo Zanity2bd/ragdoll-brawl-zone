@@ -2767,24 +2767,41 @@ export class GameEngine {
       if (inActive && !f.comboHit) {
         const target = f.id === "p1" ? this.p2 : this.p1;
         const dx = (target.x - f.x) * f.facing;
-        const range = f.comboKind === "kick" ? 78 : 58;
-        const dmg = f.comboKind === "kick" ? 4 : 6;
+        const range = f.comboKind === "kick" ? 84 : 62;
+        const dmg = f.comboKind === "kick" ? 6 : 8;
         if (dx > -10 && dx < range && Math.abs(target.y - f.y) < FIGHTER_H) {
           if (target.iframeT <= 0 && target.downedT <= 0 && target.getUpT <= 0) {
             f.comboHit = true;
             f.cancelOK = true;
             target.hp = Math.max(0, target.hp - dmg);
-            target.hitFlash = 0.28;
-            target.vx += f.facing * (f.comboKind === "kick" ? 220 : 180);
-            target.vy -= f.comboKind === "knee" ? 180 : 60;
+            target.hitFlash = 0.36;
+            // Stronger launch — victim visibly reacts (AoS5 send-back)
+            target.vx += f.facing * (f.comboKind === "kick" ? 360 : 240);
+            target.vy -= f.comboKind === "knee" ? 240 : 140;
+            // Brief partial ragdoll so the kick READS as a kick
+            if (target.ragdollT < (f.comboKind === "kick" ? 0.28 : 0.18)) {
+              target.ragdollT = f.comboKind === "kick" ? 0.28 : 0.18;
+            }
             const ix = target.x;
-            const iy = target.y + (f.comboKind === "knee" ? 50 : 32);
-            this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 46, life: 0.2, maxLife: 0.2, color: "oklch(0.95 0.05 80)" });
-            this.burst(ix, iy, "oklch(0.95 0.06 80)", 10);
-            this.shake = Math.max(this.shake, 9);
-            this.hitstopT = Math.max(this.hitstopT, 0.08);
-            this.impactFlash = Math.max(this.impactFlash, 0.3);
-            Sfx.play("attackImpact", 0.9);
+            const iy = target.y + (f.comboKind === "knee" ? 50 : 36);
+            // Bright AoS5-style impact star + shock ring + slash arc
+            spawnFx(this.attackFx, "impactStar", ix, iy, {
+              size: f.comboKind === "kick" ? 50 : 40, life: 0.22,
+              spin: 6, grow: 30, facing: f.facing as 1 | -1,
+            });
+            spawnFx(this.attackFx, "shockRing", ix, iy, {
+              size: 16, life: 0.26, grow: 110, facing: f.facing as 1 | -1,
+            });
+            spawnFx(this.attackFx, "slashArc", ix - f.facing * 8, iy - 6, {
+              size: 46, life: 0.18, facing: f.facing as 1 | -1, rot: -0.3 * f.facing,
+            });
+            this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 56, life: 0.22, maxLife: 0.22, color: "oklch(0.95 0.05 80)" });
+            this.burst(ix, iy, "oklch(0.95 0.06 80)", 14);
+            this.shake = Math.max(this.shake, f.comboKind === "kick" ? 14 : 11);
+            // Strong AoS5-style hitstop — freeze for ~6 frames so the strike lands
+            this.hitstopT = Math.max(this.hitstopT, f.comboKind === "kick" ? 0.12 : 0.10);
+            this.impactFlash = Math.max(this.impactFlash, 0.42);
+            Sfx.play("attackImpact", 1.0);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
