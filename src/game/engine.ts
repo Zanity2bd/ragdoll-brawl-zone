@@ -5813,6 +5813,14 @@ export class GameEngine {
         ctx.stroke();
         ctx.fillStyle = pr.color;
         ctx.beginPath(); ctx.arc(pr.x, pr.y, 4, 0, Math.PI * 2); ctx.fill();
+      } else if (pr.kind === "crowbar") {
+        // Render in source-over so the dark iron reads against bright bgs.
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.translate(pr.x, pr.y);
+        ctx.rotate(pr.rot ?? 0);
+        drawCrowbar(ctx, 0, 0, 1);
+        ctx.restore();
       }
     }
     ctx.shadowBlur = 0;
