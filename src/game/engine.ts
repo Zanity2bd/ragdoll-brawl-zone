@@ -1,7 +1,7 @@
 // OgunArena — Canvas 2D engine v3 (a Blkdom production)
 // Per-skin signature melees with impact frames, ragdoll, slow-mo, SFX.
 
-import { computeWalkPose, computeRagdollPose, blendPose, type Pose } from "./animation";
+import { computeWalkPose, computeRagdollPose, blendPose, applySpringPolish, type Pose } from "./animation";
 import { getMap, type MapId } from "./maps";
 import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
@@ -71,6 +71,24 @@ interface Fighter {
   vy: number;
   facing: 1 | -1;
   facingT: number;
+  // Facing intent controller (visual smoothing + hysteresis).
+  // facingTarget = the side opponent has stably been on (gameplay `facing` mirrors this).
+  // facingPersistT = continuous time opponent has been on the opposite side.
+  // facingLockT = brief lock after attacks/jumps preventing flip churn.
+  // facingVel = critically-damped spring velocity for facingT visual.
+  facingPersistT: number;
+  facingLockT: number;
+  facingVel: number;
+  lastVx: number; // for momentum/accel-aware lean
+  // Spring-damped secondary motion (render-only). Allocation-free.
+  // Each is { p: current, v: velocity }.
+  sLean: { p: number; v: number };
+  sShoulderRoll: { p: number; v: number };
+  sHead: { p: number; v: number };
+  sHandLX: { p: number; v: number }; sHandLY: { p: number; v: number };
+  sHandRX: { p: number; v: number }; sHandRY: { p: number; v: number };
+  sFootLX: { p: number; v: number }; sFootLY: { p: number; v: number };
+  sFootRX: { p: number; v: number }; sFootRY: { p: number; v: number };
   onGround: boolean;
   hp: number;
   hitFlash: number;
@@ -566,6 +584,7 @@ export class GameEngine {
   private raf = 0;
   private running = false;
   private elapsed = 0;
+  private lastDt = 1 / 60; // smoothed visual dt for spring/render polish
   private lowPower = false;
   private slowFrames = 0;
   private snapAccum = 0;
@@ -988,6 +1007,12 @@ export class GameEngine {
     return {
       id, x, y: GROUND_Y - FIGHTER_H,
       vx: 0, vy: 0, facing: 1, facingT: 1,
+      facingPersistT: 0, facingLockT: 0, facingVel: 0, lastVx: 0,
+      sLean: { p: 0, v: 0 }, sShoulderRoll: { p: 0, v: 0 }, sHead: { p: 0, v: 0 },
+      sHandLX: { p: 0, v: 0 }, sHandLY: { p: 0, v: 0 },
+      sHandRX: { p: 0, v: 0 }, sHandRY: { p: 0, v: 0 },
+      sFootLX: { p: 0, v: 0 }, sFootLY: { p: 0, v: 0 },
+      sFootRX: { p: 0, v: 0 }, sFootRY: { p: 0, v: 0 },
       onGround: true, hp: 100, hitFlash: 0,
       fireCd: 0, teleCd: 0, teleporting: false,
       name: skin.name,
@@ -1616,6 +1641,9 @@ export class GameEngine {
 
   private update(dt: number) {
     this.elapsed += dt;
+    // Smoothed visual dt for spring/animation post-process. Damps mobile FPS
+    // micro-jitter without affecting gameplay simulation.
+    this.lastDt = this.lastDt + (dt - this.lastDt) * 0.25;
     // Fire any deferred SFX whose scheduled engine-time has passed.
     if (this.pendingSfx.length) {
       const due = this.pendingSfx.filter(p => p.at <= this.elapsed);
@@ -1687,22 +1715,61 @@ export class GameEngine {
 
       if (!isFrozenFor("p1")) this.updateFighter(this.p1, sdt);
       if (!isFrozenFor("p2")) this.updateFighter(this.p2, sdt);
-      // Auto-face the opponent only when we are NOT mid-attack and NOT airborne.
-      // Flipping during a melee or jump produces visible pose/render desync;
-      // the character commits to a direction for the duration of those actions.
+      // Intent-based facing: hysteresis deadzone + persistence + retreat guard
+      // + attack lock. Prevents jitter-flips on crossover, retreat, or close
+      // overlap. Gameplay `facing` only updates after a stable commit.
       const canFlip = (f: typeof this.p1) =>
         !f.ragdollT && !f.downedT && !f.getUpT && !f.meleeKind && f.attackAnim <= 0
         && (f.onGround || f.flying);
-      if (!isFrozenFor("p1") && canFlip(this.p1)) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
-      if (!isFrozenFor("p2") && canFlip(this.p2)) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
+      const updateFacingIntent = (self: typeof this.p1, opp: typeof this.p1) => {
+        // Tick locks regardless of canFlip.
+        self.facingLockT = Math.max(0, self.facingLockT - dt);
+        // While attacking, stamp/refresh a brief lock so we hold facing during
+        // recovery frames too (prevents pop-flips right after a swing).
+        if (self.meleeKind || self.attackAnim > 0 || self.punchT > 0 || self.preJumpT > 0) {
+          self.facingLockT = Math.max(self.facingLockT, 0.20);
+        }
+        if (!canFlip(self) || self.facingLockT > 0) {
+          self.facingPersistT = 0;
+          return;
+        }
+        const dx = opp.x - self.x;
+        const desired: 1 | -1 = dx >= 0 ? 1 : -1;
+        if (desired === self.facing) { self.facingPersistT = 0; return; }
+        // Hysteresis deadzone — ignore micro-overlap flips.
+        if (Math.abs(dx) < 28) { self.facingPersistT = 0; return; }
+        // Persistence threshold scales with state.
+        const retreating = Math.sign(self.vx) === -self.facing && Math.abs(self.vx) > 80;
+        const dashCross = Math.abs(opp.vx) > 380
+          && Math.sign(opp.x + opp.vx * 0.05 - self.x) !== Math.sign(dx);
+        let need = 0.12;
+        if (!self.onGround) need = 0.20;
+        if (retreating) need = Math.max(need, 0.28);
+        if (dashCross) need = Math.max(need, 0.32);
+        // Extra guard: while retreating AND opponent is close, never flip.
+        if (retreating && Math.abs(dx) < 90) { self.facingPersistT = 0; return; }
+        self.facingPersistT += dt;
+        if (self.facingPersistT >= need) {
+          self.facing = desired;
+          self.facingPersistT = 0;
+        }
+      };
+      if (!isFrozenFor("p1")) updateFacingIntent(this.p1, this.p2);
+      if (!isFrozenFor("p2")) updateFacingIntent(this.p2, this.p1);
       this.resolveMelees(sdt);
       this.updateBamfCombo(this.p1, dt);
       this.updateBamfCombo(this.p2, dt);
     }
     for (const f of [this.p1, this.p2]) {
       if (freezeActive && f.id !== this.timeFreezer) continue;
-      // Slower, smoother yaw lerp so the turn reads as a 3D pivot, not a snap-flip.
-      f.facingT += (f.facing - f.facingT) * Math.min(1, dt * 5.5);
+      // Critically-damped spring on facingT. Smoother + more intentional than
+      // raw lerp; existing yaw-squash render path reads |facingT| automatically.
+      const k = 90, d = 19; // ~critically damped
+      const target = f.facing;
+      f.facingVel += ((target - f.facingT) * k - f.facingVel * d) * dt;
+      f.facingT += f.facingVel * dt;
+      // Track lastVx for accel-based lean (used by spring layer).
+      f.lastVx = f.vx;
     }
 
     for (const pr of this.projectiles) {
@@ -5293,6 +5360,21 @@ export class GameEngine {
       base.armL[4] += renderFacing * 4 * squash;
       base.armR[4] += renderFacing * 4 * squash;
     }
+    // Spring-damped secondary motion: trailing inertia on hands/feet/lean,
+    // airborne float, soft foot planting, elbow/knee arc recompute. Skipped
+    // for ragdoll/downed/getup branches above (those returned early).
+    const retreating = Math.sign(f.vx) === -f.facing && Math.abs(f.vx) > 60;
+    applySpringPolish(base, {
+      sLean: f.sLean, sShoulderRoll: f.sShoulderRoll, sHead: f.sHead,
+      sHandLX: f.sHandLX, sHandLY: f.sHandLY, sHandRX: f.sHandRX, sHandRY: f.sHandRY,
+      sFootLX: f.sFootLX, sFootLY: f.sFootLY, sFootRX: f.sFootRX, sFootRY: f.sFootRY,
+    }, this.lastDt, {
+      onGround: f.onGround && !f.flying,
+      facing: renderFacing,
+      vx: f.vx, vy: f.vy,
+      retreating,
+      lowPower: this.lowPower,
+    });
     return applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying);
   }
 
