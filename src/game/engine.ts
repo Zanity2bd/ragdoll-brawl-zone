@@ -6075,6 +6075,27 @@ export class GameEngine {
       ctx.fillRect(0, 0, cw, ch);
     }
 
+    // Finisher cinematic overlay — soft radial vignette + slight desat tint.
+    // Disabled in lowPower for mobile safety.
+    if (this.finisherActive && this.finisherDur > 0 && !this.lowPower) {
+      const u = 1 - this.finisherT / this.finisherDur; // 0 → 1
+      // easeInOutQuad bell — fades up to ~0.28 then back down
+      const bell = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+      const alpha = bell * 0.28;
+      const cx = cw / 2, cy = ch / 2;
+      const inner = Math.min(cw, ch) * 0.22;
+      const outer = Math.max(cw, ch) * 0.78;
+      const vg = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer);
+      vg.addColorStop(0, "rgba(0,0,0,0)");
+      vg.addColorStop(0.55, `rgba(8,4,12,${(alpha * 0.55).toFixed(3)})`);
+      vg.addColorStop(1, `rgba(0,0,0,${alpha.toFixed(3)})`);
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, cw, ch);
+      // Subtle warm desat tint (sepia-ish) — sells the "moment".
+      ctx.fillStyle = `rgba(40,18,8,${(alpha * 0.18).toFixed(3)})`;
+      ctx.fillRect(0, 0, cw, ch);
+    }
+
     if (this.teleTargeting) {
       ctx.fillStyle = "oklch(0.1 0.05 275 / 0.45)";
       ctx.fillRect(0, 0, cw, ch);
