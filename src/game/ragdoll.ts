@@ -145,7 +145,7 @@ export function applyHitReaction(
   const p = Math.max(0, Math.min(1, power));
 
   // Pick state.
-  let state: RagdollStateName;
+  let state: Exclude<RagdollStateName, "none">;
   if (flags & HR_FINISHER)            state = "finalKO";
   else if (flags & HR_LAUNCHER)       state = "launcher";
   else if (flags & HR_AIRBORNE)       state = "airborneSpin";
