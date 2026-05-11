@@ -1793,6 +1793,7 @@ export class GameEngine {
     // Decay directional shake + zoom-punch (run on real dt so they aren't
     // affected by hit-stop pause — they should resolve smoothly).
     if (this.shakeDirT > 0) this.shakeDirT = Math.max(0, this.shakeDirT - dt);
+    if (this.shakeReboundT > 0) this.shakeReboundT = Math.max(0, this.shakeReboundT - dt);
     if (this.zoomPunchT > 0) this.zoomPunchT = Math.max(0, this.zoomPunchT - dt);
 
     // Hitstop freezes simulation for a few frames (render still runs)
