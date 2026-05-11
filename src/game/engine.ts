@@ -2953,23 +2953,24 @@ export class GameEngine {
             // Stronger send-back so a jab visibly rocks the opponent (AoS5)
             target.vx += f.facing * 170;
             target.vy -= 70;
-            const ix = target.x;
+            const fx = f.facing as 1 | -1;
+            const ix = target.x - fx * 6;
             const iy = target.y + 40;
-            // Bright impact star + shock ring at contact — clearest possible "HIT"
-            spawnFx(this.attackFx, "impactStar", ix, iy, {
-              size: 34, life: 0.18, spin: 5, grow: 26, facing: f.facing as 1 | -1,
+            const fxX = ix + fx * 18;
+            const fxY = iy - 6;
+            // Edge-biased: spark frames the contact instead of covering the body.
+            spawnFx(this.attackFx, "impactStar", fxX, fxY, {
+              size: 22, life: 0.13, spin: 5, grow: 22, facing: fx,
             });
-            spawnFx(this.attackFx, "shockRing", ix, iy, {
-              size: 12, life: 0.2, grow: 80, facing: f.facing as 1 | -1,
+            spawnFx(this.attackFx, "shockRing", ix, iy + 4, {
+              size: 10, life: 0.16, grow: 100, facing: fx,
             });
             this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 38, life: 0.18, maxLife: 0.18, color: "oklch(0.95 0.04 80)" });
-            this.burst(ix, iy, "oklch(0.95 0.06 80)", 10);
-            this.shake = Math.max(this.shake, 9);
-            // Punchy 4-frame hitstop on every jab — the AoS5 secret sauce
-            this.hitstopT = Math.max(this.hitstopT, 0.075);
+            this.burst(fxX, fxY, "oklch(0.95 0.06 80)", 8);
+            // Light-tier impact via funnel (directional shake, smaller hitstop).
+            this.impact({ intensity: 0.4, dirX: fx, dirY: -0.2, hitstop: 0.045, flash: 0.28 });
             this.impactFlash = Math.max(this.impactFlash, 0.32);
             Sfx.play("punch", 0.9);
-            this.spawnHitLabel(f.id, "PUNCH", ix, iy - 6, f.facing as 1 | -1);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
