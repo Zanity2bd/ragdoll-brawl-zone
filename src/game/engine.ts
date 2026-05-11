@@ -1038,6 +1038,7 @@ export class GameEngine {
       hitReactKind: null, hitReactT: 0, hitReactDur: 0, hitReactDir: 1, hitReactMag: 0,
       cancelOK: false, meleeBufferT: 0, punchBufferT: 0,
       wobble: createWobble(),
+      rs: createRagdoll(),
       dash: null,
       frenzy: null,
       frenzyCd: 0,
