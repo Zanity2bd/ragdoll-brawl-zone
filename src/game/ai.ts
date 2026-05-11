@@ -311,17 +311,38 @@ export class CpuController {
     const adx = Math.abs(dx);
     const dir = (Math.sign(dx) || 1) as -1 | 1;
 
+    // Basic-attack reach for the shared jab/kick combo (matches engine PUNCH range).
+    const BRAWL_RANGE = 64;
     // === Hard rules ===
     const oppHelpless = oppR.ragdollT > 0 || oppR.downedT > 0 || oppR.getUpT > 0;
     if (oppHelpless) {
-      this.moveDir = dir;
+      // Opponent just went down — back off to a clean special-launch distance,
+      // arm a short regroup window, then use a special / power. Reads as
+      // "step back, line it up, finish them" instead of mashing on top of them.
+      this.regroupT = Math.max(this.regroupT, 0.55);
+      const safeMin = Math.max(skill.specialMin, Math.round(skill.preferred * 0.85), 90);
+      const safeMax = Math.max(safeMin + 60, skill.specialMax - 20);
+      if (adx < safeMin - 12) {
+        this.moveDir = -dir as -1 | 1;
+        this.commitT = 0.18;
+        return; // create space first; specials next tick
+      }
+      if (adx > safeMax + 20) {
+        this.moveDir = dir;
+        this.commitT = 0.18;
+        return;
+      }
+      // In the launch window — hold position and fire.
+      this.moveDir = 0;
       this.commitT = 0.2;
-      if (adx <= skill.specialMax + 10 && this.canSpecial(me, skill, oppR, meR)) {
+      if (this.canSpecial(me, skill, oppR, meR)) {
         if (Math.random() < cfg.specialChance) this.wantSpecial = true;
       }
       this.maybeUsePower(me, skill, adx, oppR, meR, cfg, /*aggressive*/ true);
       return;
     }
+    // Reset punch-streak whenever the target leaves brawl range or recovers.
+    if (adx > BRAWL_RANGE * 1.3) this.punchStreak = 0;
 
     if (meR.ragdollT > 0 || meR.downedT > 0 || meR.getUpT > 0) {
       this.moveDir = 0;
