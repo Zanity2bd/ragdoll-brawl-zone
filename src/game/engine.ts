@@ -1003,6 +1003,7 @@ export class GameEngine {
     this.finisherT = 0; this.finisherDur = 0; this.finisherActive = false;
     this.shake = 0;
     this.shakeDirX = 0; this.shakeDirY = 0; this.shakeDirT = 0; this.shakeDirDur = 0;
+    this.shakeReboundX = 0; this.shakeReboundY = 0; this.shakeReboundT = 0; this.shakeReboundDur = 0;
     this.zoomPunch = 0; this.zoomPunchT = 0; this.zoomPunchDur = 0;
     this.introT = 1.2;
     this.phase = "intro";
