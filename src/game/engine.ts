@@ -5688,6 +5688,14 @@ export class GameEngine {
       dirShx = this.shakeDirX * pulse;
       dirShy = this.shakeDirY * pulse;
     }
+    // Rebound — fires only after the primary kick has stopped contributing,
+    // giving a clear "punch → snap-back" rhythm instead of a smeared decay.
+    if (this.shakeReboundT > 0 && this.shakeReboundDur > 0 && this.shakeDirT <= 0) {
+      const u = 1 - this.shakeReboundT / this.shakeReboundDur;
+      const pulse = Math.sin(Math.PI * u);
+      dirShx += this.shakeReboundX * pulse;
+      dirShy += this.shakeReboundY * pulse;
+    }
 
     const cw = this.canvas.width, ch = this.canvas.height;
 
