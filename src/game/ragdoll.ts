@@ -101,6 +101,8 @@ export function createRagdoll(): RagdollState {
     seed: 1, variantTwist: 0, variantArch: 0,
     propRing: new Float32Array(PROP_SLOTS * PROP_STRIDE),
     poseHoldT: 0,
+    incomingImpactT: 0, incomingImpactStrength: 0, incomingImpactDir: 0,
+    breathPhase: 0,
   };
 }
 
