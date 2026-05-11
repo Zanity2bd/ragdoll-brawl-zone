@@ -107,6 +107,10 @@ export function GameCanvas() {
     engineRef.current = engine;
     engine.onSnapshot = setSnap;
     engine.setLowPower(lowPower);
+    // ?rig=1 → draw pelvis/anchor debug overlay (visual-truth tool for tuning).
+    if (typeof window !== "undefined" && window.location.search.includes("rig=1")) {
+      engine.setDebugRig(true);
+    }
 
     engine.start();
 
