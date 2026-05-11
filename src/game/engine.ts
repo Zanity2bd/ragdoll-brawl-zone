@@ -940,10 +940,34 @@ export class GameEngine {
     // KO: heaviest possible zoom punch + lateral kick toward the loser.
     const koDir = winnerId === "p1" ? 1 : -1;
     this.impact({ intensity: 1.0, dirX: koDir, dirY: -0.5, zoom: 0.09, flash: 0, hitstop: 0 });
+    // Finisher cinematic overlay — vignette + frame-step during the slow-mo window.
+    this.triggerFinisher();
+    // Oversized FX burst on the KO contact point.
+    const fxX = loser.x + koDir * 22;
+    const fxY = loser.y + FIGHTER_H * 0.4;
+    spawnFx(this.attackFx, "impactStar", fxX, fxY, { size: 52, life: 0.45, grow: 60, spin: 4, facing: koDir as 1 | -1 });
+    spawnFx(this.attackFx, "shockRing", loser.x, loser.y + FIGHTER_H * 0.5, { size: 24, life: 0.55, grow: 200, blend: "lighter" });
+    // Directional debris streaks along the impact vector
+    for (let i = 0; i < 22; i++) {
+      const spread = (Math.random() - 0.5) * 0.9;
+      const sp = 320 + Math.random() * 360;
+      this.particles.push({
+        x: fxX + (Math.random() - 0.5) * 10,
+        y: fxY + (Math.random() - 0.5) * 12,
+        vx: koDir * sp * (0.7 + Math.random() * 0.5) + spread * 80,
+        vy: -120 - Math.random() * 280 + spread * 60,
+        life: 0.55 + Math.random() * 0.25, maxLife: 0.8,
+        color: i % 3 === 0 ? "oklch(0.96 0.16 80)" : "oklch(0.55 0.04 60)",
+        size: 1.5 + Math.random() * 2.4,
+        grav: 0.8,
+      });
+    }
     // Finisher blood burst at the loser's torso — sells the kill.
     this.spawnBlood(loser.x, loser.y + FIGHTER_H * 0.45, koDir as 1 | -1, 1);
     this.spawnBlood(loser.x, loser.y + FIGHTER_H * 0.30, koDir as 1 | -1, 0.85);
     Sfx.play("boom", 0.9);
+    Sfx.play("heavy", 0.85); // low-pitched bass layer for finisher weight
+    Sfx.play("thud", 0.75);
   }
 
   /**
