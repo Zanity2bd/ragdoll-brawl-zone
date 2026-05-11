@@ -3640,6 +3640,8 @@ export class GameEngine {
         case "heatPunch":
         case "crowbar":
         case "repulsor": {
+          // Butcher's crowbar is a thrown projectile (handled in startMelee/projectiles)
+          if (m.kind === "crowbar" && f.skin.id === "butcher") break;
           if (inActive && f.meleeHitMask.size === 0) {
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
