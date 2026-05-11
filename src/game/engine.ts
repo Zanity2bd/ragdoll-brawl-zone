@@ -763,6 +763,12 @@ export class GameEngine {
   private shakeDirY = 0;
   private shakeDirT = 0;
   private shakeDirDur = 0;
+  // Reverse-rebound kick — fires after primary directional shake settles so
+  // the camera reads as "punched and snapped back" instead of just drifting.
+  private shakeReboundX = 0;
+  private shakeReboundY = 0;
+  private shakeReboundT = 0;
+  private shakeReboundDur = 0;
   // Zoom-punch: short multiplicative zoom kick on big hits.
   // 0 = no effect; positive values briefly multiply camZoom.
   private zoomPunch = 0;
