@@ -2713,10 +2713,13 @@ export class GameEngine {
       // constant so head/arms/legs flop with offset phase, never lockstep.
       const lagChase = (cur: number, target: number, k: number) =>
         cur + (target - cur) * Math.min(1, dt * k);
-      f.headLag  = lagChase(f.headLag,  f.ragdollAV * 0.35, 6.5) * Math.pow(0.92, dt * 60);
-      f.armLagL  = lagChase(f.armLagL,  f.ragdollAV * 0.55, 9.0) * Math.pow(0.90, dt * 60);
-      f.armLagR  = lagChase(f.armLagR,  f.ragdollAV * 0.55, 8.2) * Math.pow(0.90, dt * 60);
-      f.legLag   = lagChase(f.legLag,   f.ragdollAV * 0.40, 7.0) * Math.pow(0.91, dt * 60);
+      // Much stronger trailing-limb drag — limbs visibly chase the body with
+      // staggered offsets (head last). Asymmetric L/R so the silhouette never
+      // mirrors itself. Slower decay so momentum carries longer.
+      f.headLag  = lagChase(f.headLag,  f.ragdollAV * 0.95, 3.4) * Math.pow(0.955, dt * 60);
+      f.armLagL  = lagChase(f.armLagL,  f.ragdollAV * 1.55, 5.2) * Math.pow(0.945, dt * 60);
+      f.armLagR  = lagChase(f.armLagR,  f.ragdollAV * 1.25, 4.6) * Math.pow(0.948, dt * 60);
+      f.legLag   = lagChase(f.legLag,   f.ragdollAV * 1.10, 4.0) * Math.pow(0.950, dt * 60);
       // Walls — bounce with energy loss
       if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6);
         f.hitReactKind = "wallBounce"; f.hitReactT = 0.22; f.hitReactDur = 0.22; f.hitReactDir = 1; f.hitReactMag = Math.min(1, Math.abs(f.vx) / 360 + 0.3); }
