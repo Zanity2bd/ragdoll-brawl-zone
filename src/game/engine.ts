@@ -6610,9 +6610,9 @@ export class GameEngine {
     if (useSpriteWalk) {
       // ---- Hip-rooted root transform for sprite body ----
       // Apply ragdoll torso tilt around the HIP (pelvis), not feet or
-      // sprite-center. This makes the cosmetic sprite inherit the same
-      // rotational impulse the procedural rig already shows, so the skin
-      // never drifts off the skeleton during recoil / hit-reaction springs.
+      // sprite-center. The cosmetic sprite inherits the same rotational
+      // impulse the procedural rig already shows so the skin never drifts
+      // off the skeleton during recoil / hit-reaction springs.
       // Skipped during full ragdoll tumble — that branch owns its own pivot.
       const __rsTilt = (!ghost && f.rs && f.ragdollT <= 0) ? f.rs.torsoAng : 0;
       const __needRoot = Math.abs(__rsTilt) > 0.005;
@@ -6625,6 +6625,8 @@ export class GameEngine {
         ctx.translate(-hipPx, -hipPy);
       }
       try {
+      // Soft accent pool — only when grounded
+      if (f.onGround && !this.lowPower) {
         ctx.save();
         const grad = ctx.createRadialGradient(x, y + FIGHTER_H - 1, 1, x, y + FIGHTER_H - 1, 28);
         grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 28%, transparent)`);
