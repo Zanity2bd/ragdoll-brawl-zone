@@ -291,6 +291,9 @@ export function stepRagdoll(
   // Always tick immunity + pose hold even when in 'none' so they expire.
   if (rs.immuneT > 0)  rs.immuneT  = Math.max(0, rs.immuneT - dt);
   if (rs.poseHoldT > 0) rs.poseHoldT = Math.max(0, rs.poseHoldT - dt);
+  if (rs.incomingImpactT > 0) rs.incomingImpactT = Math.max(0, rs.incomingImpactT - dt);
+  // Free-running breath phase (visual; not state-bound).
+  rs.breathPhase += dt;
 
   // Tension always relaxes toward target.
   const tDelta = rs.targetTension - rs.muscleTension;
