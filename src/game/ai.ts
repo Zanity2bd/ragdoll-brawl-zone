@@ -123,6 +123,7 @@ export class CpuController {
   private wantPower1 = false;
   private wantPower2 = false;
   private wantSuperDash = false;
+  private wantPunch = false;
   private feintT = 0;
   private commitT = 0;
   private lastOppMelee: string | null = null;
@@ -132,6 +133,12 @@ export class CpuController {
   private dodgedAtX = 0;
   // throttle so we don't spam powers every think tick
   private nextPowerT = 0;
+  // throttle basic punches so combat reads like deliberate strikes, not a held button
+  private nextPunchT = 0;
+  private punchStreak = 0;
+  // brief "back off" timer after the opponent goes down so the AI clears space
+  // before launching a special — feels far more natural than insta-special-on-fall.
+  private regroupT = 0;
   // anti-stand-still timer — forces a small movement / jump when idle too long
   private idleT = 0;
   private preferredScale = 1;
@@ -173,7 +180,9 @@ export class CpuController {
     this.commitT = Math.max(0, this.commitT - dt);
     this.punishT = Math.max(0, this.punishT - dt);
     this.retreatT = Math.max(0, this.retreatT - dt);
+    this.regroupT = Math.max(0, this.regroupT - dt);
     this.nextPowerT = Math.max(0, this.nextPowerT - dt);
+    this.nextPunchT = Math.max(0, this.nextPunchT - dt);
     this.lastOppMeleeT += dt;
     this.idleT = this.moveDir === 0 ? this.idleT + dt : 0;
 
@@ -232,6 +241,17 @@ export class CpuController {
     });
     if (this.wantJump) { this.engine.pressJump(this.id); this.wantJump = false; }
     if (this.wantSpecial) { this.wantSpecial = false; this.fireSpecial(me.name); }
+    if (this.wantPunch) {
+      this.wantPunch = false;
+      this.engine.pressPunch(this.id);
+      // Slightly varied cadence — short between jab→kick chain, longer after a finisher.
+      this.punchStreak++;
+      const cadence = this.punchStreak >= 2
+        ? 0.34 + Math.random() * 0.18  // breathing room after a combo
+        : 0.16 + Math.random() * 0.08; // tight chain
+      if (this.punchStreak >= 2) this.punchStreak = 0;
+      this.nextPunchT = cadence;
+    }
     if (this.wantPower1) { this.wantPower1 = false; this.engine.pressPower1(this.id); this.nextPowerT = 0.4; }
     if (this.wantPower2) { this.wantPower2 = false; this.engine.pressPower2(this.id); this.nextPowerT = 0.4; }
     if (this.wantSuperDash) { this.wantSuperDash = false; this.engine.pressSuperDash(this.id); this.nextPowerT = 0.6; }
@@ -291,17 +311,38 @@ export class CpuController {
     const adx = Math.abs(dx);
     const dir = (Math.sign(dx) || 1) as -1 | 1;
 
+    // Basic-attack reach for the shared jab/kick combo (matches engine PUNCH range).
+    const BRAWL_RANGE = 64;
     // === Hard rules ===
     const oppHelpless = oppR.ragdollT > 0 || oppR.downedT > 0 || oppR.getUpT > 0;
     if (oppHelpless) {
-      this.moveDir = dir;
+      // Opponent just went down — back off to a clean special-launch distance,
+      // arm a short regroup window, then use a special / power. Reads as
+      // "step back, line it up, finish them" instead of mashing on top of them.
+      this.regroupT = Math.max(this.regroupT, 0.55);
+      const safeMin = Math.max(skill.specialMin, Math.round(skill.preferred * 0.85), 90);
+      const safeMax = Math.max(safeMin + 60, skill.specialMax - 20);
+      if (adx < safeMin - 12) {
+        this.moveDir = -dir as -1 | 1;
+        this.commitT = 0.18;
+        return; // create space first; specials next tick
+      }
+      if (adx > safeMax + 20) {
+        this.moveDir = dir;
+        this.commitT = 0.18;
+        return;
+      }
+      // In the launch window — hold position and fire.
+      this.moveDir = 0;
       this.commitT = 0.2;
-      if (adx <= skill.specialMax + 10 && this.canSpecial(me, skill, oppR, meR)) {
+      if (this.canSpecial(me, skill, oppR, meR)) {
         if (Math.random() < cfg.specialChance) this.wantSpecial = true;
       }
       this.maybeUsePower(me, skill, adx, oppR, meR, cfg, /*aggressive*/ true);
       return;
     }
+    // Reset punch-streak whenever the target leaves brawl range or recovers.
+    if (adx > BRAWL_RANGE * 1.3) this.punchStreak = 0;
 
     if (meR.ragdollT > 0 || meR.downedT > 0 || meR.getUpT > 0) {
       this.moveDir = 0;
@@ -379,6 +420,36 @@ export class CpuController {
       this.wantJump = true;
     }
 
+    // === Brawl: prefer basic punch/kick combos when nose-to-nose ===
+    // Specials at point-blank often whiff against an active opponent and
+    // reads as "dumb AI". When inside basic-attack reach we throw the same
+    // jab→kick combo a player would, with a small chance to mix in a heavy
+    // special as a feint. Once the opponent ragdolls, the helpless branch
+    // above takes over and steps back to line up the finisher.
+    const inBrawl =
+      adx <= BRAWL_RANGE &&
+      meR.onGround && oppR.onGround &&
+      !meR.meleeKind &&
+      Math.abs(oppR.y - meR.y) < 60;
+    if (inBrawl) {
+      // Face & micro-space the opponent
+      this.moveDir = (adx > 28 ? dir : 0) as -1 | 0 | 1;
+      this.commitT = 0.12;
+      if (this.nextPunchT <= 0) this.wantPunch = true;
+      // Rare special mix-in: mostly when special is ready and we've already
+      // landed a couple of basics, so it lands as a finisher not an opener.
+      const mixSpecial =
+        this.regroupT <= 0 &&
+        this.canSpecial(me, skill, oppR, meR) &&
+        adx >= skill.specialMin && adx <= skill.specialMax + 20 &&
+        this.punchStreak >= 1 &&
+        Math.random() < cfg.specialChance * 0.18;
+      if (mixSpecial) this.wantSpecial = true;
+      // Power abilities still allowed if they fit (e.g. Hulk's close-range power2)
+      this.maybeUsePower(me, skill, adx, oppR, meR, cfg, false);
+      return;
+    }
+
     // === Special trigger ===
     if (this.canSpecial(me, skill, oppR, meR)) {
       const inWindow = adx >= skill.specialMin && adx <= skill.specialMax;
@@ -387,7 +458,9 @@ export class CpuController {
         this.id, this.id === "p1" ? "p2" : "p1",
       );
       const opponentFasterAttack = !!oppR.meleeKind && (oppR.meleeKind === "speedFlurry" || oppR.meleeKind === "phaseStrike");
-      if (!blocked && !opponentFasterAttack && (inWindow || lowHpTele)) {
+      // Don't pop a special during a forced regroup window — that whole
+      // window exists so the AI can pick its spot deliberately.
+      if (this.regroupT <= 0 && !blocked && !opponentFasterAttack && (inWindow || lowHpTele)) {
         if (Math.random() < cfg.specialChance) this.wantSpecial = true;
       }
     }
