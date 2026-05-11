@@ -2860,6 +2860,7 @@ export class GameEngine {
         f.ragdollAng = 0; f.ragdollAV = 0; f.ragdollEnergy = 0;
         f.headLag = f.armLagL = f.armLagR = f.legLag = 0;
         resetWobble(f.wobble);
+        resetRagdoll(f.rs);
       }
       return;
     }
