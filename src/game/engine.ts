@@ -871,6 +871,9 @@ export class GameEngine {
     this.teleTargeting = null;
     this.slowmoT = 0; this.slowmoMode = null;
     this.hitstopT = 0; this.impactFlash = 0;
+    this.hitLabels = [];
+    this.comboCount = { p1: 0, p2: 0 };
+    this.comboCountT = { p1: 0, p2: 0 };
     this.shake = 0;
     this.shakeDirX = 0; this.shakeDirY = 0; this.shakeDirT = 0; this.shakeDirDur = 0;
     this.zoomPunch = 0; this.zoomPunchT = 0; this.zoomPunchDur = 0;
