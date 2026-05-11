@@ -71,6 +71,24 @@ interface Fighter {
   vy: number;
   facing: 1 | -1;
   facingT: number;
+  // Facing intent controller (visual smoothing + hysteresis).
+  // facingTarget = the side opponent has stably been on (gameplay `facing` mirrors this).
+  // facingPersistT = continuous time opponent has been on the opposite side.
+  // facingLockT = brief lock after attacks/jumps preventing flip churn.
+  // facingVel = critically-damped spring velocity for facingT visual.
+  facingPersistT: number;
+  facingLockT: number;
+  facingVel: number;
+  lastVx: number; // for momentum/accel-aware lean
+  // Spring-damped secondary motion (render-only). Allocation-free.
+  // Each is { p: current, v: velocity }.
+  sLean: { p: number; v: number };
+  sShoulderRoll: { p: number; v: number };
+  sHead: { p: number; v: number };
+  sHandLX: { p: number; v: number }; sHandLY: { p: number; v: number };
+  sHandRX: { p: number; v: number }; sHandRY: { p: number; v: number };
+  sFootLX: { p: number; v: number }; sFootLY: { p: number; v: number };
+  sFootRX: { p: number; v: number }; sFootRY: { p: number; v: number };
   onGround: boolean;
   hp: number;
   hitFlash: number;
