@@ -1733,12 +1733,16 @@ export class GameEngine {
     for (const pr of this.projectiles) {
       const target = pr.owner === "p1" ? this.p2 : this.p1;
       if (this.phase !== "fight") continue;
-      const hitR = pr.kind === "batarang" ? 18 : (pr.kind === "web" ? 14 : FIGHTER_W);
+      if (pr.kind === "crowbar" && pr.rested) continue;
+      const hitR = pr.kind === "batarang" ? 18 : (pr.kind === "web" ? 14 : (pr.kind === "crowbar" ? 22 : FIGHTER_W));
       if (Math.abs(pr.x - target.x) < hitR && pr.y > target.y && pr.y < target.y + FIGHTER_H) {
-        if (target.iframeT > 0 || target.downedT > 0 || target.getUpT > 0) { pr.life = 0; continue; }
+        if (target.iframeT > 0 || target.downedT > 0 || target.getUpT > 0) {
+          if (pr.kind !== "crowbar") pr.life = 0;
+          continue;
+        }
         const dmg = pr.damage ?? FIRE_DAMAGE;
         target.hp = Math.max(0, target.hp - dmg);
-        target.hitFlash = 0.25;
+        target.hitFlash = 0.35;
         if (pr.kind === "web") {
           // pull target toward owner
           const owner = pr.owner === "p1" ? this.p1 : this.p2;
@@ -1746,6 +1750,42 @@ export class GameEngine {
           target.vy = -180;
           target.onGround = false;
           Sfx.play("whoosh", 0.7);
+        } else if (pr.kind === "crowbar") {
+          // Heavy iron strike: massive launch + ragdoll.
+          const dir = (Math.sign(pr.vx) || 1) as 1 | -1;
+          target.vx = dir * 520;
+          target.vy = -360;
+          target.onGround = false;
+          target.ragdollT = Math.max(target.ragdollT, 0.9);
+          target.ragdollEnergy = 1;
+          target.ragdollAV = dir * 7;
+          target.ragdollImmuneT = 1.0;
+          this.hitstopT = Math.max(this.hitstopT, 0.22);
+          this.slowmoT = Math.max(this.slowmoT, 0.35);
+          this.shake = Math.max(this.shake, 24);
+          this.impactFlash = Math.max(this.impactFlash, 0.85);
+          // Bright impact star + sparks at contact
+          spawnFx(this.attackFx, "impactStar", pr.x, pr.y, { size: 40, life: 0.32, grow: 90, spin: 5 });
+          spawnFx(this.attackFx, "shockRing", pr.x, pr.y, { size: 22, life: 0.32, grow: 90, blend: "lighter" });
+          for (let i = 0; i < 14; i++) {
+            this.particles.push({
+              x: pr.x + (Math.random() - 0.5) * 14, y: pr.y + (Math.random() - 0.5) * 10,
+              vx: -dir * (80 + Math.random() * 220), vy: -160 - Math.random() * 200,
+              life: 0.5, maxLife: 0.5,
+              color: "oklch(0.92 0.16 80)", size: 1.4 + Math.random() * 1.6,
+            });
+          }
+          Sfx.play("thud", 0.95);
+          // Crowbar drops at impact location and rests on the ground.
+          pr.vx = 0; pr.vy = 0; pr.spin = 0;
+          pr.y = GROUND_Y - 4;
+          pr.rot = Math.PI / 2;
+          pr.rested = true;
+          pr.life = 999;
+          if (target.hp <= 0 && this.phase === "fight") {
+            this.triggerKo(pr.owner);
+          }
+          continue;
         } else {
           target.vx += Math.sign(pr.vx || target.x - (pr.owner === "p1" ? this.p1.x : this.p2.x)) * FIRE_KNOCKBACK;
           target.vy = -240;
@@ -1766,6 +1806,20 @@ export class GameEngine {
         pr.life = 0;
         if (target.hp <= 0 && this.phase === "fight") {
           this.triggerKo(pr.owner);
+        }
+      }
+    }
+    // Butcher pickup: walking near his rested crowbar restores the special.
+    for (const f of [this.p1, this.p2]) {
+      if (f.skin.id !== "butcher" || !f.crowbarThrown) continue;
+      for (const pr of this.projectiles) {
+        if (pr.kind !== "crowbar" || !pr.rested || pr.owner !== f.id) continue;
+        if (Math.abs(pr.x - f.x) < 30 && Math.abs(pr.y - (f.y + FIGHTER_H)) < 70 && f.onGround) {
+          pr.life = 0;
+          f.crowbarThrown = false;
+          f.meleeCd = 0.3;
+          Sfx.play("blip", 0.5);
+          spawnFx(this.attackFx, "chargeRing", pr.x, pr.y - 12, { size: 22, life: 0.28, grow: 30, spin: 8, blend: "lighter" });
         }
       }
     }
