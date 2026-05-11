@@ -535,3 +535,178 @@ export function blendPose(a: Pose, b: Pose, t: number, leanOverride?: number): P
     shoulderRoll: lerp(a.shoulderRoll, b.shoulderRoll),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Spring-damped secondary motion
+// ---------------------------------------------------------------------------
+// Render-only post-process applied to a Pose. Each scalar/vec spring tracks
+// a baked target with critically-damped behavior (k, d ≈ 2√k), so hands and
+// feet trail body acceleration naturally without overshoot.
+//
+// Allocation-free: callers pass mutable { p, v } state objects per fighter.
+// All offsets are clamped to preserve silhouette readability.
+
+export interface Spring1 { p: number; v: number }
+
+// Semi-implicit Euler step. Stable at typical 60fps and dt up to ~0.05s.
+// For larger dt callers should substep externally.
+export function springStep(s: Spring1, target: number, dt: number, k: number, d: number) {
+  s.v += ((target - s.p) * k - s.v * d) * dt;
+  s.p += s.v * dt;
+}
+
+export interface SpringBundle {
+  sLean: Spring1; sShoulderRoll: Spring1; sHead: Spring1;
+  sHandLX: Spring1; sHandLY: Spring1; sHandRX: Spring1; sHandRY: Spring1;
+  sFootLX: Spring1; sFootLY: Spring1; sFootRX: Spring1; sFootRY: Spring1;
+}
+
+// Apply spring offsets to a Pose in-place. `dt` should already be substepped
+// by the caller if it exceeds 0.025s.
+//
+// State machine: spring `target` is always the baked pose value, so springs
+// converge back to canonical pose when motion settles. Offsets clamped per
+// silhouette rules.
+export function applySpringPolish(
+  pose: Pose,
+  s: SpringBundle,
+  dt: number,
+  opts: {
+    onGround: boolean;
+    facing: 1 | -1;
+    vx: number;
+    vy: number;
+    retreating: boolean;
+    lowPower: boolean;
+  },
+): void {
+  if (dt <= 0) return;
+  // Substep guard: never feed a spring more than 25ms at once.
+  let remaining = Math.min(dt, 0.05);
+  const maxStep = 0.025;
+  // Tunings — critically damped (d ≈ 2√k).
+  const handK = 180;
+  const handD = opts.onGround ? 27 : 14; // float in air
+  const footK = 260, footD = 32;
+  const leanK = 120, leanD = 22;
+  const headK = 200, headD = 28;
+  const rollK = 120, rollD = 22;
+
+  // Airborne velocity bias on hand/foot targets — limbs trail real motion.
+  const airBiasX = opts.onGround ? 0 : Math.max(-10, Math.min(10, -opts.vx * 0.04));
+  const airBiasY = opts.onGround ? 0 : Math.max(-10, Math.min(10, -opts.vy * 0.03));
+  const footBiasX = opts.onGround ? 0 : Math.max(-8, Math.min(8, -opts.vx * 0.03));
+  const footBiasY = opts.onGround ? 0 : Math.max(-8, Math.min(8, -opts.vy * 0.025));
+
+  // Targets (baked pose values + airborne bias).
+  const tHandLX = pose.handL[0] + airBiasX, tHandLY = pose.handL[1] + airBiasY;
+  const tHandRX = pose.handR[0] + airBiasX, tHandRY = pose.handR[1] + airBiasY;
+  const tFootLX = pose.footL[0] + footBiasX, tFootLY = pose.footL[1] + footBiasY;
+  const tFootRX = pose.footR[0] + footBiasX, tFootRY = pose.footR[1] + footBiasY;
+  const tLean = pose.lean;
+  const tRoll = pose.shoulderRoll;
+  const tHead = pose.headOffsetY;
+
+  while (remaining > 0) {
+    const h = Math.min(maxStep, remaining);
+    springStep(s.sLean, tLean, h, leanK, leanD);
+    springStep(s.sShoulderRoll, tRoll, h, rollK, rollD);
+    if (!opts.lowPower) {
+      springStep(s.sHead, tHead, h, headK, headD);
+    }
+    springStep(s.sHandLX, tHandLX, h, handK, handD);
+    springStep(s.sHandLY, tHandLY, h, handK, handD);
+    springStep(s.sHandRX, tHandRX, h, handK, handD);
+    springStep(s.sHandRY, tHandRY, h, handK, handD);
+    if (!opts.lowPower) {
+      springStep(s.sFootLX, tFootLX, h, footK, footD);
+      springStep(s.sFootLY, tFootLY, h, footK, footD);
+      springStep(s.sFootRX, tFootRX, h, footK, footD);
+      springStep(s.sFootRY, tFootRY, h, footK, footD);
+    }
+    remaining -= h;
+  }
+
+  // Compute clamped offsets (current spring pos vs target).
+  const clamp = (v: number, lim: number) => Math.max(-lim, Math.min(lim, v));
+  const hLx = clamp(s.sHandLX.p - tHandLX, 10);
+  const hLy = clamp(s.sHandLY.p - tHandLY, 10);
+  const hRx = clamp(s.sHandRX.p - tHandRX, 10);
+  const hRy = clamp(s.sHandRY.p - tHandRY, 10);
+  const fLx = opts.lowPower ? 0 : clamp(s.sFootLX.p - tFootLX, 8);
+  const fLy = opts.lowPower ? 0 : clamp(s.sFootLY.p - tFootLY, 8);
+  const fRx = opts.lowPower ? 0 : clamp(s.sFootRX.p - tFootRX, 8);
+  const fRy = opts.lowPower ? 0 : clamp(s.sFootRY.p - tFootRY, 8);
+  // Foot planting (soft anchor): on ground + slow vx, suppress foot drift.
+  const planted = opts.onGround && Math.abs(opts.vx) < 60;
+  const footScale = planted ? 0.25 : 1;
+
+  const leanOffset = clamp(s.sLean.p - tLean, 0.12);
+  const rollOffset = clamp(s.sShoulderRoll.p - tRoll, 0.12);
+  const headOffset = opts.lowPower ? 0 : clamp(s.sHead.p - tHead, 6);
+
+  // Retreat: widen arm arc, deepen shoulder roll, add backward weight.
+  if (opts.retreating) {
+    pose.shoulderRoll *= 1.25;
+  }
+
+  // Write polished values back to the pose.
+  pose.lean += leanOffset;
+  pose.shoulderRoll += rollOffset;
+  pose.headOffsetY += headOffset;
+
+  // Hands move; recompute elbow as midpoint + perpendicular curve so the arm
+  // bends through a clean arc instead of a straight line.
+  const newHandLX = pose.handL[0] + hLx;
+  const newHandLY = pose.handL[1] + hLy;
+  const newHandRX = pose.handR[0] + hRx;
+  const newHandRY = pose.handR[1] + hRy;
+
+  const recomputeElbow = (
+    arm: [number, number, number, number, number, number],
+    handX: number, handY: number, sign: number,
+  ) => {
+    const sx = arm[0], sy = arm[1];
+    const dx = handX - sx, dy = handY - sy;
+    const dist = Math.hypot(dx, dy) || 1;
+    // Perpendicular pointing "forward" of the limb chain.
+    const px = -dy / dist, py = dx / dist;
+    const curve = 4; // baseline elbow bow
+    const mx = (sx + handX) / 2;
+    const my = (sy + handY) / 2;
+    arm[2] = mx + px * curve * sign;
+    arm[3] = my + py * curve * sign;
+    arm[4] = handX;
+    arm[5] = handY;
+  };
+  recomputeElbow(pose.armL, newHandLX, newHandLY, opts.facing);
+  recomputeElbow(pose.armR, newHandRX, newHandRY, opts.facing);
+  pose.handL = [newHandLX, newHandLY];
+  pose.handR = [newHandRX, newHandRY];
+
+  // Feet: scale by plant factor, write back, and recompute knee similarly.
+  const newFootLX = pose.footL[0] + fLx * footScale;
+  const newFootLY = pose.footL[1] + fLy * footScale;
+  const newFootRX = pose.footR[0] + fRx * footScale;
+  const newFootRY = pose.footR[1] + fRy * footScale;
+  const recomputeKnee = (
+    leg: [number, number, number, number, number, number],
+    footX: number, footY: number, sign: number,
+  ) => {
+    const hx = leg[0], hy = leg[1];
+    const dx = footX - hx, dy = footY - hy;
+    const dist = Math.hypot(dx, dy) || 1;
+    const px = -dy / dist, py = dx / dist;
+    const curve = 3;
+    const mx = (hx + footX) / 2;
+    const my = (hy + footY) / 2;
+    leg[2] = mx + px * curve * sign;
+    leg[3] = my + py * curve * sign;
+    leg[4] = footX;
+    leg[5] = footY;
+  };
+  recomputeKnee(pose.legL, newFootLX, newFootLY, opts.facing);
+  recomputeKnee(pose.legR, newFootRX, newFootRY, opts.facing);
+  pose.footL = [newFootLX, newFootLY];
+  pose.footR = [newFootRX, newFootRY];
+}
