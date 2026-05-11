@@ -2705,18 +2705,22 @@ export class GameEngine {
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
       // Angular: torque from horizontal speed; damp gradually
-      const targetAV = Math.sign(f.vx) * Math.min(12, Math.abs(f.vx) * 0.02);
-      f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 2);
-      f.ragdollAV *= Math.pow(0.94, dt * 60);
+      // Bigger torque target + slower decay → body keeps spinning, momentum sells weight.
+      const targetAV = Math.sign(f.vx) * Math.min(18, Math.abs(f.vx) * 0.035);
+      f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 1.4);
+      f.ragdollAV *= Math.pow(0.965, dt * 60);
       f.ragdollAng += f.ragdollAV * dt;
       // Per-limb rotational lag — each limb chases ragdollAV with its own time
       // constant so head/arms/legs flop with offset phase, never lockstep.
       const lagChase = (cur: number, target: number, k: number) =>
         cur + (target - cur) * Math.min(1, dt * k);
-      f.headLag  = lagChase(f.headLag,  f.ragdollAV * 0.35, 6.5) * Math.pow(0.92, dt * 60);
-      f.armLagL  = lagChase(f.armLagL,  f.ragdollAV * 0.55, 9.0) * Math.pow(0.90, dt * 60);
-      f.armLagR  = lagChase(f.armLagR,  f.ragdollAV * 0.55, 8.2) * Math.pow(0.90, dt * 60);
-      f.legLag   = lagChase(f.legLag,   f.ragdollAV * 0.40, 7.0) * Math.pow(0.91, dt * 60);
+      // Much stronger trailing-limb drag — limbs visibly chase the body with
+      // staggered offsets (head last). Asymmetric L/R so the silhouette never
+      // mirrors itself. Slower decay so momentum carries longer.
+      f.headLag  = lagChase(f.headLag,  f.ragdollAV * 0.95, 3.4) * Math.pow(0.955, dt * 60);
+      f.armLagL  = lagChase(f.armLagL,  f.ragdollAV * 1.55, 5.2) * Math.pow(0.945, dt * 60);
+      f.armLagR  = lagChase(f.armLagR,  f.ragdollAV * 1.25, 4.6) * Math.pow(0.948, dt * 60);
+      f.legLag   = lagChase(f.legLag,   f.ragdollAV * 1.10, 4.0) * Math.pow(0.950, dt * 60);
       // Walls — bounce with energy loss
       if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6);
         f.hitReactKind = "wallBounce"; f.hitReactT = 0.22; f.hitReactDur = 0.22; f.hitReactDir = 1; f.hitReactMag = Math.min(1, Math.abs(f.vx) / 360 + 0.3); }
@@ -5271,27 +5275,29 @@ export class GameEngine {
       const p = computeRagdollPose(f.ragdollPhase, FIGHTER_H, f.ragdollAng);
       // Per-limb rotational lag — limbs trail the body so it reads as flesh,
       // not a rigid plank. Lag values are in radians; convert to small XY swings.
+      // Larger swing radii so trailing limbs read on mobile silhouettes.
+      // Asymmetric L vs R so body lines stay diagonal, never mirrored.
       const sw = (lag: number, r: number): [number, number] => {
-        const a = Math.max(-1.4, Math.min(1.4, lag));
-        return [Math.sin(a) * r, (1 - Math.cos(a)) * r * 0.6];
+        const a = Math.max(-1.6, Math.min(1.6, lag));
+        return [Math.sin(a) * r, (1 - Math.cos(a)) * r * 0.55];
       };
-      const [hx, hy] = sw(f.headLag, 4);
-      const [aLx, aLy] = sw(f.armLagL, 7);
-      const [aRx, aRy] = sw(f.armLagR, 7);
-      const [lx, ly] = sw(f.legLag, 5);
+      const [hx, hy] = sw(f.headLag, 9);
+      const [aLx, aLy] = sw(f.armLagL, 16);
+      const [aRx, aRy] = sw(f.armLagR, 13);
+      const [lLx, lLy] = sw(f.legLag, 11);
+      const [lRx, lRy] = sw(f.legLag * 0.78, 9); // L/R asymmetry
       const legacyPose: Pose = {
         ...p,
         headOffsetY: p.headOffsetY + hy,
         handL: [p.handL[0] + aLx, p.handL[1] + aLy],
         handR: [p.handR[0] + aRx, p.handR[1] + aRy],
-        armL: [p.armL[0], p.armL[1], p.armL[2] + aLx * 0.5, p.armL[3] + aLy * 0.5, p.armL[4] + aLx, p.armL[5] + aLy],
-        armR: [p.armR[0], p.armR[1], p.armR[2] + aRx * 0.5, p.armR[3] + aRy * 0.5, p.armR[4] + aRx, p.armR[5] + aRy],
-        footL: [p.footL[0] + lx, p.footL[1] + ly],
-        footR: [p.footR[0] + lx, p.footR[1] + ly],
-        legL: [p.legL[0], p.legL[1], p.legL[2] + lx * 0.5, p.legL[3] + ly * 0.5, p.legL[4] + lx, p.legL[5] + ly],
-        legR: [p.legR[0], p.legR[1], p.legR[2] + lx * 0.5, p.legR[3] + ly * 0.5, p.legR[4] + lx, p.legR[5] + ly],
-        // Override lean with physical body angle for stable visual; add tiny head bias.
-        lean: f.ragdollAng + hx * 0.01,
+        armL: [p.armL[0], p.armL[1], p.armL[2] + aLx * 0.6, p.armL[3] + aLy * 0.6, p.armL[4] + aLx, p.armL[5] + aLy],
+        armR: [p.armR[0], p.armR[1], p.armR[2] + aRx * 0.6, p.armR[3] + aRy * 0.6, p.armR[4] + aRx, p.armR[5] + aRy],
+        footL: [p.footL[0] + lLx, p.footL[1] + lLy],
+        footR: [p.footR[0] + lRx, p.footR[1] + lRy],
+        legL: [p.legL[0], p.legL[1], p.legL[2] + lLx * 0.55, p.legL[3] + lLy * 0.55, p.legL[4] + lLx, p.legL[5] + lLy],
+        legR: [p.legR[0], p.legR[1], p.legR[2] + lRx * 0.55, p.legR[3] + lRy * 0.55, p.legR[4] + lRx, p.legR[5] + lRy],
+        lean: f.ragdollAng + hx * 0.015,
       };
       // Layer the new spring/momentum/anticipation/breath system ON TOP of the
       // legacy tumble pose so cinematic ragdoll polish is visible during the
