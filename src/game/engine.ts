@@ -1711,22 +1711,61 @@ export class GameEngine {
 
       if (!isFrozenFor("p1")) this.updateFighter(this.p1, sdt);
       if (!isFrozenFor("p2")) this.updateFighter(this.p2, sdt);
-      // Auto-face the opponent only when we are NOT mid-attack and NOT airborne.
-      // Flipping during a melee or jump produces visible pose/render desync;
-      // the character commits to a direction for the duration of those actions.
+      // Intent-based facing: hysteresis deadzone + persistence + retreat guard
+      // + attack lock. Prevents jitter-flips on crossover, retreat, or close
+      // overlap. Gameplay `facing` only updates after a stable commit.
       const canFlip = (f: typeof this.p1) =>
         !f.ragdollT && !f.downedT && !f.getUpT && !f.meleeKind && f.attackAnim <= 0
         && (f.onGround || f.flying);
-      if (!isFrozenFor("p1") && canFlip(this.p1)) this.p1.facing = this.p2.x > this.p1.x ? 1 : -1;
-      if (!isFrozenFor("p2") && canFlip(this.p2)) this.p2.facing = this.p1.x > this.p2.x ? 1 : -1;
+      const updateFacingIntent = (self: typeof this.p1, opp: typeof this.p1) => {
+        // Tick locks regardless of canFlip.
+        self.facingLockT = Math.max(0, self.facingLockT - dt);
+        // While attacking, stamp/refresh a brief lock so we hold facing during
+        // recovery frames too (prevents pop-flips right after a swing).
+        if (self.meleeKind || self.attackAnim > 0 || self.punchT > 0 || self.preJumpT > 0) {
+          self.facingLockT = Math.max(self.facingLockT, 0.20);
+        }
+        if (!canFlip(self) || self.facingLockT > 0) {
+          self.facingPersistT = 0;
+          return;
+        }
+        const dx = opp.x - self.x;
+        const desired: 1 | -1 = dx >= 0 ? 1 : -1;
+        if (desired === self.facing) { self.facingPersistT = 0; return; }
+        // Hysteresis deadzone — ignore micro-overlap flips.
+        if (Math.abs(dx) < 28) { self.facingPersistT = 0; return; }
+        // Persistence threshold scales with state.
+        const retreating = Math.sign(self.vx) === -self.facing && Math.abs(self.vx) > 80;
+        const dashCross = Math.abs(opp.vx) > 380
+          && Math.sign(opp.x + opp.vx * 0.05 - self.x) !== Math.sign(dx);
+        let need = 0.12;
+        if (!self.onGround) need = 0.20;
+        if (retreating) need = Math.max(need, 0.28);
+        if (dashCross) need = Math.max(need, 0.32);
+        // Extra guard: while retreating AND opponent is close, never flip.
+        if (retreating && Math.abs(dx) < 90) { self.facingPersistT = 0; return; }
+        self.facingPersistT += dt;
+        if (self.facingPersistT >= need) {
+          self.facing = desired;
+          self.facingPersistT = 0;
+        }
+      };
+      if (!isFrozenFor("p1")) updateFacingIntent(this.p1, this.p2);
+      if (!isFrozenFor("p2")) updateFacingIntent(this.p2, this.p1);
       this.resolveMelees(sdt);
       this.updateBamfCombo(this.p1, dt);
       this.updateBamfCombo(this.p2, dt);
     }
     for (const f of [this.p1, this.p2]) {
       if (freezeActive && f.id !== this.timeFreezer) continue;
-      // Slower, smoother yaw lerp so the turn reads as a 3D pivot, not a snap-flip.
-      f.facingT += (f.facing - f.facingT) * Math.min(1, dt * 5.5);
+      // Critically-damped spring on facingT. Smoother + more intentional than
+      // raw lerp; existing yaw-squash render path reads |facingT| automatically.
+      const k = 90, d = 19; // ~critically damped
+      const target = f.facing;
+      f.facingVel += ((target - f.facingT) * k - f.facingVel * d) * dt;
+      f.facingT += f.facingVel * dt;
+      // Track lastVx for accel-based lean (used by spring layer).
+      f.lastVx = f.vx;
     }
 
     for (const pr of this.projectiles) {
