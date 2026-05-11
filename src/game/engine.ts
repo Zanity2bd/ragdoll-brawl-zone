@@ -2902,7 +2902,7 @@ export class GameEngine {
         f.attackAnim = Math.max(f.attackAnim, PUNCH_DUR);
         f.cancelOK = false;
         Sfx.play("whoosh", 0.35);
-        armTrail(f.weaponTrail, PUNCH_DUR, { limb: "handR", rgb: "255,235,180", width: 7 });
+        armTrail(f.weaponTrail, PUNCH_DUR + 0.04, { limb: "handR", rgb: "255,235,180", width: 11 });
       }
     }
     intent.punch = false;
