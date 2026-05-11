@@ -4443,6 +4443,14 @@ export class GameEngine {
       target.wobble.staggerMag = mag;
       applyImpulse(target.wobble, f.facing, -0.45, mag);
     }
+    // AAA hit-reaction layer (additive, gameplay-safe)
+    {
+      const dmgN = Math.max(0.15, Math.min(1, m.damage / 22));
+      const isLauncher = m.ragdollT > 0 || m.knockbackY < -240;
+      const flags = (isLauncher ? HR_LAUNCHER : 0) | (wasAirborne ? HR_AIRBORNE : 0)
+        | (m.damage >= 14 ? HR_TELEGRAPHED : 0);
+      applyHitReaction(target.rs, f.facing, isLauncher ? -0.45 : -0.2, dmgN, 0, flags);
+    }
     // Hit-reaction profile: pick light/heavy/juggle based on context. Ragdoll
     // hits get no overlay (ragdoll renderer owns the body during that window).
     if (target.ragdollT <= 0) {
