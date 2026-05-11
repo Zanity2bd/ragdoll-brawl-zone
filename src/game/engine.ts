@@ -5618,7 +5618,7 @@ export class GameEngine {
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
     // Sprite-based attack FX overlays (charge ring, slash arc, impact star, shockwave).
     drawFxPool(ctx, this.attackFx);
-    this.drawHitLabels(ctx);
+    
     // Web-swing tethers — silky double strand with glow + slight slack curve.
     for (const f of [this.p1, this.p2]) {
       if (!f.swing) continue;
