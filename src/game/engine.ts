@@ -2830,18 +2830,26 @@ export class GameEngine {
             f.punchHit = true;
             f.cancelOK = true;
             target.hp = Math.max(0, target.hp - PUNCH_DMG);
-            target.hitFlash = 0.22;
-            target.vx += f.facing * 90;
-            target.vy -= 30;
+            target.hitFlash = 0.3;
+            // Stronger send-back so a jab visibly rocks the opponent (AoS5)
+            target.vx += f.facing * 170;
+            target.vy -= 70;
             const ix = target.x;
-            const iy = target.y + 36;
+            const iy = target.y + 40;
+            // Bright impact star + shock ring at contact — clearest possible "HIT"
+            spawnFx(this.attackFx, "impactStar", ix, iy, {
+              size: 34, life: 0.18, spin: 5, grow: 26, facing: f.facing as 1 | -1,
+            });
+            spawnFx(this.attackFx, "shockRing", ix, iy, {
+              size: 12, life: 0.2, grow: 80, facing: f.facing as 1 | -1,
+            });
             this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 38, life: 0.18, maxLife: 0.18, color: "oklch(0.95 0.04 80)" });
-            this.shockwaves.push({ x: ix, y: iy, r: 2, rMax: 22, life: 0.12, maxLife: 0.12, color: "oklch(0.99 0.02 250)" });
-            this.burst(ix, iy, "oklch(0.95 0.06 80)", 8);
-            this.shake = Math.max(this.shake, 6);
-            this.hitstopT = Math.max(this.hitstopT, 0.06);
-            this.impactFlash = Math.max(this.impactFlash, 0.22);
-            Sfx.play("punch", 0.8);
+            this.burst(ix, iy, "oklch(0.95 0.06 80)", 10);
+            this.shake = Math.max(this.shake, 9);
+            // Punchy 4-frame hitstop on every jab — the AoS5 secret sauce
+            this.hitstopT = Math.max(this.hitstopT, 0.075);
+            this.impactFlash = Math.max(this.impactFlash, 0.32);
+            Sfx.play("punch", 0.9);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
           }
         }
