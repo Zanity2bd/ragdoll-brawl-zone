@@ -7174,6 +7174,8 @@ function drawCrowbar(ctx: CanvasRenderingContext2D, x: number, y: number, facing
   ctx.stroke();
   ctx.restore();
 }
+
+function drawBoot(ctx: CanvasRenderingContext2D, p: [number, number], facing: 1 | -1, color: string) {
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.ellipse(p[0] + facing * 2, p[1] - 1, 5, 2.6, 0, 0, Math.PI * 2);
