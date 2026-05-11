@@ -420,6 +420,36 @@ export class CpuController {
       this.wantJump = true;
     }
 
+    // === Brawl: prefer basic punch/kick combos when nose-to-nose ===
+    // Specials at point-blank often whiff against an active opponent and
+    // reads as "dumb AI". When inside basic-attack reach we throw the same
+    // jab→kick combo a player would, with a small chance to mix in a heavy
+    // special as a feint. Once the opponent ragdolls, the helpless branch
+    // above takes over and steps back to line up the finisher.
+    const inBrawl =
+      adx <= BRAWL_RANGE &&
+      meR.onGround && oppR.onGround &&
+      !meR.meleeKind && !meR.dash &&
+      Math.abs(oppR.y - meR.y) < 60;
+    if (inBrawl) {
+      // Face & micro-space the opponent
+      this.moveDir = (adx > 28 ? dir : 0) as -1 | 0 | 1;
+      this.commitT = 0.12;
+      if (this.nextPunchT <= 0) this.wantPunch = true;
+      // Rare special mix-in: mostly when special is ready and we've already
+      // landed a couple of basics, so it lands as a finisher not an opener.
+      const mixSpecial =
+        this.regroupT <= 0 &&
+        this.canSpecial(me, skill, oppR, meR) &&
+        adx >= skill.specialMin && adx <= skill.specialMax + 20 &&
+        this.punchStreak >= 1 &&
+        Math.random() < cfg.specialChance * 0.18;
+      if (mixSpecial) this.wantSpecial = true;
+      // Power abilities still allowed if they fit (e.g. Hulk's close-range power2)
+      this.maybeUsePower(me, skill, adx, oppR, meR, cfg, false);
+      return;
+    }
+
     // === Special trigger ===
     if (this.canSpecial(me, skill, oppR, meR)) {
       const inWindow = adx >= skill.specialMin && adx <= skill.specialMax;
@@ -428,7 +458,9 @@ export class CpuController {
         this.id, this.id === "p1" ? "p2" : "p1",
       );
       const opponentFasterAttack = !!oppR.meleeKind && (oppR.meleeKind === "speedFlurry" || oppR.meleeKind === "phaseStrike");
-      if (!blocked && !opponentFasterAttack && (inWindow || lowHpTele)) {
+      // Don't pop a special during a forced regroup window — that whole
+      // window exists so the AI can pick its spot deliberately.
+      if (this.regroupT <= 0 && !blocked && !opponentFasterAttack && (inWindow || lowHpTele)) {
         if (Math.random() < cfg.specialChance) this.wantSpecial = true;
       }
     }
