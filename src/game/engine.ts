@@ -7201,8 +7201,9 @@ export class GameEngine {
         // anchor so the envelope's tx/ty still read as forward push.
         // Stance foot sits ~10px behind body center on the back-leg side.
         const stanceOffsetX = -renderFacing * 10;
-        const footPx = x + f.bodyLagX + stanceOffsetX;
-        const footPy = y + FIGHTER_H - 1; // ground contact
+        // Root-local foot pivot (bodyLag/wobble baked in by pushFighterRoot).
+        const footPx = stanceOffsetX;
+        const footPy = FIGHTER_H - 1;
         ctx.save();
         ctx.translate(footPx + env.tx, footPy + env.ty);
         ctx.rotate(env.rot);
@@ -7210,14 +7211,13 @@ export class GameEngine {
         ctx.translate(-footPx, -footPy);
         drawFrame(swingIdx);
         ctx.restore();
-        // ---- Foot-plant dust puff on first active frame ----
-        // One-shot scuff at the planted foot when the kick fires — sells
-        // the "weight slamming down" the IK pivot is now visualizing.
+        // ---- Foot-plant dust puff on first active frame (world coords for particle pool) ----
         if (!f.comboHit && u > 0.18 && u < 0.32 && !this.lowPower
             && f.onGround && this.particles.length < 220) {
+          const footWorldX = f.x + stanceOffsetX;
           for (let i = 0; i < 4; i++) {
             this.particles.push({
-              x: footPx + (Math.random() - 0.5) * 8,
+              x: footWorldX + (Math.random() - 0.5) * 8,
               y: GROUND_Y - 1,
               vx: -renderFacing * (40 + Math.random() * 80),
               vy: -10 - Math.random() * 24,
