@@ -6704,6 +6704,52 @@ export class GameEngine {
     return [x, y];
   }
 
+  /**
+   * Canonical fighter render root. Every visual child of the body must inherit
+   * this stack so sprites, procedural limbs, cape, eyes, and cosmetic anchors
+   * all live under one authority instead of mixing world and local offsets.
+   */
+  private pushFighterRoot(ctx: CanvasRenderingContext2D, f: Fighter, ghost: boolean) {
+    const t = this.getRootTransform(f);
+    const bodyLagX = ghost ? 0 : f.bodyLagX;
+    const bodyRoll = ghost ? 0 : f.bodyRoll;
+    ctx.save();
+    ctx.translate(f.x + t.bodyOffX, f.y + t.bodyOffY);
+    ctx.translate(0, FIGHTER_H * 0.62);
+    if (!ghost && t.dx) ctx.translate(t.dx, 0);
+    if (!ghost && t.dy) ctx.translate(0, t.dy);
+    if (!ghost && t.rot) ctx.rotate(t.rot);
+    if (!ghost && (t.sx !== 1 || t.sy !== 1)) ctx.scale(t.sx, t.sy);
+    if (bodyLagX) ctx.translate(bodyLagX, 0);
+    if (!ghost && f.ragdollT <= 0) {
+      const wobTime = this.elapsed + (f.id === "p1" ? 0 : 1.7);
+      const moving = Math.min(1, Math.abs(f.vx) / 280);
+      const hit = Math.min(1, f.hitFlash * 4);
+      const wobAmp = 0.022 + moving * 0.018 + hit * 0.05;
+      const wob = Math.sin(wobTime * 6.2) * wobAmp;
+      const breath = 1 + Math.sin(wobTime * 2.4) * 0.012;
+      const squash = 1 + Math.sin(wobTime * 5.5) * (0.018 + hit * 0.04);
+      const moveStretch = 1 + moving * 0.04;
+      const moveSquash = 1 / moveStretch;
+      const hitSquash = 1 + hit * 0.18;
+      const hitStretch = 1 / hitSquash;
+      ctx.scale(squash * moveSquash * hitSquash, (2 - squash) * moveStretch * hitStretch);
+      ctx.scale(breath, breath);
+      ctx.rotate(wob);
+    }
+    const rootLean = poseForRoot(f, bodyRoll, t.torsoAng, ghost, this);
+    if (rootLean) ctx.rotate(rootLean);
+    if (!ghost) {
+      const mag = Math.abs(f.facingT);
+      const yawMag = 0.22 + 0.78 * mag;
+      const turnAmt = 1 - mag;
+      const skew = f.facing * turnAmt * 0.18;
+      const ysquash = 1 - turnAmt * 0.06;
+      ctx.transform(yawMag, 0, Math.tan(skew * 0.6) * 0.4, ysquash, 0, 0);
+    }
+    ctx.translate(0, -FIGHTER_H * 0.62);
+  }
+
   private drawFighter(f: Fighter) {
     const pose = this.poseFor(f);
     const ctx = this.ctx;
