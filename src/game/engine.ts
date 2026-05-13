@@ -5692,6 +5692,10 @@ export class GameEngine {
   private viewOffY = 0;
 
   private render() {
+    // Tick the per-frame root-transform cache stamp so getRootTransform
+    // recomputes once per frame and serves cached results to the dozens of
+    // bodyToWorld / FX anchor calls that follow.
+    this.rootStamp++;
     const ctx = this.ctx;
     // Legacy omni-shake (random jitter both axes)
     const shx = (Math.random() - 0.5) * this.shake;
