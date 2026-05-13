@@ -5653,21 +5653,16 @@ export class GameEngine {
 
   /**
    * World-space position of the eye-line mid-point, accounting for body lean /
-   * roll / head bob. Mirrors transforms in drawFighterAt: translate(x+bodyLagX, y)
-   * → rotate(lean+bodyRoll) around feet → eye at local (facing*3, headY).
+   * hit reactions, and pelvis-rooted body transforms. Routed through the same
+   * local→world conversion path as the rendered skin so beams and eye FX never
+   * detach from the head during attacks or recoil.
    */
   private getEyeWorldPos(f: Fighter): { x: number; y: number } {
     const pose = this.poseFor(f);
     const headR = 12;
     const headY = headR + 2 + pose.headOffsetY;
-    const ex = f.facingT * 3;
-    const ey = headY;
-    const a = pose.lean + f.bodyRoll;
-    const dyL = ey - FIGHTER_H;
-    const cos = Math.cos(a); const sin = Math.sin(a);
-    const rx = ex * cos - dyL * sin;
-    const ry = ex * sin + dyL * cos + FIGHTER_H;
-    return { x: f.x + f.bodyLagX + rx, y: f.y + ry };
+    const [x, y] = this.bodyToWorld(f, f.facingT * 3, headY);
+    return { x, y };
   }
 
   // ---------------- RENDER ----------------
@@ -6684,87 +6679,116 @@ export class GameEngine {
    */
   private bodyToWorld(f: Fighter, lx: number, ly: number): [number, number] {
     const t = this.getRootTransform(f);
-    let x = f.x + lx + t.bodyOffX;
-    let y = f.y + ly + t.bodyOffY;
-    const px = f.x;
-    const py = f.y + FIGHTER_H * 0.62;
-    if (t.torsoAng) {
-      const c = Math.cos(t.torsoAng), s = Math.sin(t.torsoAng);
-      const rx = x - px, ry = y - py;
-      x = px + rx * c - ry * s;
-      y = py + rx * s + ry * c;
+    const pose = this.poseFor(f);
+    let x = lx;
+    let y = ly - FIGHTER_H * 0.62;
+    const mag = Math.abs(f.facingT);
+    const yawMag = 0.22 + 0.78 * mag;
+    const turnAmt = 1 - mag;
+    const skew = f.facing * turnAmt * 0.18;
+    const ysquash = 1 - turnAmt * 0.06;
+    {
+      const nx = x * yawMag + y * Math.tan(skew * 0.6) * 0.4;
+      const ny = y * ysquash;
+      x = nx;
+      y = ny;
     }
-    if (t.dx || t.dy || t.rot || t.sx !== 1 || t.sy !== 1) {
-      let rx = (x - px) * t.sx;
-      let ry = (y - py) * t.sy;
-      if (t.rot) {
-        const c = Math.cos(t.rot), s = Math.sin(t.rot);
-        const nx = rx * c - ry * s;
-        const ny = rx * s + ry * c;
-        rx = nx; ry = ny;
+    {
+      const a = t.torsoAng + (f.ragdollT > 0 ? 0 : pose.lean + f.bodyRoll);
+      if (a) {
+        const c = Math.cos(a), s = Math.sin(a);
+        const nx = x * c - y * s;
+        const ny = x * s + y * c;
+        x = nx;
+        y = ny;
       }
-      x = px + rx + t.dx;
-      y = py + ry + t.dy;
     }
+    if (f.ragdollT <= 0) {
+      const wobTime = this.elapsed + (f.id === "p1" ? 0 : 1.7);
+      const moving = Math.min(1, Math.abs(f.vx) / 280);
+      const hit = Math.min(1, f.hitFlash * 4);
+      const wobAmp = 0.022 + moving * 0.018 + hit * 0.05;
+      const wob = Math.sin(wobTime * 6.2) * wobAmp;
+      const breath = 1 + Math.sin(wobTime * 2.4) * 0.012;
+      const squash = 1 + Math.sin(wobTime * 5.5) * (0.018 + hit * 0.04);
+      const moveStretch = 1 + moving * 0.04;
+      const moveSquash = 1 / moveStretch;
+      const hitSquash = 1 + hit * 0.18;
+      const hitStretch = 1 / hitSquash;
+      x *= squash * moveSquash * hitSquash * breath;
+      y *= (2 - squash) * moveStretch * hitStretch * breath;
+      if (wob) {
+        const c = Math.cos(wob), s = Math.sin(wob);
+        const nx = x * c - y * s;
+        const ny = x * s + y * c;
+        x = nx;
+        y = ny;
+      }
+    }
+    x += f.bodyLagX;
+    x *= t.sx;
+    y *= t.sy;
+    if (t.rot) {
+      const c = Math.cos(t.rot), s = Math.sin(t.rot);
+      const nx = x * c - y * s;
+      const ny = x * s + y * c;
+      x = nx;
+      y = ny;
+    }
+    x += f.x + t.bodyOffX + t.dx;
+    y += f.y + t.bodyOffY + FIGHTER_H * 0.62 + t.dy;
     return [x, y];
+  }
+
+  /**
+   * Canonical fighter render root. Every visual child of the body must inherit
+   * this stack so sprites, procedural limbs, cape, eyes, and cosmetic anchors
+   * all live under one authority instead of mixing world and local offsets.
+   */
+  private pushFighterRoot(ctx: CanvasRenderingContext2D, f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
+    const t = this.getRootTransform(f);
+    const bodyLagX = ghost ? 0 : f.bodyLagX;
+    const bodyRoll = ghost ? 0 : f.bodyRoll;
+    ctx.save();
+    ctx.translate(x + t.bodyOffX, y + t.bodyOffY);
+    ctx.translate(0, FIGHTER_H * 0.62);
+    if (!ghost && t.dx) ctx.translate(t.dx, 0);
+    if (!ghost && t.dy) ctx.translate(0, t.dy);
+    if (!ghost && t.rot) ctx.rotate(t.rot);
+    if (!ghost && (t.sx !== 1 || t.sy !== 1)) ctx.scale(t.sx, t.sy);
+    if (bodyLagX) ctx.translate(bodyLagX, 0);
+    if (!ghost && f.ragdollT <= 0) {
+      const wobTime = this.elapsed + (f.id === "p1" ? 0 : 1.7);
+      const moving = Math.min(1, Math.abs(f.vx) / 280);
+      const hit = Math.min(1, f.hitFlash * 4);
+      const wobAmp = 0.022 + moving * 0.018 + hit * 0.05;
+      const wob = Math.sin(wobTime * 6.2) * wobAmp;
+      const breath = 1 + Math.sin(wobTime * 2.4) * 0.012;
+      const squash = 1 + Math.sin(wobTime * 5.5) * (0.018 + hit * 0.04);
+      const moveStretch = 1 + moving * 0.04;
+      const moveSquash = 1 / moveStretch;
+      const hitSquash = 1 + hit * 0.18;
+      const hitStretch = 1 / hitSquash;
+      ctx.scale(squash * moveSquash * hitSquash, (2 - squash) * moveStretch * hitStretch);
+      ctx.scale(breath, breath);
+      ctx.rotate(wob);
+    }
+    const rootLean = t.torsoAng + (f.ragdollT > 0 ? 0 : pose.lean + bodyRoll);
+    if (rootLean) ctx.rotate(rootLean);
+    if (!ghost) {
+      const mag = Math.abs(f.facingT);
+      const yawMag = 0.22 + 0.78 * mag;
+      const turnAmt = 1 - mag;
+      const skew = f.facing * turnAmt * 0.18;
+      const ysquash = 1 - turnAmt * 0.06;
+      ctx.transform(yawMag, 0, Math.tan(skew * 0.6) * 0.4, ysquash, 0, 0);
+    }
+    ctx.translate(0, -FIGHTER_H * 0.62);
   }
 
   private drawFighter(f: Fighter) {
     const pose = this.poseFor(f);
-    const ctx = this.ctx;
-    // Hit-reaction transform — distinct profile per flinch kind. Pure
-    // canvas-space transform applied around the body so the sprite stays
-    // unchanged but the silhouette reads as "hit".
-    const hr = f.hitReactKind;
-    if (hr && f.hitReactT > 0 && f.ragdollT <= 0) {
-      const u = f.hitReactT / Math.max(0.0001, f.hitReactDur);   // 1 → 0
-      // Ease-out so the snap is on impact and recovery is smooth
-      const e = u * u;
-      const dir = f.hitReactDir;
-      const mag = f.hitReactMag;
-      let dx = 0, dy = 0, rot = 0, sx = 1, sy = 1;
-      switch (hr) {
-        case "light":
-          dx = dir * 4 * mag * e;
-          rot = -dir * 0.05 * mag * e;
-          break;
-        case "heavy":
-          dx = dir * 9 * mag * e;
-          dy = -3 * mag * e;
-          rot = -dir * 0.13 * mag * e;
-          sy = 1 - 0.07 * mag * e; sx = 1 + 0.05 * mag * e; // squash
-          break;
-        case "juggle":
-          // Spin tilt for chained air hits — rotates more on each flinch.
-          dx = dir * 5 * mag * e;
-          dy = -6 * mag * e;
-          rot = -dir * (0.18 + Math.min(0.18, f.juggleHits * 0.025)) * mag * e;
-          break;
-        case "wallBounce":
-          dx = dir * 7 * mag * e;
-          rot = dir * 0.16 * mag * e;
-          sx = 1 - 0.08 * mag * e; sy = 1 + 0.06 * mag * e; // sideways squash
-          break;
-        case "groundBounce":
-          dy = -4 * mag * e;
-          sx = 1 + 0.10 * mag * e; sy = 1 - 0.10 * mag * e; // pancake
-          rot = dir * 0.06 * mag * e;
-          break;
-      }
-      ctx.save();
-      // Pelvis-rooted pivot for hit-reaction transforms — feet pivot caused
-      // the entire body to slide horizontally on rotation, separating the
-      // sprite from the procedural rig. Rotating around the hip keeps the
-      // body silhouette anchored where the impact actually applies force.
-      ctx.translate(f.x + dx, f.y + FIGHTER_H * 0.62 + dy);
-      ctx.rotate(rot);
-      ctx.scale(sx, sy);
-      ctx.translate(-(f.x), -(f.y + FIGHTER_H * 0.62));
-      this.drawFighterAt(f, f.x, f.y, pose, false);
-      ctx.restore();
-    } else {
-      this.drawFighterAt(f, f.x, f.y, pose, false);
-    }
+    this.drawFighterAt(f, f.x, f.y, pose, false);
     this.drawDamageOverlay(f);
     this.drawJuggleCounter(f);
     this.drawParryFlash(f);
