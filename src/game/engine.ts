@@ -6926,6 +6926,7 @@ export class GameEngine {
       // tilt, yaw skew, squash, and bodyLag are shared with the procedural
       // rig. Inner draws use local coordinates: feet=(0,FIGHTER_H),
       // hip=(0,FIGHTER_H*0.62), origin=(0,0) at top-of-fighter.
+      const __preRoot = ctx.getTransform();
       this.pushFighterRoot(ctx, f, x, y, pose, ghost);
       try {
       // Soft accent pool — only when grounded (root-local: feet at FIGHTER_H)
