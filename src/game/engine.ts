@@ -6928,15 +6928,15 @@ export class GameEngine {
       // hip=(0,FIGHTER_H*0.62), origin=(0,0) at top-of-fighter.
       this.pushFighterRoot(ctx, f, x, y, pose, ghost);
       try {
-      // Soft accent pool — only when grounded
+      // Soft accent pool — only when grounded (root-local: feet at FIGHTER_H)
       if (f.onGround && !this.lowPower) {
         ctx.save();
-        const grad = ctx.createRadialGradient(x, y + FIGHTER_H - 1, 1, x, y + FIGHTER_H - 1, 28);
+        const grad = ctx.createRadialGradient(0, FIGHTER_H - 1, 1, 0, FIGHTER_H - 1, 28);
         grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 28%, transparent)`);
         grad.addColorStop(1, "transparent");
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.ellipse(x, y + FIGHTER_H - 1, 28, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, FIGHTER_H - 1, 28, 5, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -6947,28 +6947,27 @@ export class GameEngine {
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
         const g = ctx.createRadialGradient(
-          x, y + FIGHTER_H * 0.55, 4,
-          x, y + FIGHTER_H * 0.55, FIGHTER_H * 0.55,
+          0, FIGHTER_H * 0.55, 4,
+          0, FIGHTER_H * 0.55, FIGHTER_H * 0.55,
         );
         g.addColorStop(0, `color-mix(in oklab, ${skin.glow} ${Math.round(pulse * 100)}%, transparent)`);
         g.addColorStop(1, "transparent");
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.ellipse(x, y + FIGHTER_H * 0.55, FIGHTER_H * 0.32, FIGHTER_H * 0.55, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, FIGHTER_H * 0.55, FIGHTER_H * 0.32, FIGHTER_H * 0.55, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
 
       const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
+      // Root-local draw helper: feet at (0, FIGHTER_H), bodyLag/wobble baked in by pushFighterRoot.
       const drawFrame = (idx: number) =>
-        drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+        drawWalkFrame(ctx, skin, idx, 0, FIGHTER_H, renderFacing, FIGHTER_H);
 
-      // ---- Ragdoll tumble (rotate down silhouette around HIP, not sprite center) ----
+      // ---- Ragdoll tumble (rotate down silhouette around HIP, root-local) ----
       if (f.ragdollT > 0) {
         ctx.save();
-        // Pelvis pivot keeps the body anchored at the hip during tumble — no
-        // sprite-center slide that breaks skin/skeleton cohesion.
-        ctx.translate(x + f.bodyLagX, y + FIGHTER_H * 0.62);
+        ctx.translate(0, FIGHTER_H * 0.62);
         ctx.rotate(f.ragdollAng);
         ctx.translate(0, FIGHTER_H * 0.38);
         drawWalkFrame(ctx, skin, DOWN_FRAME, 0, 0, renderFacing, FIGHTER_H);
