@@ -3186,6 +3186,19 @@ export class GameEngine {
       f.comboT += dt;
       const u = f.comboT / Math.max(0.001, f.comboDur);
       const inActive = u >= 0.35 && u <= 0.7;
+      // ---- Planted-foot world-lock ----
+      // During the active window of a grounded kick, snap the fighter's
+      // world-x back to the captured anchor and zero horizontal velocity.
+      // Visual reach comes from the envelope (env.tx) under the foot pivot,
+      // so the body must NOT also slide forward — that's what creates the
+      // "skin shifted off the skeleton" feel during kicks. Industry-standard
+      // approach: anchor the supporting foot in world space; let only the
+      // limb travel.
+      if (f.comboKind === "kick" && f.onGround && f.ragdollT <= 0
+          && u >= 0.18 && u <= 0.85) {
+        f.x = f.kickAnchorX;
+        if (Math.abs(f.vx) > 1) f.vx = 0;
+      }
       if (inActive && !f.comboHit) {
         const target = f.id === "p1" ? this.p2 : this.p1;
         const dx = (target.x - f.x) * f.facing;
