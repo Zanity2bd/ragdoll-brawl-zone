@@ -238,6 +238,10 @@ interface Fighter {
   comboDur: number;     // duration of current combo swing
   comboKind: "kick" | "knee" | null;
   comboHit: boolean;
+  /** World-x of the planted (standing) foot when a grounded kick fires.
+   *  Used to lock body position during the active window so the kick reads
+   *  as a true weight-on-back-foot pivot instead of a forward slide. */
+  kickAnchorX: number;
   // Air juggle: hits stacked while target is airborne. Scales damage/KB
   // down with diminishing returns so launches stay cinematic but not abusive.
   juggleHits: number;
@@ -1186,7 +1190,7 @@ export class GameEngine {
       bamfCombo: null,
       swing: null,
       punchT: 0, punchCd: 0, punchHit: false, recoverT: 0, justLandedT: 0,
-      comboStep: 0, comboWindowT: 0, comboT: 0, comboDur: 0, comboKind: null, comboHit: false,
+      comboStep: 0, comboWindowT: 0, comboT: 0, comboDur: 0, comboKind: null, comboHit: false, kickAnchorX: 0,
       juggleHits: 0, juggleResetT: 0, juggleFlash: 0,
       parryT: 0, parrySuccessT: 0,
     };
@@ -3182,6 +3186,19 @@ export class GameEngine {
       f.comboT += dt;
       const u = f.comboT / Math.max(0.001, f.comboDur);
       const inActive = u >= 0.35 && u <= 0.7;
+      // ---- Planted-foot world-lock ----
+      // During the active window of a grounded kick, snap the fighter's
+      // world-x back to the captured anchor and zero horizontal velocity.
+      // Visual reach comes from the envelope (env.tx) under the foot pivot,
+      // so the body must NOT also slide forward — that's what creates the
+      // "skin shifted off the skeleton" feel during kicks. Industry-standard
+      // approach: anchor the supporting foot in world space; let only the
+      // limb travel.
+      if (f.comboKind === "kick" && f.onGround && f.ragdollT <= 0
+          && u >= 0.18 && u <= 0.85) {
+        f.x = f.kickAnchorX;
+        if (Math.abs(f.vx) > 1) f.vx = 0;
+      }
       if (inActive && !f.comboHit) {
         const target = f.id === "p1" ? this.p2 : this.p1;
         const dx = (target.x - f.x) * f.facing;
@@ -3315,6 +3332,9 @@ export class GameEngine {
       if (f.comboStep === 1 && f.comboWindowT > 0) {
         // Step 2: high kick
          f.comboKind = "kick"; f.comboT = 0.0001; f.comboDur = 0.32; f.comboHit = false;
+         // Snap planted-foot anchor: lock body world-x while kick is active so
+         // the standing leg stays world-locked under the new pivot rendering.
+         f.kickAnchorX = f.x;
         f.attackAnim = Math.max(f.attackAnim, 0.32);
         // Combo ends after the high kick — knee finisher removed per design.
         f.comboStep = 0; f.comboWindowT = 0;
