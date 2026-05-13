@@ -5692,6 +5692,10 @@ export class GameEngine {
   private viewOffY = 0;
 
   private render() {
+    // Tick the per-frame root-transform cache stamp so getRootTransform
+    // recomputes once per frame and serves cached results to the dozens of
+    // bodyToWorld / FX anchor calls that follow.
+    this.rootStamp++;
     const ctx = this.ctx;
     // Legacy omni-shake (random jitter both axes)
     const shx = (Math.random() - 0.5) * this.shake;
@@ -6657,7 +6661,18 @@ export class GameEngine {
    * cosmetic anchor sampling (weapon trails) so cosmetics never drift off
    * the visible body during recoil/torsion/airborne hits.
    */
+  // ---- Root transform cache (per-frame, per-fighter) ----
+  // bodyToWorld can call getRootTransform many times per frame (eyes, weapon
+  // trail, debug rig, FX anchors). Recomputing the hit-reaction switch + rs
+  // reads every call is wasteful. Cache invalidates whenever frameStamp ticks
+  // (set at the start of render()) so caller code never sees stale data.
+  private rootStamp = 0;
+  private rootCache = new WeakMap<Fighter, { stamp: number; v: { dx: number; dy: number; rot: number; sx: number; sy: number; torsoAng: number; bodyOffX: number; bodyOffY: number } }>();
+
   private getRootTransform(f: Fighter) {
+    const cached = this.rootCache.get(f);
+    if (cached && cached.stamp === this.rootStamp) return cached.v;
+
     let dx = 0, dy = 0, rot = 0, sx = 1, sy = 1;
     const hr = f.hitReactKind;
     if (hr && f.hitReactT > 0 && f.ragdollT <= 0) {
@@ -6684,10 +6699,37 @@ export class GameEngine {
           rot = dir * 0.06 * mag * e; break;
       }
     }
-    const torsoAng = (f.rs && f.ragdollT <= 0) ? f.rs.torsoAng : 0;
-    const bodyOffX = f.rs ? f.rs.bodyOffX : 0;
-    const bodyOffY = f.rs ? f.rs.bodyOffY : 0;
-    return { dx, dy, rot, sx, sy, torsoAng, bodyOffX, bodyOffY };
+    let torsoAng = (f.rs && f.ragdollT <= 0) ? f.rs.torsoAng : 0;
+    let bodyOffX = f.rs ? f.rs.bodyOffX : 0;
+    let bodyOffY = f.rs ? f.rs.bodyOffY : 0;
+
+    // ---- NaN / Inf guards ----
+    // Any non-finite slips into the canvas matrix → silent render corruption
+    // (skin offsets to (0,0), entire fighter disappears). Clamp to 0/1 instead.
+    if (!Number.isFinite(dx)) dx = 0;
+    if (!Number.isFinite(dy)) dy = 0;
+    if (!Number.isFinite(rot)) rot = 0;
+    if (!Number.isFinite(sx)) sx = 1;
+    if (!Number.isFinite(sy)) sy = 1;
+    if (!Number.isFinite(torsoAng)) torsoAng = 0;
+    if (!Number.isFinite(bodyOffX)) bodyOffX = 0;
+    if (!Number.isFinite(bodyOffY)) bodyOffY = 0;
+
+    // ---- Silhouette clamps ----
+    // Hard upper bounds keep the readable stickman silhouette intact even if
+    // upstream springs/hit-reactions overshoot. Mirrors the wobble.ts caps.
+    if (dx > 14) dx = 14; else if (dx < -14) dx = -14;
+    if (dy > 12) dy = 12; else if (dy < -12) dy = -12;
+    if (rot > 0.35) rot = 0.35; else if (rot < -0.35) rot = -0.35;
+    if (sx < 0.78) sx = 0.78; else if (sx > 1.22) sx = 1.22;
+    if (sy < 0.78) sy = 0.78; else if (sy > 1.22) sy = 1.22;
+    if (torsoAng > 0.45) torsoAng = 0.45; else if (torsoAng < -0.45) torsoAng = -0.45;
+    if (bodyOffX > 8) bodyOffX = 8; else if (bodyOffX < -8) bodyOffX = -8;
+    if (bodyOffY > 8) bodyOffY = 8; else if (bodyOffY < -8) bodyOffY = -8;
+
+    const v = { dx, dy, rot, sx, sy, torsoAng, bodyOffX, bodyOffY };
+    this.rootCache.set(f, { stamp: this.rootStamp, v });
+    return v;
   }
 
   /**
