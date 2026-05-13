@@ -6920,32 +6920,24 @@ export class GameEngine {
     // (Taijutsu sprite playback removed — Nightcrawler uses default sprite rig.)
 
     if (useSpriteWalk) {
-      // ---- Hip-rooted root transform for sprite body ----
-      // Apply ragdoll torso tilt around the HIP (pelvis), not feet or
-      // sprite-center. The cosmetic sprite inherits the same rotational
-      // impulse the procedural rig already shows so the skin never drifts
-      // off the skeleton during recoil / hit-reaction springs.
-      // Skipped during full ragdoll tumble — that branch owns its own pivot.
-      const __rsTilt = (!ghost && f.rs && f.ragdollT <= 0) ? f.rs.torsoAng : 0;
-      const __needRoot = Math.abs(__rsTilt) > 0.005;
-      if (__needRoot) {
-        ctx.save();
-        const hipPx = x + f.bodyLagX;
-        const hipPy = y + FIGHTER_H * 0.62;
-        ctx.translate(hipPx, hipPy);
-        ctx.rotate(__rsTilt);
-        ctx.translate(-hipPx, -hipPy);
-      }
+      // ---- Unified pelvis-rooted transform ----
+      // Every sprite sub-path (walk, kick, punch, ragdoll, get-up, hurt)
+      // renders inside ONE pushFighterRoot stack so wobble, hit-reaction
+      // tilt, yaw skew, squash, and bodyLag are shared with the procedural
+      // rig. Inner draws use local coordinates: feet=(0,FIGHTER_H),
+      // hip=(0,FIGHTER_H*0.62), origin=(0,0) at top-of-fighter.
+      const __preRoot = ctx.getTransform();
+      this.pushFighterRoot(ctx, f, x, y, pose, ghost);
       try {
-      // Soft accent pool — only when grounded
+      // Soft accent pool — only when grounded (root-local: feet at FIGHTER_H)
       if (f.onGround && !this.lowPower) {
         ctx.save();
-        const grad = ctx.createRadialGradient(x, y + FIGHTER_H - 1, 1, x, y + FIGHTER_H - 1, 28);
+        const grad = ctx.createRadialGradient(0, FIGHTER_H - 1, 1, 0, FIGHTER_H - 1, 28);
         grad.addColorStop(0, `color-mix(in oklab, ${skin.glow} 28%, transparent)`);
         grad.addColorStop(1, "transparent");
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.ellipse(x, y + FIGHTER_H - 1, 28, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, FIGHTER_H - 1, 28, 5, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -6956,28 +6948,27 @@ export class GameEngine {
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
         const g = ctx.createRadialGradient(
-          x, y + FIGHTER_H * 0.55, 4,
-          x, y + FIGHTER_H * 0.55, FIGHTER_H * 0.55,
+          0, FIGHTER_H * 0.55, 4,
+          0, FIGHTER_H * 0.55, FIGHTER_H * 0.55,
         );
         g.addColorStop(0, `color-mix(in oklab, ${skin.glow} ${Math.round(pulse * 100)}%, transparent)`);
         g.addColorStop(1, "transparent");
         ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.ellipse(x, y + FIGHTER_H * 0.55, FIGHTER_H * 0.32, FIGHTER_H * 0.55, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, FIGHTER_H * 0.55, FIGHTER_H * 0.32, FIGHTER_H * 0.55, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
 
       const renderFacing: 1 | -1 = f.facingT >= 0 ? 1 : -1;
+      // Root-local draw helper: feet at (0, FIGHTER_H), bodyLag/wobble baked in by pushFighterRoot.
       const drawFrame = (idx: number) =>
-        drawWalkFrame(ctx, skin, idx, x + f.bodyLagX, y + FIGHTER_H, renderFacing, FIGHTER_H);
+        drawWalkFrame(ctx, skin, idx, 0, FIGHTER_H, renderFacing, FIGHTER_H);
 
-      // ---- Ragdoll tumble (rotate down silhouette around HIP, not sprite center) ----
+      // ---- Ragdoll tumble (rotate down silhouette around HIP, root-local) ----
       if (f.ragdollT > 0) {
         ctx.save();
-        // Pelvis pivot keeps the body anchored at the hip during tumble — no
-        // sprite-center slide that breaks skin/skeleton cohesion.
-        ctx.translate(x + f.bodyLagX, y + FIGHTER_H * 0.62);
+        ctx.translate(0, FIGHTER_H * 0.62);
         ctx.rotate(f.ragdollAng);
         ctx.translate(0, FIGHTER_H * 0.38);
         drawWalkFrame(ctx, skin, DOWN_FRAME, 0, 0, renderFacing, FIGHTER_H);
@@ -7028,7 +7019,7 @@ export class GameEngine {
           : info.phase === "settle" ? 1.02 - info.local * 0.02
           : 0.96;
         ctx.save();
-        ctx.translate(x + f.bodyLagX + leanPx + sway, y + FIGHTER_H + groundLift);
+        ctx.translate(leanPx + sway, FIGHTER_H + groundLift);
         ctx.scale(sx, sy);
         // Motion-blur afterimage — concentrated on the drive (explosive) phase.
         const blurAmt =
@@ -7129,6 +7120,7 @@ export class GameEngine {
                 });
                 // Skin-tinted shock-ring flash
                 ctx.save();
+                ctx.setTransform(__preRoot);
                 ctx.globalCompositeOperation = "lighter";
                 const ringGrad = ctx.createRadialGradient(
                   f.x, GROUND_Y - 2, 4,
@@ -7157,6 +7149,7 @@ export class GameEngine {
           if (info.phase === "drive") {
             const glowA = Math.sin(info.local * Math.PI) * 0.55;
             ctx.save();
+            ctx.setTransform(__preRoot);
             ctx.globalCompositeOperation = "lighter";
             const g = ctx.createRadialGradient(
               f.x, GROUND_Y - 2, 2,
@@ -7208,8 +7201,9 @@ export class GameEngine {
         // anchor so the envelope's tx/ty still read as forward push.
         // Stance foot sits ~10px behind body center on the back-leg side.
         const stanceOffsetX = -renderFacing * 10;
-        const footPx = x + f.bodyLagX + stanceOffsetX;
-        const footPy = y + FIGHTER_H - 1; // ground contact
+        // Root-local foot pivot (bodyLag/wobble baked in by pushFighterRoot).
+        const footPx = stanceOffsetX;
+        const footPy = FIGHTER_H - 1;
         ctx.save();
         ctx.translate(footPx + env.tx, footPy + env.ty);
         ctx.rotate(env.rot);
@@ -7217,14 +7211,13 @@ export class GameEngine {
         ctx.translate(-footPx, -footPy);
         drawFrame(swingIdx);
         ctx.restore();
-        // ---- Foot-plant dust puff on first active frame ----
-        // One-shot scuff at the planted foot when the kick fires — sells
-        // the "weight slamming down" the IK pivot is now visualizing.
+        // ---- Foot-plant dust puff on first active frame (world coords for particle pool) ----
         if (!f.comboHit && u > 0.18 && u < 0.32 && !this.lowPower
             && f.onGround && this.particles.length < 220) {
+          const footWorldX = f.x + stanceOffsetX;
           for (let i = 0; i < 4; i++) {
             this.particles.push({
-              x: footPx + (Math.random() - 0.5) * 8,
+              x: footWorldX + (Math.random() - 0.5) * 8,
               y: GROUND_Y - 1,
               vx: -renderFacing * (40 + Math.random() * 80),
               vy: -10 - Math.random() * 24,
@@ -7247,8 +7240,8 @@ export class GameEngine {
         else pIdx = 3;
         const punchU = 1 - (pt / PUNCH_DUR); // 0 → 1 across the punch
         const env = attackEnvelope("punch", punchU, renderFacing);
-        const hipPx = x + f.bodyLagX;
-        const hipPy = y + FIGHTER_H * 0.62;
+        const hipPx = 0;
+        const hipPy = FIGHTER_H * 0.62;
         ctx.save();
         ctx.translate(hipPx + env.tx, hipPy + env.ty);
         ctx.rotate(env.rot);
@@ -7298,8 +7291,8 @@ export class GameEngine {
       const fIdxRaw = moving ? cycleF * WALK_LOOP_FRAMES : 0;
       const f0 = Math.floor(fIdxRaw) % WALK_LOOP_FRAMES;
 
-      const drawX = x + f.bodyLagX + sway + lean;    // sub-pixel — smooth slide
-      const drawY = Math.round(y + FIGHTER_H - bob + stance.crouch); // integer — kill shimmer
+      const drawX = sway + lean;                                    // root-local
+      const drawY = Math.round(FIGHTER_H - bob + stance.crouch);    // root-local feet
       const prevSmoothing = ctx.imageSmoothingEnabled;
       const prevQuality = ctx.imageSmoothingQuality;
       ctx.imageSmoothingEnabled = true;
@@ -7312,7 +7305,7 @@ export class GameEngine {
       // and overlays (cape, emblem, eyes) layer on top elsewhere.
       return;
       } finally {
-        if (__needRoot) ctx.restore();
+        ctx.restore();
       }
     }
 
