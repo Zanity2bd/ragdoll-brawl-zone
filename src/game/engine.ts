@@ -7291,8 +7291,8 @@ export class GameEngine {
       const fIdxRaw = moving ? cycleF * WALK_LOOP_FRAMES : 0;
       const f0 = Math.floor(fIdxRaw) % WALK_LOOP_FRAMES;
 
-      const drawX = x + f.bodyLagX + sway + lean;    // sub-pixel — smooth slide
-      const drawY = Math.round(y + FIGHTER_H - bob + stance.crouch); // integer — kill shimmer
+      const drawX = sway + lean;                                    // root-local
+      const drawY = Math.round(FIGHTER_H - bob + stance.crouch);    // root-local feet
       const prevSmoothing = ctx.imageSmoothingEnabled;
       const prevQuality = ctx.imageSmoothingQuality;
       ctx.imageSmoothingEnabled = true;
