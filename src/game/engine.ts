@@ -7303,7 +7303,7 @@ export class GameEngine {
       // and overlays (cape, emblem, eyes) layer on top elsewhere.
       return;
       } finally {
-        if (__needRoot) ctx.restore();
+        ctx.restore();
       }
     }
 
