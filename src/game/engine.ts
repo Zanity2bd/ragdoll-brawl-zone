@@ -6920,22 +6920,13 @@ export class GameEngine {
     // (Taijutsu sprite playback removed — Nightcrawler uses default sprite rig.)
 
     if (useSpriteWalk) {
-      // ---- Hip-rooted root transform for sprite body ----
-      // Apply ragdoll torso tilt around the HIP (pelvis), not feet or
-      // sprite-center. The cosmetic sprite inherits the same rotational
-      // impulse the procedural rig already shows so the skin never drifts
-      // off the skeleton during recoil / hit-reaction springs.
-      // Skipped during full ragdoll tumble — that branch owns its own pivot.
-      const __rsTilt = (!ghost && f.rs && f.ragdollT <= 0) ? f.rs.torsoAng : 0;
-      const __needRoot = Math.abs(__rsTilt) > 0.005;
-      if (__needRoot) {
-        ctx.save();
-        const hipPx = x + f.bodyLagX;
-        const hipPy = y + FIGHTER_H * 0.62;
-        ctx.translate(hipPx, hipPy);
-        ctx.rotate(__rsTilt);
-        ctx.translate(-hipPx, -hipPy);
-      }
+      // ---- Unified pelvis-rooted transform ----
+      // Every sprite sub-path (walk, kick, punch, ragdoll, get-up, hurt)
+      // renders inside ONE pushFighterRoot stack so wobble, hit-reaction
+      // tilt, yaw skew, squash, and bodyLag are shared with the procedural
+      // rig. Inner draws use local coordinates: feet=(0,FIGHTER_H),
+      // hip=(0,FIGHTER_H*0.62), origin=(0,0) at top-of-fighter.
+      this.pushFighterRoot(ctx, f, x, y, pose, ghost);
       try {
       // Soft accent pool — only when grounded
       if (f.onGround && !this.lowPower) {
