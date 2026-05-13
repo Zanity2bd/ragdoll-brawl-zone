@@ -7240,8 +7240,8 @@ export class GameEngine {
         else pIdx = 3;
         const punchU = 1 - (pt / PUNCH_DUR); // 0 → 1 across the punch
         const env = attackEnvelope("punch", punchU, renderFacing);
-        const hipPx = x + f.bodyLagX;
-        const hipPy = y + FIGHTER_H * 0.62;
+        const hipPx = 0;
+        const hipPy = FIGHTER_H * 0.62;
         ctx.save();
         ctx.translate(hipPx + env.tx, hipPy + env.ty);
         ctx.rotate(env.rot);
