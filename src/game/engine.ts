@@ -238,6 +238,10 @@ interface Fighter {
   comboDur: number;     // duration of current combo swing
   comboKind: "kick" | "knee" | null;
   comboHit: boolean;
+  /** World-x of the planted (standing) foot when a grounded kick fires.
+   *  Used to lock body position during the active window so the kick reads
+   *  as a true weight-on-back-foot pivot instead of a forward slide. */
+  kickAnchorX: number;
   // Air juggle: hits stacked while target is airborne. Scales damage/KB
   // down with diminishing returns so launches stay cinematic but not abusive.
   juggleHits: number;
