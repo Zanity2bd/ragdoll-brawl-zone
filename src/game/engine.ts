@@ -3319,6 +3319,9 @@ export class GameEngine {
       if (f.comboStep === 1 && f.comboWindowT > 0) {
         // Step 2: high kick
          f.comboKind = "kick"; f.comboT = 0.0001; f.comboDur = 0.32; f.comboHit = false;
+         // Snap planted-foot anchor: lock body world-x while kick is active so
+         // the standing leg stays world-locked under the new pivot rendering.
+         f.kickAnchorX = f.x;
         f.attackAnim = Math.max(f.attackAnim, 0.32);
         // Combo ends after the high kick — knee finisher removed per design.
         f.comboStep = 0; f.comboWindowT = 0;
