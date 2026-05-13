@@ -7120,6 +7120,7 @@ export class GameEngine {
                 });
                 // Skin-tinted shock-ring flash
                 ctx.save();
+                ctx.setTransform(__preRoot);
                 ctx.globalCompositeOperation = "lighter";
                 const ringGrad = ctx.createRadialGradient(
                   f.x, GROUND_Y - 2, 4,
