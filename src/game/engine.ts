@@ -7018,7 +7018,7 @@ export class GameEngine {
           : info.phase === "settle" ? 1.02 - info.local * 0.02
           : 0.96;
         ctx.save();
-        ctx.translate(x + f.bodyLagX + leanPx + sway, y + FIGHTER_H + groundLift);
+        ctx.translate(leanPx + sway, FIGHTER_H + groundLift);
         ctx.scale(sx, sy);
         // Motion-blur afterimage — concentrated on the drive (explosive) phase.
         const blurAmt =
