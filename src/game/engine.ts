@@ -6819,7 +6819,15 @@ export class GameEngine {
     if (!ghost && t.rot) ctx.rotate(t.rot);
     if (!ghost && (t.sx !== 1 || t.sy !== 1)) ctx.scale(t.sx, t.sy);
     if (bodyLagX) ctx.translate(bodyLagX, 0);
-    if (!ghost && f.ragdollT <= 0) {
+    // Suppress idle wobble while an attack envelope is owning the body's
+    // squash/stretch — compounding both is what reads as "skin drift" during
+    // kicks/punches. The attack envelope alone provides anticipation/snap.
+    const attacking = !ghost && (
+      (f.comboKind != null && f.comboT > 0) ||
+      f.punchT > 0 ||
+      (f.meleeKind != null && f.meleeT > 0)
+    );
+    if (!ghost && f.ragdollT <= 0 && !attacking) {
       const wobTime = this.elapsed + (f.id === "p1" ? 0 : 1.7);
       const moving = Math.min(1, Math.abs(f.vx) / 280);
       const hit = Math.min(1, f.hitFlash * 4);
