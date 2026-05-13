@@ -7149,6 +7149,7 @@ export class GameEngine {
           if (info.phase === "drive") {
             const glowA = Math.sin(info.local * Math.PI) * 0.55;
             ctx.save();
+            ctx.setTransform(__preRoot);
             ctx.globalCompositeOperation = "lighter";
             const g = ctx.createRadialGradient(
               f.x, GROUND_Y - 2, 2,
