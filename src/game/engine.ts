@@ -6819,7 +6819,15 @@ export class GameEngine {
     if (!ghost && t.rot) ctx.rotate(t.rot);
     if (!ghost && (t.sx !== 1 || t.sy !== 1)) ctx.scale(t.sx, t.sy);
     if (bodyLagX) ctx.translate(bodyLagX, 0);
-    if (!ghost && f.ragdollT <= 0) {
+    // Suppress idle wobble while an attack envelope is owning the body's
+    // squash/stretch — compounding both is what reads as "skin drift" during
+    // kicks/punches. The attack envelope alone provides anticipation/snap.
+    const attacking = !ghost && (
+      (f.comboKind != null && f.comboT > 0) ||
+      f.punchT > 0 ||
+      (f.meleeKind != null && f.meleeT > 0)
+    );
+    if (!ghost && f.ragdollT <= 0 && !attacking) {
       const wobTime = this.elapsed + (f.id === "p1" ? 0 : 1.7);
       const moving = Math.min(1, Math.abs(f.vx) / 280);
       const hit = Math.min(1, f.hitFlash * 4);
@@ -7236,6 +7244,43 @@ export class GameEngine {
       if (!f.onGround) {
         if (f.vy < -120) drawFrame(JUMP_RISE_FRAME);
         else drawFrame(JUMP_APEX_FRAME);
+        // Dangling-arms overlay: stickman arms swing freely while airborne.
+        // Two segment-arms drawn over the sprite, each pivoting at the
+        // shoulder. Angle is driven by vy (rising → arms thrown up; falling
+        // → arms drop & overshoot) plus a per-frame phase for organic dangle.
+        // Limb color = skin.limb so they read as the character's own arms.
+        const vyN = Math.max(-1, Math.min(1, f.vy / 520));            // -1 rising .. +1 falling
+        const phase = this.elapsed * 7.5 + (f.id === "p1" ? 0 : 1.3);
+        // Hanging straight down = +π/2. Rising lifts arms forward/back.
+        const baseUp = -vyN * 1.15;                                    // -1.15 (up) .. +1.15 (down throw)
+        const swing = Math.sin(phase) * 0.18;                          // dangle oscillation
+        const fwd = renderFacing;
+        const shoulderY = FIGHTER_H * 0.36;
+        const upperLen = 11;
+        const foreLen = 10;
+        ctx.save();
+        ctx.lineCap = "round";
+        ctx.strokeStyle = skin.limb ?? skin.body;
+        ctx.lineWidth = 3.2;
+        for (let side = -1 as -1 | 1; side <= 1; side = (side + 2) as -1 | 1) {
+          const sx = side * 5;
+          // Lead arm (matching facing) lifts a bit more on rise.
+          const lead = side === fwd ? 1 : 0.78;
+          const ang = Math.PI / 2 + baseUp * lead + swing * side + (vyN < 0 ? -0.25 * fwd * lead : 0.15 * fwd * lead);
+          const ex = sx + Math.cos(ang) * upperLen;
+          const ey = shoulderY + Math.sin(ang) * upperLen;
+          // Forearm with delayed dangle (pendulum-second-segment).
+          const foreAng = ang + Math.sin(phase * 0.85 + side) * 0.3 + (vyN < 0 ? -0.35 : 0.45) * lead;
+          const hx = ex + Math.cos(foreAng) * foreLen;
+          const hy = ey + Math.sin(foreAng) * foreLen;
+          ctx.beginPath();
+          ctx.moveTo(sx, shoulderY);
+          ctx.lineTo(ex, ey);
+          ctx.lineTo(hx, hy);
+          ctx.stroke();
+          if (side === 1) break;
+        }
+        ctx.restore();
         return;
       }
 
