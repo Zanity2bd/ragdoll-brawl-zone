@@ -6694,7 +6694,7 @@ export class GameEngine {
       y = ny;
     }
     {
-      const a = t.torsoAng + pose.lean + f.bodyRoll;
+      const a = t.torsoAng + (f.ragdollT > 0 ? 0 : pose.lean + f.bodyRoll);
       if (a) {
         const c = Math.cos(a), s = Math.sin(a);
         const nx = x * c - y * s;
@@ -6773,7 +6773,7 @@ export class GameEngine {
       ctx.scale(breath, breath);
       ctx.rotate(wob);
     }
-    const rootLean = t.torsoAng + pose.lean + bodyRoll;
+    const rootLean = t.torsoAng + (f.ragdollT > 0 ? 0 : pose.lean + bodyRoll);
     if (rootLean) ctx.rotate(rootLean);
     if (!ghost) {
       const mag = Math.abs(f.facingT);
