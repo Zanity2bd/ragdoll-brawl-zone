@@ -6737,7 +6737,7 @@ export class GameEngine {
       ctx.scale(breath, breath);
       ctx.rotate(wob);
     }
-    const rootLean = poseForRoot(f, bodyRoll, t.torsoAng, ghost, this);
+    const rootLean = t.torsoAng + (ghost ? 0 : this.poseFor(f).lean + bodyRoll);
     if (rootLean) ctx.rotate(rootLean);
     if (!ghost) {
       const mag = Math.abs(f.facingT);
