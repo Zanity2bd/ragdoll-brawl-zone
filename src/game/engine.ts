@@ -7040,10 +7040,24 @@ export class GameEngine {
         drawWalkFrame(ctx, skin, idx, 0, FIGHTER_H, renderFacing, FIGHTER_H);
 
       // ---- Ragdoll tumble (rotate down silhouette around HIP, root-local) ----
+      // Motion-aligned stretch + floppy secondary wobble so the body reads as
+      // "thrown" rather than just "rotating a frame". Sells weight + impact.
       if (f.ragdollT > 0) {
+        const speed = Math.hypot(f.vx, f.vy);
+        // Stretch along velocity vector — fast tumbles elongate, slow ones settle.
+        const stretch = Math.min(0.28, speed / 1400);
+        const sy = 1 + stretch;
+        const sx = 1 - stretch * 0.55;
+        // Secondary floppy wobble — high-freq overlay on top of ragdollAng,
+        // amplitude scales with angular velocity so violent spins flop harder.
+        const wob = Math.sin(f.ragdollPhase * 14) * Math.min(0.18, Math.abs(f.ragdollAV) * 0.025)
+                  + Math.sin(f.ragdollPhase * 23 + 1.3) * 0.04;
+        // Tilt toward motion vector so silhouette "points" where it's flying.
+        const motionTilt = Math.atan2(f.vy, f.vx) * 0.08;
         ctx.save();
         ctx.translate(0, FIGHTER_H * 0.62);
-        ctx.rotate(f.ragdollAng);
+        ctx.rotate(f.ragdollAng + wob + motionTilt);
+        ctx.scale(sx, sy);
         ctx.translate(0, FIGHTER_H * 0.38);
         drawWalkFrame(ctx, skin, DOWN_FRAME, 0, 0, renderFacing, FIGHTER_H);
         ctx.restore();
