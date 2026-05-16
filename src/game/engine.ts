@@ -7256,17 +7256,79 @@ export class GameEngine {
       }
 
       // ---- Anticipation crouch (pre-jump) ----
-      if (f.preJumpT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
+      // Squash down hard, scale Y < 1 and X > 1 to sell coiled spring tension.
+      if (f.preJumpT > 0) {
+        const u = 1 - (f.preJumpT / PRE_JUMP_T); // 0 → 1 across crouch
+        const sy = 1 - 0.18 * u;
+        const sx = 1 + 0.12 * u;
+        ctx.save();
+        ctx.translate(0, FIGHTER_H);
+        ctx.scale(sx, sy);
+        ctx.translate(0, -FIGHTER_H);
+        drawFrame(JUMP_LAND_FRAME);
+        ctx.restore();
+        return;
+      }
 
       // ---- Airborne (jump/fall) ----
+      // Procedural envelope on top of the 3-frame sprite set:
+      //   * Rise:  vertical stretch + slight back-lean, scaled by upward speed
+      //   * Apex:  brief squash "hang" when |vy| near zero
+      //   * Fall:  vertical stretch + forward-lean, scaled by downward speed
+      // Horizontal velocity rolls the silhouette into its motion vector so a
+      // running jump arcs visually instead of standing straight up.
       if (!f.onGround) {
-        if (f.vy < -120) drawFrame(JUMP_RISE_FRAME);
-        else drawFrame(JUMP_APEX_FRAME);
+        const vy = f.vy;
+        const rising = vy < -40;
+        const falling = vy > 80;
+        const speedY = Math.min(1, Math.abs(vy) / 700);
+        const speedX = Math.max(-1, Math.min(1, f.vx / 360));
+        // Apex hang: when nearly weightless at the top, compress slightly so
+        // the silhouette pops and reads as "floating".
+        const apex = 1 - Math.min(1, Math.abs(vy) / 220);
+        const sy = rising
+          ? 1 + 0.18 * speedY
+          : falling
+            ? 1 + 0.22 * speedY
+            : 1 - 0.08 * apex;
+        const sx = rising
+          ? 1 - 0.10 * speedY
+          : falling
+            ? 1 - 0.12 * speedY
+            : 1 + 0.06 * apex;
+        // Lean into motion: rising tilts back, falling pitches forward.
+        const rot = (rising ? -0.10 : falling ? 0.14 : 0) * speedY * renderFacing
+                  + speedX * 0.08 * renderFacing;
+        const idx = rising ? JUMP_RISE_FRAME : JUMP_APEX_FRAME;
+        ctx.save();
+        ctx.translate(0, FIGHTER_H * 0.55);
+        ctx.rotate(rot);
+        ctx.scale(sx, sy);
+        ctx.translate(0, -FIGHTER_H * 0.55);
+        drawFrame(idx);
+        ctx.restore();
         return;
       }
 
       // ---- Just landed (squash + recovery hold) ----
-      if (f.justLandedT > 0 || f.landSquashT > 0) { drawFrame(JUMP_LAND_FRAME); return; }
+      // Bouncy ease-out squash — depth scales with cached landImpact.
+      if (f.justLandedT > 0 || f.landSquashT > 0) {
+        const dur = 0.08 + f.landImpact * 0.16;
+        const elapsed = Math.max(0, dur - f.landSquashT);
+        const u = Math.min(1, elapsed / Math.max(0.001, dur));
+        // Heavy compress at t=0, overshoots past 1, settles back. Cubic-ish.
+        const settle = 1 - Math.pow(1 - u, 2.4);
+        const squashDepth = 0.20 + 0.35 * f.landImpact;
+        const sy = (1 - squashDepth) + squashDepth * settle + Math.sin(u * Math.PI) * 0.04;
+        const sx = 1 + squashDepth * 0.7 * (1 - settle) - Math.sin(u * Math.PI) * 0.03;
+        ctx.save();
+        ctx.translate(0, FIGHTER_H);
+        ctx.scale(sx, sy);
+        ctx.translate(0, -FIGHTER_H);
+        drawFrame(JUMP_LAND_FRAME);
+        ctx.restore();
+        return;
+      }
 
       // ---- Combo swing (high kick / knee finisher) ----
       // Frame interpolation pass: bitmap frames are discrete (chamber → hit
