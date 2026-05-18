@@ -34,7 +34,7 @@ export function GameCanvas() {
   const [isTouch, setIsTouch] = useState(false);
   const [screen, setScreen] = useState<Screen>("splash");
   const [mapId, setMapId] = useState<MapId>("neon-city");
-  const [p1Skin, setP1Skin] = useState<SkinId>("ironman");
+  const [p1Skin, setP1Skin] = useState<SkinId>("spiderman");
   const [p2Skin, setP2Skin] = useState<SkinId>("homelander");
   const [muted, setMuted] = useState(false);
   const [sfxVol, setSfxVol] = useState(0.8);
