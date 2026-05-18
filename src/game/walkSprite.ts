@@ -224,17 +224,6 @@ function drawOverlays(
   // ---- Eyes ----
   drawEyes(ctx, skin, hx, hy, r);
 
-  // ---- Spider-Man web pattern on mask (3 thin radial strokes) ----
-  if (skin.id === "spiderman") {
-    ctx.strokeStyle = "oklch(0.16 0.04 25 / 0.55)";
-    ctx.lineWidth = 0.6;
-    [-0.5, 0, 0.5].forEach((a) => {
-      ctx.beginPath();
-      ctx.moveTo(hx, hy - r * 0.85);
-      ctx.lineTo(hx + Math.sin(a) * r * 0.85, hy + Math.cos(a) * r * 0.65);
-      ctx.stroke();
-    });
-  }
 
   // ---- Beard (Butcher) ----
   if (skin.beard) {
