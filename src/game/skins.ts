@@ -106,7 +106,6 @@ export const SKINS: Skin[] = [
   { id: "butcher", name: "Butcher", universe: "The Boys",
     body: "oklch(0.32 0.04 70)", limb: "oklch(0.32 0.04 70)",
     gloves: "oklch(0.18 0.02 60)", boots: "oklch(0.14 0.01 60)",
-    thickBody: true,
     glow: "oklch(0.78 0.12 55)" },
 
   { id: "atrain", name: "A-Train", universe: "The Boys",
