@@ -707,7 +707,7 @@ export class GameEngine {
   private snapAccum = 0;
 
   private mapId: MapId = "neon-city";
-  private p1Skin: SkinId = "spiderman";
+  private p1Skin: SkinId = "ironman";
   private p2Skin: SkinId = "homelander";
 
   private p1!: Fighter;
