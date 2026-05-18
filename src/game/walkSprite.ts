@@ -224,17 +224,6 @@ function drawOverlays(
   // ---- Eyes ----
   drawEyes(ctx, skin, hx, hy, r);
 
-  // ---- Spider-Man web pattern on mask (3 thin radial strokes) ----
-  if (skin.id === "spiderman") {
-    ctx.strokeStyle = "oklch(0.16 0.04 25 / 0.55)";
-    ctx.lineWidth = 0.6;
-    [-0.5, 0, 0.5].forEach((a) => {
-      ctx.beginPath();
-      ctx.moveTo(hx, hy - r * 0.85);
-      ctx.lineTo(hx + Math.sin(a) * r * 0.85, hy + Math.cos(a) * r * 0.65);
-      ctx.stroke();
-    });
-  }
 
   // ---- Beard (Butcher) ----
   if (skin.beard) {
@@ -274,36 +263,6 @@ function drawEyes(
   // Spider-Man — iconic large white teardrop lenses, black-outlined,
   // tilted outward (~0.35 rad) for the classic angry shape, with a subtle
   // inner highlight. All sized off head radius `r` so they scale per-frame.
-  if (skin.id === "spiderman") {
-    const lensCx = r * 0.42;
-    const lensCy = ey - r * 0.05;
-    [-1, 1].forEach((s) => {
-      // Black outline (slightly larger)
-      ctx.fillStyle = "oklch(0.10 0.02 260)";
-      ctx.beginPath();
-      ctx.ellipse(hx + s * lensCx, lensCy, r * 0.42, r * 0.30, s * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      // White lens fill
-      ctx.fillStyle = "oklch(0.97 0.01 220)";
-      ctx.beginPath();
-      ctx.ellipse(hx + s * lensCx, lensCy, r * 0.34, r * 0.24, s * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      // Inner highlight
-      ctx.fillStyle = "oklch(0.78 0.02 220)";
-      ctx.beginPath();
-      ctx.ellipse(
-        hx + s * lensCx + s * r * 0.05,
-        lensCy + r * 0.05,
-        r * 0.10,
-        r * 0.06,
-        s * 0.35,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    });
-    return;
-  }
 
   // Iron Man slits
   if (skin.id === "ironman") {
