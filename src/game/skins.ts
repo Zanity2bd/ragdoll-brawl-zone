@@ -104,10 +104,9 @@ export const SKINS: Skin[] = [
     glow: "oklch(0.55 0.18 30)" },
 
   { id: "butcher", name: "Butcher", universe: "The Boys",
-    body: "oklch(0.18 0.02 60)", limb: "oklch(0.32 0.04 70)",
-    head: "oklch(0.30 0.05 30)", skinTone: "oklch(0.68 0.06 50)",
+    body: "oklch(0.32 0.04 70)", limb: "oklch(0.32 0.04 70)",
     gloves: "oklch(0.18 0.02 60)", boots: "oklch(0.14 0.01 60)",
-    thickBody: true, beard: true,
+    thickBody: true,
     glow: "oklch(0.78 0.12 55)" },
 
   { id: "atrain", name: "A-Train", universe: "The Boys",
