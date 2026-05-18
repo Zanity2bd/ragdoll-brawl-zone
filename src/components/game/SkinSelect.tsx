@@ -16,7 +16,7 @@ export function SkinSelect({
   onConfirm: (p1: SkinId, p2: SkinId, opts: { cpu: boolean; difficulty: Difficulty }) => void;
   onBack: () => void;
 }) {
-  const [p1, setP1] = useState<SkinId>("spiderman");
+  const [p1, setP1] = useState<SkinId>("ironman");
   const [p2, setP2] = useState<SkinId>("homelander");
   const [cpu, setCpu] = useState(true);
   const [difficulty, setDifficulty] = useState<Difficulty>("hard");
