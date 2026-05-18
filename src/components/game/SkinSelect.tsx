@@ -295,12 +295,9 @@ function SkinPreview({ skin }: { skin: Skin }) {
           ctx.fillRect(cx - 5, headY + 1, 10, 1.5);
         }
         // eyes
-        const eyeColor = skin.id === "spiderman" ? "oklch(0.95 0.02 250)" : "oklch(0.10 0 0)";
+        const eyeColor = "oklch(0.10 0 0)";
         ctx.fillStyle = eyeColor;
-        if (skin.id === "spiderman") {
-          ctx.beginPath(); ctx.ellipse(cx - 4, headY - 1, 3.8, 2.4, -0.35, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(cx + 4, headY - 1, 3.8, 2.4, 0.35, 0, Math.PI * 2); ctx.fill();
-        } else if (skin.cowlEars) {
+        if (skin.cowlEars) {
           ctx.fillStyle = "oklch(0.92 0.02 250)";
           ctx.fillRect(cx - 6, headY - 1, 4, 2);
           ctx.fillRect(cx + 2, headY - 1, 4, 2);
