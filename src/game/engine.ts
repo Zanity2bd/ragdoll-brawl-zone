@@ -7871,12 +7871,9 @@ export class GameEngine {
       ctx.fill();
     }
 
-    const eyeColor = skin.id === "spiderman" ? "oklch(0.95 0.02 250)" : "oklch(0.10 0 0)";
+    const eyeColor = "oklch(0.10 0 0)";
     ctx.fillStyle = eyeColor;
-    if (skin.id === "spiderman") {
-      ctx.beginPath(); ctx.ellipse(-3.5, headY - 1, 3, 2, -0.35, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(3.5, headY - 1, 3, 2, 0.35, 0, Math.PI * 2); ctx.fill();
-    } else if (skin.cowlEars) {
+    if (skin.cowlEars) {
       ctx.fillStyle = "oklch(0.92 0.02 250)";
       ctx.fillRect(-5, headY - 1, 3, 1.6);
       ctx.fillRect(2, headY - 1, 3, 1.6);
