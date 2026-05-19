@@ -103,7 +103,7 @@ function drawOverlays(
     ctx.save();
     ctx.globalCompositeOperation = "source-atop";
     ctx.fillStyle = skin.arms;
-    ctx.fillRect(ox, 0, 160, a.hipY);
+    ctx.fillRect(ox, 0, WALK_FRAME_W, a.hipY);
     ctx.restore();
   }
 
