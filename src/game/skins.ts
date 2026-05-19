@@ -12,7 +12,8 @@ export interface Skin {
   name: string;
   universe: Universe;
   body: string;             // torso line color
-  limb?: string;            // arms/legs line color
+  limb?: string;            // arms/legs line color (silhouette base tint)
+  arms?: string;            // upper-body recolor (arms + torso area); falls back to limb
   head?: string;            // head outline (mask) color — defaults to body
   skinTone?: string;        // exposed face skin (drawn as filled head)
   gloves?: string;          // colored hand "fists"
