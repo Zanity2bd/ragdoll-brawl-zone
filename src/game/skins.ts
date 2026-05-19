@@ -105,11 +105,15 @@ export const SKINS: Skin[] = [
     glow: "oklch(0.55 0.18 30)" },
 
   { id: "butcher", name: "Butcher", universe: "The Boys",
-    // Billy Butcher: weathered slate-teal jacket tone baked into the whole
-    // silhouette — reads as his grey-green coat + dark trousers in one tint.
-    body: "oklch(0.34 0.025 220)", limb: "oklch(0.34 0.025 220)",
-    gloves: "oklch(0.34 0.025 220)", boots: "oklch(0.34 0.025 220)",
-    noHead: true,
+    // Billy Butcher: dark trousers (limb), weathered slate jacket (body chest
+    // patch), black hair cap + warm skin face + full beard — all baked in.
+    body: "oklch(0.36 0.025 220)",
+    limb: "oklch(0.18 0.01 250)",
+    head: "oklch(0.14 0.01 30)",
+    skinTone: "oklch(0.62 0.07 50)",
+    gloves: "oklch(0.18 0.01 250)",
+    boots: "oklch(0.12 0.01 250)",
+    beard: true,
     glow: "oklch(0.55 0.06 220)" },
 
   { id: "atrain", name: "A-Train", universe: "The Boys",
