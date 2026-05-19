@@ -106,13 +106,13 @@ export const SKINS: Skin[] = [
     glow: "oklch(0.55 0.18 30)" },
 
   { id: "butcher", name: "Butcher", universe: "The Boys",
-    // Billy Butcher: slate-teal jacket torso, black trousers/boots, black hair head.
-    body: "oklch(0.38 0.03 220)",
-    limb: "oklch(0.16 0.01 250)",
-    head: "oklch(0.14 0.01 30)",
-    gloves: "oklch(0.16 0.01 250)",
-    boots: "oklch(0.12 0.01 250)",
-    noHead: true,
+    // Billy Butcher: black-hair head with peach face, grey jacket/arms,
+    // dark navy trousers — pure recolor, no extra details.
+    body: "oklch(0.58 0.01 250)",          // grey torso
+    arms: "oklch(0.58 0.01 250)",          // grey arms (upper-body recolor)
+    limb: "oklch(0.18 0.04 260)",          // dark dark blue legs (base tint)
+    head: "oklch(0.10 0.01 30)",           // black hair cap
+    skinTone: "oklch(0.74 0.07 55)",       // peach face
     glow: "oklch(0.55 0.06 220)" },
 
   { id: "atrain", name: "A-Train", universe: "The Boys",
