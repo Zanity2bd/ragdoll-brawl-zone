@@ -95,6 +95,19 @@ function drawOverlays(
   const cy = a.cy;
   const r = a.hr;
 
+  // ---- Upper-body recolor (arms + torso area) ----
+  // Silhouette was tinted with `limb` (treated as legs base). If `arms` is
+  // defined, source-atop recolor the upper region (above hipY) so arms/torso
+  // read as a different color from legs.
+  if (skin.arms && skin.arms !== (skin.limb ?? skin.body)) {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = skin.arms;
+    ctx.fillRect(ox, 0, 160, a.hipY);
+    ctx.restore();
+  }
+
+
   // ---- Body thickening pass (baked) ----
   // Adds visible torso + limb mass so thickBody skins look premium, not skinny.
   if (skin.thickBody) {
