@@ -152,6 +152,7 @@ function drawOverlays(
   // Perfect domed head. Center is shifted DOWN by ~r*0.15 so an enlarged
   // radius still fits inside the frame top (hy≈14) — prevents flat-top clip.
   ctx.save();
+  if (skin.noHead) { ctx.restore(); return; }
   ctx.fillStyle = skin.head ?? skin.body;
   const headCx = hx;
   const headCy = hy + r * 0.18;
