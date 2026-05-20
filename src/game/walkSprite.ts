@@ -208,16 +208,31 @@ function drawOverlays(
 
   // Skin-tone face for open faces (Superman, Homelander, Butcher, Heatwave)
   if (skin.skinTone) {
-    ctx.fillStyle = skin.skinTone;
-    ctx.beginPath();
-    // Face oval lower-half
-    ctx.ellipse(hx, hy + r * 0.15, r * 0.78, r * 0.85, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Hair cap on top
-    ctx.fillStyle = skin.head ?? "oklch(0.18 0.02 30)";
-    ctx.beginPath();
-    ctx.arc(hx, hy - r * 0.2, r * 0.95, Math.PI, Math.PI * 2);
-    ctx.fill();
+    if (skin.skinToneMode === "fullHead") {
+      ctx.fillStyle = skin.skinTone;
+      ctx.beginPath();
+      ctx.arc(headCx, headCy, headR * 0.96, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(headCx, headCy + headR * 0.4, headR * 0.72, headR * 0.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = skin.head ?? "oklch(0.18 0.02 30)";
+      ctx.beginPath();
+      ctx.arc(headCx, headCy - headR * 0.1, headR * 0.92, Math.PI, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = skin.skinTone;
+      ctx.beginPath();
+      // Face oval lower-half
+      ctx.ellipse(hx, hy + r * 0.15, r * 0.78, r * 0.85, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Hair cap on top
+      ctx.fillStyle = skin.head ?? "oklch(0.18 0.02 30)";
+      ctx.beginPath();
+      ctx.arc(hx, hy - r * 0.2, r * 0.95, Math.PI, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // ---- Cowl ears (Batman) ----
@@ -265,7 +280,7 @@ function drawOverlays(
   // ---- Body recolor over chest (subtle, matches body color) ----
   // Skip — silhouette already tinted limb; for two-tone skins we layer body
   // as a chest patch to imply shirt vs limbs.
-  if (skin.body !== (skin.limb ?? skin.body)) {
+  if (skin.body !== (skin.limb ?? skin.body) && !skin.arms) {
     ctx.save();
     ctx.fillStyle = skin.body;
     ctx.beginPath();
