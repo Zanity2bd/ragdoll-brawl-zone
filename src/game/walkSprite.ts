@@ -107,6 +107,18 @@ function drawOverlays(
     ctx.restore();
   }
 
+  // ---- Head region recolor (engraved into silhouette, no overlay shift) ----
+  // When noHead is set + a head color is defined, source-atop the head band
+  // so the silhouette's own head shape carries the color in every frame.
+  if (skin.noHead && skin.head) {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = skin.head;
+    const headBandBot = a.hy + a.hr * 1.4;
+    ctx.fillRect(ox, 0, WALK_FRAME_W, headBandBot);
+    ctx.restore();
+  }
+
 
   // ---- Body thickening pass (baked) ----
   // Adds visible torso + limb mass so thickBody skins look premium, not skinny.
