@@ -557,3 +557,17 @@ export function drawWalkFrame(
   ctx.restore();
   return true;
 }
+
+/** Tiny 5-point star — used for Butcher's jacket pattern (engraved via source-atop). */
+function drawTinyStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const ang = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rad = i % 2 === 0 ? r : r * 0.45;
+    const x = cx + Math.cos(ang) * rad;
+    const y = cy + Math.sin(ang) * rad;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
