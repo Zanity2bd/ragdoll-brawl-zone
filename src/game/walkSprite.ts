@@ -119,46 +119,6 @@ function drawOverlays(
     ctx.restore();
   }
 
-  // ---- Butcher engraved details (hair, beard, jacket shirt, stars) ----
-  // All painted via source-atop so they're clipped to the silhouette pixels
-  // — they move with the body every frame, never drift off the figure.
-  if (skin.id === "butcher") {
-    ctx.save();
-    ctx.globalCompositeOperation = "source-atop";
-
-    // Dark hair cap — top ~40% of head band
-    ctx.fillStyle = "oklch(0.12 0.01 30)";
-    ctx.fillRect(ox, 0, WALK_FRAME_W, a.hy + a.hr * 0.45);
-
-    // Beard — lower head band
-    ctx.fillStyle = "oklch(0.18 0.015 35)";
-    ctx.fillRect(ox, a.hy + a.hr * 0.95, WALK_FRAME_W, a.hr * 0.55);
-
-    // Open-jacket dark shirt — narrow vertical strip down chest center
-    ctx.fillStyle = "oklch(0.22 0.015 250)";
-    const shirtW = a.hr * 0.55;
-    const shirtTop = a.cy - a.hr * 0.2;
-    const shirtBot = a.hipY - 2;
-    ctx.fillRect(ox + a.cx - shirtW / 2, shirtTop, shirtW, shirtBot - shirtTop);
-
-    // White star speckles on jacket (fixed offsets from chest center)
-    ctx.fillStyle = "oklch(0.95 0.01 250)";
-    const stars: Array<[number, number, number]> = [
-      [-a.hr * 0.95, a.cy - a.hr * 0.1, 1.4],
-      [-a.hr * 0.55, a.cy + a.hr * 0.7,  1.1],
-      [ a.hr * 0.80, a.cy + a.hr * 0.2,  1.3],
-      [ a.hr * 0.35, a.cy + a.hr * 1.1,  1.0],
-      [-a.hr * 0.15, a.cy + a.hr * 1.6,  0.9],
-    ];
-    for (const [dx, sy, sz] of stars) {
-      drawTinyStar(ctx, ox + a.cx + dx, sy, sz);
-    }
-
-    ctx.restore();
-  }
-
-
-
 
   // ---- Body thickening pass (baked) ----
   // Adds visible torso + limb mass so thickBody skins look premium, not skinny.
@@ -556,18 +516,4 @@ export function drawWalkFrame(
   );
   ctx.restore();
   return true;
-}
-
-/** Tiny 5-point star — used for Butcher's jacket pattern (engraved via source-atop). */
-function drawTinyStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
-  ctx.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const ang = -Math.PI / 2 + (i * Math.PI) / 5;
-    const rad = i % 2 === 0 ? r : r * 0.45;
-    const x = cx + Math.cos(ang) * rad;
-    const y = cy + Math.sin(ang) * rad;
-    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fill();
 }
