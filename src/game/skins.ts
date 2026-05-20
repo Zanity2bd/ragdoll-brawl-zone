@@ -107,13 +107,12 @@ export const SKINS: Skin[] = [
     glow: "oklch(0.55 0.18 30)" },
 
   { id: "butcher", name: "Butcher", universe: "The Boys",
-    // Billy Butcher: pure recolor only — no extra chest or face overlays.
+    // Billy Butcher: pure silhouette recolor — no face/hair overlay (would shift in combat frames).
     body: "oklch(0.58 0.01 250)",          // grey torso
     arms: "oklch(0.58 0.01 250)",          // grey arms (upper-body recolor)
     limb: "oklch(0.18 0.04 260)",          // dark dark blue legs (base tint)
-    head: "oklch(0.10 0.01 30)",           // black hair cap
-    skinTone: "oklch(0.74 0.07 55)",       // peach face
-    skinToneMode: "fullHead",
+    head: "oklch(0.74 0.07 55)",           // peach head (engraved via silhouette tint)
+    noHead: true,
     glow: "oklch(0.55 0.06 220)" },
 
   { id: "atrain", name: "A-Train", universe: "The Boys",
