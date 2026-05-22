@@ -342,13 +342,8 @@ function drawOverlays(
     ctx.fillRect(ox, 0, WALK_FRAME_W, headBandBot);
     ctx.restore();
   }
-    ctx.save();
-    ctx.globalCompositeOperation = "source-atop";
-    ctx.fillStyle = skin.head;
-    const headBandBot = a.hy + a.hr * 1.4;
-    ctx.fillRect(ox, 0, WALK_FRAME_W, headBandBot);
-    ctx.restore();
-  }
+
+
 
 
   // ---- Body thickening pass (baked) ----
