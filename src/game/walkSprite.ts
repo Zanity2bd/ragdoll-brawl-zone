@@ -327,10 +327,21 @@ function drawOverlays(
     ctx.restore();
   }
 
+  // Silhouette-authored skins own their head/body/beard contour — skip the
+  // legacy head circle, skin-tone overlay, mask, beard, emblem patch.
+  if (skin.silhouette) return;
+
   // ---- Head region recolor (engraved into silhouette, no overlay shift) ----
   // When noHead is set + a head color is defined, source-atop the head band
   // so the silhouette's own head shape carries the color in every frame.
   if (skin.noHead && skin.head) {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = skin.head;
+    const headBandBot = a.hy + a.hr * 1.4;
+    ctx.fillRect(ox, 0, WALK_FRAME_W, headBandBot);
+    ctx.restore();
+  }
     ctx.save();
     ctx.globalCompositeOperation = "source-atop";
     ctx.fillStyle = skin.head;
