@@ -7,6 +7,17 @@ export type SkinId =
 
 export type Universe = "Marvel" | "DC" | "The Boys";
 
+export interface SilhouetteProfile {
+  coat:      { flare: number; hemDrop: number; sideDrop: number; color: string; interiorShade: string; weight: number };
+  shoulders: { widthMul: number; slumpPx: number; color: string; highlight: string };
+  jaw:       { widthMul: number; dropMul: number };
+  neck:      { widthMul: number; heightMul: number };
+  beard:     { widthMul: number; heightMul: number; color: string; undersideShade: string };
+  limbs:     { upperArmMul: number; forearmMul: number; thighMul: number; calfMul: number };
+  minVolume: { coatWidth: number; shoulderWidth: number; beardWidth: number };
+  taperRule: { shoulderIsMax: boolean; legsTaperIn: boolean; beardMaxOfShoulder: number };
+}
+
 export interface Skin {
   id: SkinId;
   name: string;
@@ -29,6 +40,7 @@ export interface Skin {
   beard?: boolean;
   glow: string;             // subtle accent glow (used sparingly for emblem/eyes only)
   streaks?: string;
+  silhouette?: SilhouetteProfile;
 }
 
 export const SKINS: Skin[] = [
