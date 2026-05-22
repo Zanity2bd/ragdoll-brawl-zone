@@ -76,12 +76,232 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
   for (let i = 0; i < WALK_FRAME_COUNT; i++) {
     const a = WALK_ANCHORS[i];
     const ox = i * WALK_FRAME_W;
+    // Silhouette-authored skins (Butcher) bake unified body mass into the
+    // frame before legacy overlays so coat/shoulders/jaw/beard read as one
+    // continuous shape that follows every pose without anchor drift.
+    if (skin.silhouette) buildSilhouetteContour(ctx, skin, ox, a, i);
     drawOverlays(ctx, skin, ox, a);
   }
 
   skinCache.set(skin.id, c);
   return c;
 }
+
+// ---------------------------------------------------------------------------
+// Motion shaping: per-frame deltas applied inside buildSilhouetteContour.
+// Encodes impact compression, jump stretch, landing flare, recovery lag,
+// directional bias, controlled asymmetry. All clamped against minVolume.
+// ---------------------------------------------------------------------------
+
+interface MotionShape {
+  flareMul: number;
+  hemDropMul: number;
+  hemSkewX: number;
+  shoulderWidthMul: number;
+  shoulderAsym: number;
+  torsoCompressY: number;
+  torsoStretchY: number;
+  torsoCompressX: number;
+  beardLagX: number;
+  coatAsymX: number;
+}
+
+const BASE_MOTION: MotionShape = {
+  flareMul: 1, hemDropMul: 1, hemSkewX: 0,
+  shoulderWidthMul: 1, shoulderAsym: 0,
+  torsoCompressY: 1, torsoStretchY: 1, torsoCompressX: 1,
+  beardLagX: 0, coatAsymX: 0,
+};
+
+const MOTION_SHAPING: MotionShape[] = (() => {
+  const m: MotionShape[] = [];
+  for (let i = 0; i < WALK_FRAME_COUNT; i++) m.push({ ...BASE_MOTION });
+  // Walk 0..9 — gentle controlled asymmetry per footfall.
+  for (let i = 0; i < 10; i++) {
+    m[i].hemSkewX = (i % 2 === 0 ? 1 : -1) * 0.8;
+    m[i].coatAsymX = (i % 2 === 0 ? 1 : -1) * 0.5;
+  }
+  // Punch 10..13 — impact compression on hit frames.
+  m[11].torsoCompressX = 0.97; m[11].shoulderAsym = 1;
+  m[12].torsoCompressX = 0.96; m[12].shoulderAsym = 1.5; m[12].hemSkewX = -1.5;
+  m[13].torsoCompressX = 0.98; m[13].shoulderAsym = 1;
+  // Recovery 14
+  m[14].flareMul = 1.02;
+  // Jump takeoff (15) — squat compression
+  m[15].torsoCompressY = 0.93; m[15].flareMul = 1.05;
+  // Jump rise (16) — vertical stretch
+  m[16].torsoStretchY = 1.04; m[16].hemDropMul = 0.92;
+  // Jump apex (17) — coat arcs opposite spin
+  m[17].flareMul = 1.08; m[17].hemSkewX = -2;
+  // Landing (18) — fast compression + wide flare
+  m[18].torsoCompressY = 0.94; m[18].flareMul = 1.12;
+  // Down/getup (19..21) — recovery curve
+  m[19].flareMul = 1.10; m[19].hemDropMul = 1.05;
+  m[20].flareMul = 1.06;
+  m[21].flareMul = 1.02;
+  // Hurt 22 — recoil asymmetry
+  m[22].torsoCompressX = 0.95; m[22].shoulderAsym = -1.5; m[22].coatAsymX = -1.5;
+  // Kicks/knees/slash 23..29
+  m[24].hemSkewX = -1.5; m[24].coatAsymX = 1;
+  m[26].torsoCompressY = 0.95; m[26].flareMul = 1.04;
+  m[28].hemSkewX = -1.5; m[28].shoulderAsym = 1; m[28].coatAsymX = 1;
+  return m;
+})();
+
+/** Bake unified silhouette mass (limbs → torso/coat/shoulders → head/jaw/beard)
+ *  into the cached frame. One continuous fill per tier so the body reads as a
+ *  single authored contour, not stacked decorations. */
+function buildSilhouetteContour(
+  ctx: CanvasRenderingContext2D,
+  skin: Skin,
+  ox: number,
+  a: typeof WALK_ANCHORS[number],
+  frameIdx: number,
+) {
+  const s = skin.silhouette!;
+  const m = MOTION_SHAPING[frameIdx] ?? BASE_MOTION;
+  const hx = ox + a.hx;
+  const hy = a.hy;
+  const cx = ox + a.cx;
+  const cy = a.cy;
+  const r = a.hr;
+
+  // Clamp secondary motion when primary is deforming strongly (rule 9).
+  const primaryDeform = Math.abs(m.torsoCompressX - 1) + Math.abs(m.torsoCompressY - 1);
+  const secScale = Math.max(0, 1 - primaryDeform * 6);
+  const beardLag = m.beardLagX * secScale;
+  const coatAsym = m.coatAsymX * secScale;
+
+  // Apply minVolume floors (rule 4 — readability never collapses).
+  const flare = Math.max(s.coat.flare * m.flareMul, s.coat.flare * s.minVolume.coatWidth);
+  const shoulderWMul = Math.max(
+    s.shoulders.widthMul * m.shoulderWidthMul,
+    s.shoulders.widthMul * s.minVolume.shoulderWidth,
+  );
+
+  // --- TERTIARY: limb thickening capsules (drawn first, torso unions over) ---
+  ctx.save();
+  ctx.fillStyle = s.coat.color;
+  // thighs: from hip to footY, two columns
+  const thighW = r * 0.45 * s.limbs.thighMul;
+  const calfW = r * 0.38 * s.limbs.calfMul;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(cx + side * r * 0.35, a.hipY + 4, thighW * 0.5, r * 0.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(cx + side * r * 0.4, a.hipY + r * 1.8, calfW * 0.5, r * 1.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // --- PRIMARY: torso + coat + shoulders as ONE continuous trapezoid ---
+  const torsoTop = cy - r * 0.65 + s.shoulders.slumpPx;
+  const torsoBot = a.hipY + s.coat.hemDrop * m.hemDropMul;
+  const torsoHCompress = (torsoBot - torsoTop) * m.torsoCompressY * m.torsoStretchY;
+  const baseShoulderHalf = r * shoulderWMul;
+  const shoulderHalfL = baseShoulderHalf - m.shoulderAsym;
+  const shoulderHalfR = baseShoulderHalf + m.shoulderAsym;
+  const hemHalf = r * flare;
+  const hemSkew = m.hemSkewX;
+  const tBot = torsoTop + torsoHCompress;
+  const compressX = m.torsoCompressX;
+
+  ctx.save();
+  ctx.fillStyle = s.coat.color;
+  ctx.beginPath();
+  // Left shoulder slope down to hem
+  ctx.moveTo(cx - shoulderHalfL * compressX, torsoTop);
+  ctx.quadraticCurveTo(
+    cx - (shoulderHalfL + 2) * compressX, torsoTop + r * 0.3,
+    cx - hemHalf * compressX + hemSkew - coatAsym, tBot,
+  );
+  // Hem (with slight side-drop for trench feel)
+  ctx.quadraticCurveTo(
+    cx + hemSkew, tBot + s.coat.sideDrop,
+    cx + hemHalf * compressX + hemSkew + coatAsym, tBot,
+  );
+  // Right shoulder up
+  ctx.quadraticCurveTo(
+    cx + (shoulderHalfR + 2) * compressX, torsoTop + r * 0.3,
+    cx + shoulderHalfR * compressX, torsoTop,
+  );
+  // Shoulder slope across the top
+  ctx.quadraticCurveTo(cx, torsoTop - r * 0.05, cx - shoulderHalfL * compressX, torsoTop);
+  ctx.closePath();
+  ctx.fill();
+
+  // Anti-flatness: lower-interior shade (rule 4)
+  ctx.save();
+  ctx.clip();
+  const grad = ctx.createLinearGradient(0, torsoTop + torsoHCompress * 0.5, 0, tBot + s.coat.sideDrop);
+  grad.addColorStop(0, "transparent");
+  grad.addColorStop(1, s.coat.interiorShade);
+  ctx.fillStyle = grad;
+  ctx.fillRect(cx - hemHalf - 10, torsoTop, hemHalf * 2 + 20, torsoHCompress + s.coat.sideDrop + 5);
+  ctx.restore();
+
+  // Shoulder-top highlight strip (rule 4)
+  ctx.fillStyle = s.shoulders.highlight;
+  ctx.beginPath();
+  ctx.ellipse(cx, torsoTop + 0.5, baseShoulderHalf * 0.95 * compressX, 1.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // --- SECONDARY: head + jaw + neck + beard as ONE continuous shape ---
+  // Neck rectangle overlaps the top of the primary by ~3px → no seam.
+  const neckW = r * s.neck.widthMul;
+  const neckTop = hy + r * 1.0;
+  const neckBot = torsoTop + 3;
+  const jawW = r * s.jaw.widthMul;
+  const jawDrop = r * s.jaw.dropMul;
+  const headCx = hx;
+  const headCy = hy + r * 0.18;
+  const headR = r * 1.18;
+  const beardW = Math.max(
+    Math.min(jawW * s.beard.widthMul, baseShoulderHalf * s.taperRule.beardMaxOfShoulder),
+    jawW * s.minVolume.beardWidth,
+  );
+  const beardH = r * s.beard.heightMul;
+  const beardCy = hy + r * 0.55 + jawDrop * 0.5;
+
+  ctx.save();
+  ctx.fillStyle = skin.head ?? "oklch(0.74 0.07 55)";
+  ctx.beginPath();
+  // Skull arc (left side around to right)
+  ctx.arc(headCx, headCy, headR, Math.PI, Math.PI * 2);
+  // Down into jaw
+  ctx.lineTo(headCx + jawW, headCy + jawDrop);
+  ctx.quadraticCurveTo(headCx + jawW, neckTop, headCx + neckW * 0.5, neckTop);
+  ctx.lineTo(headCx + neckW * 0.5, neckBot);
+  ctx.lineTo(headCx - neckW * 0.5, neckBot);
+  ctx.lineTo(headCx - neckW * 0.5, neckTop);
+  ctx.quadraticCurveTo(headCx - jawW, neckTop, headCx - jawW, headCy + jawDrop);
+  ctx.closePath();
+  ctx.fill();
+
+  // Beard sub-region in the same continuous body — fill darker, then underside shade.
+  ctx.fillStyle = s.beard.color;
+  ctx.beginPath();
+  ctx.ellipse(headCx + beardLag, beardCy, beardW, beardH, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Beard underside darken strip (rule 4)
+  ctx.fillStyle = s.beard.undersideShade;
+  ctx.beginPath();
+  ctx.ellipse(headCx + beardLag, beardCy + beardH * 0.55, beardW * 0.85, beardH * 0.25, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Tiny eye dots so the face reads from a distance (engraved, not overlay).
+  ctx.fillStyle = "oklch(0.14 0.02 30)";
+  const ey = headCy - r * 0.05;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(headCx + side * r * 0.38, ey, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 
 function drawOverlays(
   ctx: CanvasRenderingContext2D,
@@ -107,6 +327,10 @@ function drawOverlays(
     ctx.restore();
   }
 
+  // Silhouette-authored skins own their head/body/beard contour — skip the
+  // legacy head circle, skin-tone overlay, mask, beard, emblem patch.
+  if (skin.silhouette) return;
+
   // ---- Head region recolor (engraved into silhouette, no overlay shift) ----
   // When noHead is set + a head color is defined, source-atop the head band
   // so the silhouette's own head shape carries the color in every frame.
@@ -118,6 +342,8 @@ function drawOverlays(
     ctx.fillRect(ox, 0, WALK_FRAME_W, headBandBot);
     ctx.restore();
   }
+
+
 
 
   // ---- Body thickening pass (baked) ----

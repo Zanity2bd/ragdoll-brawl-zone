@@ -36,7 +36,7 @@ const STANCES: Partial<Record<SkinId, Stance>> = {
   superman:  { bobMul: 0.9, strideMul: 1.1, crouch: 0, lean: 0.8, sway: 0, idleMul: 1 },
   homelander:{ bobMul: 0.85, strideMul: 1.1, crouch: 0, lean: 0, sway: 0, idleMul: 1 },
   batman:    { bobMul: 1, strideMul: 1, crouch: -1, lean: 0.4, sway: 0, idleMul: 1 },
-  butcher:   { bobMul: 1.25, strideMul: 1.15, crouch: 0, lean: -0.3, sway: 0.6, idleMul: 1.1 },
+  butcher:   { bobMul: 1.05, strideMul: 1.10, crouch: 1, lean: -0.6, sway: 0.4, idleMul: 0.95 },
   atrain:    { bobMul: 0.6, strideMul: 0.8, crouch: 0, lean: 1.8, sway: 0, idleMul: 0.85 },
   heatwave:  { bobMul: 1.2, strideMul: 1.1, crouch: 0, lean: 0, sway: 0.5, idleMul: 1.1 },
   nightcrawler:{ bobMul: 1.05, strideMul: 0.9, crouch: -2, lean: 0.4, sway: 0, idleMul: 1 },
