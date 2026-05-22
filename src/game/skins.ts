@@ -119,13 +119,36 @@ export const SKINS: Skin[] = [
     glow: "oklch(0.55 0.18 30)" },
 
   { id: "butcher", name: "Butcher", universe: "The Boys",
-    // Billy Butcher: pure silhouette recolor — no face/hair overlay (would shift in combat frames).
-    body: "oklch(0.58 0.01 250)",          // grey torso
-    arms: "oklch(0.58 0.01 250)",          // grey arms (upper-body recolor)
-    limb: "oklch(0.18 0.04 260)",          // dark dark blue legs (base tint)
-    head: "oklch(0.74 0.07 55)",           // peach head (engraved via silhouette tint)
-    noHead: true,
-    glow: "oklch(0.55 0.06 220)" },
+    // Billy Butcher — silhouette-authored: coat + shoulders + bearded jaw baked
+    // into the cached sprite frame via SilhouetteProfile (see walkSprite.ts).
+    body: "oklch(0.30 0.015 250)",
+    limb: "oklch(0.18 0.04 260)",          // dark dark blue legs/base
+    head: "oklch(0.74 0.07 55)",           // peach skin tone for face/jaw
+    glow: "oklch(0.55 0.06 220)",
+    silhouette: {
+      coat: {
+        flare: 1.45, hemDrop: 24, sideDrop: 8,
+        color: "oklch(0.30 0.015 250)",
+        interiorShade: "oklch(0.22 0.012 250)",
+        weight: 0.85,
+      },
+      shoulders: {
+        widthMul: 1.38, slumpPx: 1,
+        color: "oklch(0.32 0.015 250)",
+        highlight: "oklch(0.38 0.015 250)",
+      },
+      jaw:   { widthMul: 0.92, dropMul: 0.55 },
+      neck:  { widthMul: 1.18, heightMul: 0.9 },
+      beard: {
+        widthMul: 0.88, heightMul: 0.55,
+        color: "oklch(0.17 0.01 30)",
+        undersideShade: "oklch(0.11 0.01 30)",
+      },
+      limbs: { upperArmMul: 1.28, forearmMul: 1.15, thighMul: 1.22, calfMul: 1.08 },
+      minVolume: { coatWidth: 0.78, shoulderWidth: 0.85, beardWidth: 0.70 },
+      taperRule: { shoulderIsMax: true, legsTaperIn: true, beardMaxOfShoulder: 0.85 },
+    },
+  },
 
   { id: "atrain", name: "A-Train", universe: "The Boys",
     body: "oklch(0.45 0.20 25)", limb: "oklch(0.45 0.20 25)",
