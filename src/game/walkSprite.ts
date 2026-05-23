@@ -195,56 +195,115 @@ function buildSilhouetteContour(
   }
   ctx.restore();
 
-  // --- PRIMARY: torso + coat + shoulders as ONE continuous trapezoid ---
+  // --- PRIMARY: torso + coat + shoulders as ONE continuous tapered contour ---
+  // Sloped trapezius → shoulder peak (widest) → chest taper → waist pinch →
+  // coat re-flare → softened hem. Cubic beziers per side, mirrored.
   const torsoTop = cy - r * 0.65 + s.shoulders.slumpPx;
   const torsoBot = a.hipY + s.coat.hemDrop * m.hemDropMul;
   const torsoHCompress = (torsoBot - torsoTop) * m.torsoCompressY * m.torsoStretchY;
   const baseShoulderHalf = r * shoulderWMul;
-  const shoulderHalfL = baseShoulderHalf - m.shoulderAsym;
-  const shoulderHalfR = baseShoulderHalf + m.shoulderAsym;
-  const hemHalf = r * flare;
+  const compressX = m.torsoCompressX;
+  const shoulderHalfL = (baseShoulderHalf - m.shoulderAsym) * compressX;
+  const shoulderHalfR = (baseShoulderHalf + m.shoulderAsym) * compressX;
+  const hemHalfBase = r * flare * compressX;
+  // Clamp: shoulders must remain the widest point of the figure.
+  const shoulderHalfLc = Math.max(shoulderHalfL, hemHalfBase + 1);
+  const shoulderHalfRc = Math.max(shoulderHalfR, hemHalfBase + 1);
+  const waistMul = 0.85;       // gentle pinch — avoid hourglass at mobile scale
+  const chestMul = 0.94;       // ~6% inward chest taper
+  const lowerCoatMul = 0.92;   // coat re-widens below waist
+  const neckHalf = r * s.neck.widthMul * 0.5;
   const hemSkew = m.hemSkewX;
   const tBot = torsoTop + torsoHCompress;
-  const compressX = m.torsoCompressX;
+
+  // Motion-only hem asymmetry — coatAsym is 0 on idle frames.
+  const hemDipL = Math.max(0, -coatAsym) * 1.2;
+  const hemDipR = Math.max(0,  coatAsym) * 1.2;
+  const waistDriftL = -coatAsym * 0.3;
+  const waistDriftR =  coatAsym * 0.3;
+
+  const shoulderY  = torsoTop + r * 0.08;
+  const chestY     = torsoTop + r * 0.45;
+  const waistY     = torsoTop + r * 0.95;
+  const lowerCoatY = torsoTop + r * 1.45;
 
   ctx.save();
   ctx.fillStyle = s.coat.color;
   ctx.beginPath();
-  // Left shoulder slope down to hem
-  ctx.moveTo(cx - shoulderHalfL * compressX, torsoTop);
-  ctx.quadraticCurveTo(
-    cx - (shoulderHalfL + 2) * compressX, torsoTop + r * 0.3,
-    cx - hemHalf * compressX + hemSkew - coatAsym, tBot,
+
+  // Start at LEFT neck-side anchor, just above torsoTop (no flat top edge).
+  ctx.moveTo(cx - neckHalf, torsoTop - r * 0.02);
+
+  // 1) Trapezius merge: neck → left shoulder peak.
+  ctx.bezierCurveTo(
+    cx - neckHalf - r * 0.18,   torsoTop - r * 0.01,
+    cx - shoulderHalfLc * 0.85, torsoTop + r * 0.02,
+    cx - shoulderHalfLc,        shoulderY,
   );
-  // Hem (with slight side-drop for trench feel)
-  ctx.quadraticCurveTo(
-    cx + hemSkew, tBot + s.coat.sideDrop,
-    cx + hemHalf * compressX + hemSkew + coatAsym, tBot,
+  // 2) Shoulder peak → chest.
+  ctx.bezierCurveTo(
+    cx - shoulderHalfLc,             shoulderY + r * 0.15,
+    cx - shoulderHalfLc * chestMul,  chestY - r * 0.10,
+    cx - shoulderHalfLc * chestMul,  chestY,
   );
-  // Right shoulder up
-  ctx.quadraticCurveTo(
-    cx + (shoulderHalfR + 2) * compressX, torsoTop + r * 0.3,
-    cx + shoulderHalfR * compressX, torsoTop,
+  // 3) Chest → waist pinch.
+  ctx.bezierCurveTo(
+    cx - shoulderHalfLc * chestMul,                 chestY + r * 0.20,
+    cx - shoulderHalfLc * waistMul + waistDriftL,   waistY - r * 0.20,
+    cx - shoulderHalfLc * waistMul + waistDriftL,   waistY,
   );
-  // Shoulder slope across the top
-  ctx.quadraticCurveTo(cx, torsoTop - r * 0.05, cx - shoulderHalfL * compressX, torsoTop);
+  // 4) Waist → lower coat re-flare.
+  ctx.bezierCurveTo(
+    cx - shoulderHalfLc * waistMul + waistDriftL,   waistY + r * 0.20,
+    cx - hemHalfBase * lowerCoatMul,                lowerCoatY - r * 0.15,
+    cx - hemHalfBase + hemSkew - coatAsym,          tBot + hemDipL,
+  );
+  // 5) Hem across (softened — hanging fabric).
+  ctx.quadraticCurveTo(
+    cx + hemSkew,                                   tBot + s.coat.sideDrop * 1.4,
+    cx + hemHalfBase + hemSkew + coatAsym,          tBot + hemDipR,
+  );
+  // 6) Lower coat → right waist (mirrored).
+  ctx.bezierCurveTo(
+    cx + hemHalfBase * lowerCoatMul,                lowerCoatY - r * 0.15,
+    cx + shoulderHalfRc * waistMul + waistDriftR,   waistY + r * 0.20,
+    cx + shoulderHalfRc * waistMul + waistDriftR,   waistY,
+  );
+  // 7) Waist → chest.
+  ctx.bezierCurveTo(
+    cx + shoulderHalfRc * waistMul + waistDriftR,   waistY - r * 0.20,
+    cx + shoulderHalfRc * chestMul,                 chestY + r * 0.20,
+    cx + shoulderHalfRc * chestMul,                 chestY,
+  );
+  // 8) Chest → right shoulder peak.
+  ctx.bezierCurveTo(
+    cx + shoulderHalfRc * chestMul,  chestY - r * 0.10,
+    cx + shoulderHalfRc,             shoulderY + r * 0.15,
+    cx + shoulderHalfRc,             shoulderY,
+  );
+  // 9) Right shoulder peak → right neck anchor (mirrored trapezius merge).
+  ctx.bezierCurveTo(
+    cx + shoulderHalfRc * 0.85,  torsoTop + r * 0.02,
+    cx + neckHalf + r * 0.18,    torsoTop - r * 0.01,
+    cx + neckHalf,               torsoTop - r * 0.02,
+  );
   ctx.closePath();
   ctx.fill();
 
-  // Anti-flatness: lower-interior shade (rule 4)
+  // Anti-flatness: lower-interior shade.
   ctx.save();
   ctx.clip();
   const grad = ctx.createLinearGradient(0, torsoTop + torsoHCompress * 0.5, 0, tBot + s.coat.sideDrop);
   grad.addColorStop(0, "transparent");
   grad.addColorStop(1, s.coat.interiorShade);
   ctx.fillStyle = grad;
-  ctx.fillRect(cx - hemHalf - 10, torsoTop, hemHalf * 2 + 20, torsoHCompress + s.coat.sideDrop + 5);
+  ctx.fillRect(cx - hemHalfBase - 10, torsoTop, hemHalfBase * 2 + 20, torsoHCompress + s.coat.sideDrop + 5);
   ctx.restore();
 
-  // Shoulder-top highlight strip (rule 4)
+  // Shoulder-slope highlight (sits on the peak, not across a flat top).
   ctx.fillStyle = s.shoulders.highlight;
   ctx.beginPath();
-  ctx.ellipse(cx, torsoTop + 0.5, baseShoulderHalf * 0.95 * compressX, 1.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, torsoTop + r * 0.06, baseShoulderHalf * 0.7 * compressX, 1.2, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
