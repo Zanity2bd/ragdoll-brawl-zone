@@ -32,10 +32,14 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#0a0a14" },
       { title: "OgunArena — Offline 1v1 Stickman Fighting Game" },
       { name: "description", content: "OgunArena (Yoruba: Ogun = war). An offline 1v1 stickman fighting arena with hero skins and animated battle maps. A Blkdom production." },
-      { property: "og:title", content: "OgunArena" },
-      { property: "og:description", content: "Offline 1v1 stickman fighting arena with animated maps and hero skins. A Blkdom production." },
+      { property: "og:title", content: "OgunArena — Offline 1v1 Stickman Fighting Game" },
+      { property: "og:description", content: "OgunArena (Yoruba: Ogun = war). An offline 1v1 stickman fighting arena with hero skins and animated battle maps. A Blkdom production." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "OgunArena — Offline 1v1 Stickman Fighting Game" },
+      { name: "twitter:description", content: "OgunArena (Yoruba: Ogun = war). An offline 1v1 stickman fighting arena with hero skins and animated battle maps. A Blkdom production." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/60ce7173-a0d1-4b2b-9eaf-678da82713fa/id-preview-018dc7a0--6eb6fbc9-e48c-4cd7-a13b-70c5ac4a1bdf.lovable.app-1779663564294.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/60ce7173-a0d1-4b2b-9eaf-678da82713fa/id-preview-018dc7a0--6eb6fbc9-e48c-4cd7-a13b-70c5ac4a1bdf.lovable.app-1779663564294.png" },
     ],
     links: [
       {
