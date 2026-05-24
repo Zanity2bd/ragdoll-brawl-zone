@@ -245,60 +245,61 @@ function buildSilhouetteContour(
   ctx.beginPath();
 
   // Start at LEFT neck-side anchor, just above torsoTop (no flat top edge).
-  ctx.moveTo(cx - neckHalf, torsoTop - r * 0.02);
+  // Upper-zone X offset = chestLeanX (chest leads).
+  ctx.moveTo(cx - neckHalf + chestLeanX, torsoTop - r * 0.02);
 
   // 1) Trapezius merge: neck → left shoulder peak.
   ctx.bezierCurveTo(
-    cx - neckHalf - r * 0.18,   torsoTop - r * 0.01,
-    cx - shoulderHalfLc * 0.85, torsoTop + r * 0.02,
-    cx - shoulderHalfLc,        shoulderY,
+    cx - neckHalf - r * 0.18 + chestLeanX,         torsoTop - r * 0.01,
+    cx - (shoulderHalfLc - shoulderSquishL) * 0.85 + chestLeanX, torsoTop + r * 0.02,
+    cx - (shoulderHalfLc - shoulderSquishL) + chestLeanX,        shoulderY,
   );
   // 2) Shoulder peak → chest.
   ctx.bezierCurveTo(
-    cx - shoulderHalfLc,             shoulderY + r * 0.15,
-    cx - shoulderHalfLc * chestMul,  chestY - r * 0.10,
-    cx - shoulderHalfLc * chestMul,  chestY,
+    cx - (shoulderHalfLc - shoulderSquishL) + chestLeanX,             shoulderY + r * 0.15,
+    cx - shoulderHalfLc * chestMul + chestLeanX,                       chestY - r * 0.10,
+    cx - shoulderHalfLc * chestMul + chestLeanX,                       chestY,
   );
-  // 3) Chest → waist pinch.
+  // 3) Chest → waist pinch (blend zone).
   ctx.bezierCurveTo(
-    cx - shoulderHalfLc * chestMul,                 chestY + r * 0.20,
-    cx - shoulderHalfLc * waistMul + waistDriftL,   waistY - r * 0.20,
-    cx - shoulderHalfLc * waistMul + waistDriftL,   waistY,
+    cx - shoulderHalfLc * chestMul + chestLeanX,             chestY + r * 0.20,
+    cx - shoulderHalfLc * waistMul + waistDriftL,            waistY - r * 0.20,
+    cx - shoulderHalfLc * waistMul + waistDriftL,            waistY,
   );
-  // 4) Waist → lower coat re-flare.
+  // 4) Waist → lower coat re-flare (lower zone trails).
   ctx.bezierCurveTo(
-    cx - shoulderHalfLc * waistMul + waistDriftL,   waistY + r * 0.20,
-    cx - hemHalfBase * lowerCoatMul,                lowerCoatY - r * 0.15,
-    cx - hemHalfBase + hemSkew - coatAsym,          tBot + hemDipL,
+    cx - shoulderHalfLc * waistMul + waistDriftL,            waistY + r * 0.20,
+    cx - hemHalfBase * lowerCoatMul + hipDriftX,             lowerCoatY - r * 0.15,
+    cx - hemHalfBase + hemSkew - coatAsym + hipDriftX,       tBot + hemDipL,
   );
   // 5) Hem across (softened — hanging fabric).
   ctx.quadraticCurveTo(
-    cx + hemSkew,                                   tBot + s.coat.sideDrop * 1.4,
-    cx + hemHalfBase + hemSkew + coatAsym,          tBot + hemDipR,
+    cx + hemSkew + hipDriftX,                                tBot + s.coat.sideDrop * 1.4,
+    cx + hemHalfBase + hemSkew + coatAsym + hipDriftX,       tBot + hemDipR,
   );
   // 6) Lower coat → right waist (mirrored).
   ctx.bezierCurveTo(
-    cx + hemHalfBase * lowerCoatMul,                lowerCoatY - r * 0.15,
-    cx + shoulderHalfRc * waistMul + waistDriftR,   waistY + r * 0.20,
-    cx + shoulderHalfRc * waistMul + waistDriftR,   waistY,
+    cx + hemHalfBase * lowerCoatMul + hipDriftX,             lowerCoatY - r * 0.15,
+    cx + shoulderHalfRc * waistMul + waistDriftR,            waistY + r * 0.20,
+    cx + shoulderHalfRc * waistMul + waistDriftR,            waistY,
   );
   // 7) Waist → chest.
   ctx.bezierCurveTo(
-    cx + shoulderHalfRc * waistMul + waistDriftR,   waistY - r * 0.20,
-    cx + shoulderHalfRc * chestMul,                 chestY + r * 0.20,
-    cx + shoulderHalfRc * chestMul,                 chestY,
+    cx + shoulderHalfRc * waistMul + waistDriftR,            waistY - r * 0.20,
+    cx + shoulderHalfRc * chestMul + chestLeanX,             chestY + r * 0.20,
+    cx + shoulderHalfRc * chestMul + chestLeanX,             chestY,
   );
   // 8) Chest → right shoulder peak.
   ctx.bezierCurveTo(
-    cx + shoulderHalfRc * chestMul,  chestY - r * 0.10,
-    cx + shoulderHalfRc,             shoulderY + r * 0.15,
-    cx + shoulderHalfRc,             shoulderY,
+    cx + shoulderHalfRc * chestMul + chestLeanX,             chestY - r * 0.10,
+    cx + (shoulderHalfRc - shoulderSquishR) + chestLeanX,    shoulderY + r * 0.15,
+    cx + (shoulderHalfRc - shoulderSquishR) + chestLeanX,    shoulderY,
   );
   // 9) Right shoulder peak → right neck anchor (mirrored trapezius merge).
   ctx.bezierCurveTo(
-    cx + shoulderHalfRc * 0.85,  torsoTop + r * 0.02,
-    cx + neckHalf + r * 0.18,    torsoTop - r * 0.01,
-    cx + neckHalf,               torsoTop - r * 0.02,
+    cx + (shoulderHalfRc - shoulderSquishR) * 0.85 + chestLeanX, torsoTop + r * 0.02,
+    cx + neckHalf + r * 0.18 + chestLeanX,                       torsoTop - r * 0.01,
+    cx + neckHalf + chestLeanX,                                  torsoTop - r * 0.02,
   );
   ctx.closePath();
   ctx.fill();
@@ -313,10 +314,10 @@ function buildSilhouetteContour(
   ctx.fillRect(cx - hemHalfBase - 10, torsoTop, hemHalfBase * 2 + 20, torsoHCompress + s.coat.sideDrop + 5);
   ctx.restore();
 
-  // Shoulder-slope highlight (sits on the peak, not across a flat top).
+  // Shoulder-slope highlight (follows chest lean).
   ctx.fillStyle = s.shoulders.highlight;
   ctx.beginPath();
-  ctx.ellipse(cx, torsoTop + r * 0.06, baseShoulderHalf * 0.7 * compressX, 1.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + chestLeanX, torsoTop + r * 0.06, baseShoulderHalf * 0.7 * compressX, 1.2, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
