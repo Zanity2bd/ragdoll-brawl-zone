@@ -219,8 +219,21 @@ function buildSilhouetteContour(
   // Motion-only hem asymmetry — coatAsym is 0 on idle frames.
   const hemDipL = Math.max(0, -coatAsym) * 1.2;
   const hemDipR = Math.max(0,  coatAsym) * 1.2;
-  const waistDriftL = -coatAsym * 0.3;
-  const waistDriftR =  coatAsym * 0.3;
+
+  // --- 3-zone pose-driven deformation (reuses existing MOTION_SHAPING only) ---
+  // Chest leads, waist blends ~40%, lower coat trails. Each zone gets one X offset
+  // applied uniformly to that zone's anchors so the silhouette bends as ONE chain.
+  // All clamped subtle so readability stays sacred.
+  const clampN = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+  const chestLeanX = clampN(m.shoulderAsym * 1.1 + coatAsym * 0.4, -3, 3);
+  const hipDriftX  = clampN(-coatAsym * 1.4 + hemSkew * 0.5, -3, 3);
+  const waistLeanX = (chestLeanX + hipDriftX) * 0.4; // ~40% blend pivot
+  // Attack-side shoulder compresses inward, opposite stretches outward (±2px max).
+  const shoulderSquishL = clampN(-m.shoulderAsym * 0.8, -2, 2);
+  const shoulderSquishR = clampN( m.shoulderAsym * 0.8, -2, 2);
+  // Waist drift inherits prior coatAsym pull, now combined into waistLeanX directly.
+  const waistDriftL = waistLeanX - coatAsym * 0.3;
+  const waistDriftR = waistLeanX + coatAsym * 0.3;
 
   const shoulderY  = torsoTop + r * 0.08;
   const chestY     = torsoTop + r * 0.45;
