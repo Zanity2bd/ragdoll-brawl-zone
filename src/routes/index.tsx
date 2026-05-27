@@ -6,126 +6,249 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "OgunArena — Offline 1v1 Stickman Fighting Game" },
-      { name: "description", content: "OgunArena (Yoruba: Ogun = war). Offline 1v1 stickman fighting arena for two players on one device. A Blkdom production." },
+      {
+        name: "description",
+        content:
+          "OgunArena (Yoruba: Ogun = war). Offline 1v1 stickman fighting arena for two players on one device. A Blkdom production.",
+      },
     ],
   }),
 });
 
 function Landing() {
   return (
-    <main
-      className="min-h-screen flex flex-col items-center justify-center px-6 py-12 relative overflow-hidden"
-      style={{
-        background: "radial-gradient(ellipse at center, oklch(0.18 0.08 280) 0%, oklch(0.10 0.05 275) 70%)",
-      }}
-    >
-      <div
-        className="absolute inset-0 pointer-events-none opacity-30"
-        style={{
-          background:
-            "repeating-linear-gradient(0deg, transparent 0 22px, oklch(0.4 0.15 280 / 0.2) 22px 23px)",
-          maskImage: "linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)",
-        }}
-      />
-
-      <div className="relative text-center max-w-2xl">
-        <div className="font-mono text-xs tracking-[0.4em] uppercase text-foreground/50 mb-4">
-          ◇ Offline 1v1 ◇
-        </div>
-        <h1
-          className="text-6xl md:text-8xl font-black tracking-tight leading-none mb-2"
+    <main className="relative min-h-[100dvh] w-full overflow-hidden bg-background text-foreground">
+      {/* Split-screen face-off backdrop (vertical on mobile, diagonal on larger) */}
+      <div className="absolute inset-0">
+        {/* Hero half */}
+        <div
+          className="absolute inset-0"
           style={{
-            background: "linear-gradient(135deg, oklch(0.92 0.18 60), oklch(0.65 0.28 25))",
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            color: "transparent",
-            filter: "drop-shadow(0 0 30px oklch(0.65 0.25 30 / 0.55))",
+            background:
+              "linear-gradient(180deg, color-mix(in oklab, var(--hero) 22%, var(--background)) 0%, var(--background) 55%)",
+            clipPath: "polygon(0 0, 100% 0, 100% 42%, 0 58%)",
           }}
-        >
-          OGUN
-        </h1>
-        <h2
-          className="text-4xl md:text-6xl font-black tracking-[0.25em] mb-3"
-          style={{ color: "oklch(0.95 0.04 60)" }}
-        >
-          ARENA
-        </h2>
-        <div className="font-mono text-[10px] tracking-[0.4em] uppercase text-foreground/50 mb-10">
-          Ogun · war in Yoruba
-        </div>
-
-        <p className="text-foreground/70 mb-10 font-mono text-sm leading-relaxed">
-          Two stickmen. One arena. No mercy.
-          <br />
-          Share a keyboard or a touchscreen and settle it the old way.
-        </p>
-
-        <Link
-          to="/play"
-          className="inline-block px-10 py-4 font-mono uppercase tracking-[0.3em] text-sm border-2 transition-all hover:scale-105"
+        />
+        {/* Villain half */}
+        <div
+          className="absolute inset-0"
           style={{
-            borderColor: "oklch(0.85 0.18 210)",
-            color: "oklch(0.85 0.18 210)",
-            boxShadow: "0 0 30px oklch(0.75 0.22 215 / 0.4)",
+            background:
+              "linear-gradient(0deg, color-mix(in oklab, var(--villain) 26%, var(--background)) 0%, var(--background) 55%)",
+            clipPath: "polygon(0 58%, 100% 42%, 100% 100%, 0 100%)",
           }}
-        >
-          ▶ Start Fight
-        </Link>
+        />
+        {/* Halftone overlay */}
+        <div className="absolute inset-0 halftone opacity-60" />
+        {/* Center seam — jagged comic slash */}
+        <div
+          className="absolute left-0 right-0 h-[2px]"
+          style={{
+            top: "50%",
+            background:
+              "linear-gradient(90deg, transparent, var(--gold) 12%, var(--paper) 50%, var(--gold) 88%, transparent)",
+            boxShadow: "0 0 24px color-mix(in oklab, var(--gold) 70%, transparent)",
+            transform: "rotate(-2.2deg)",
+          }}
+        />
+        {/* Edge vignette */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, transparent 40%, oklch(0.06 0.02 25 / 0.85) 100%)",
+          }}
+        />
+      </div>
 
-        <div className="mt-16 grid grid-cols-2 gap-8 text-left">
-          <ControlsCard
-            name="Hero"
-            color="oklch(0.85 0.18 210)"
-            rows={[
-              ["Move", "A · D"],
-              ["Jump", "W"],
-              ["Fire Blast", "F"],
-              ["Teleport", "G + click"],
-            ]}
-          />
-          <ControlsCard
-            name="Villain"
-            color="oklch(0.72 0.28 340)"
-            rows={[
-              ["Move", "← · →"],
-              ["Jump", "↑"],
-              ["Fire Blast", "K"],
-              ["Teleport", "L + click"],
-            ]}
-          />
+      {/* Top brand bar */}
+      <header className="relative z-20 flex items-center justify-between px-4 pt-[max(env(safe-area-inset-top,0px),12px)] pb-2">
+        <div className="font-display text-[11px] tracking-[0.35em] text-foreground/70">
+          OGUN<span className="text-[color:var(--gold)]">/</span>ARENA
+        </div>
+        <div className="font-display text-[10px] tracking-[0.4em] text-foreground/45">
+          v1 · OFFLINE
+        </div>
+      </header>
+
+      <div className="relative z-10 mx-auto flex max-w-md flex-col px-5 pb-10 pt-2">
+        {/* HERO panel */}
+        <FighterPanel side="hero" />
+
+        {/* Title slab */}
+        <TitleSlab />
+
+        {/* VILLAIN panel */}
+        <FighterPanel side="villain" />
+
+        {/* CTA */}
+        <div className="mt-8 flex flex-col items-center">
+          <Link
+            to="/play"
+            className="group relative inline-flex items-center justify-center min-h-14 px-10 font-display text-[15px] tracking-[0.3em] uppercase text-background transition-transform active:scale-[0.97]"
+            style={{
+              background: "var(--paper)",
+              clipPath:
+                "polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%)",
+              boxShadow:
+                "0 0 0 2px var(--background), 0 0 0 4px var(--gold), 0 14px 40px -10px color-mix(in oklab, var(--gold) 55%, transparent)",
+            }}
+          >
+            <span className="relative">FIGHT NOW</span>
+          </Link>
+          <div className="mt-3 font-display text-[10px] tracking-[0.5em] text-foreground/40">
+            ▸ TWO PLAYERS · ONE SCREEN
+          </div>
         </div>
 
-        <div className="mt-8 font-mono text-[10px] tracking-widest uppercase text-foreground/40">
-          On mobile? On-screen buttons appear automatically.
+        {/* Mobile hint */}
+        <div className="mt-8 mx-auto px-3 py-1.5 font-display text-[9px] tracking-[0.35em] uppercase text-background hazard">
+          on-screen pads on mobile
         </div>
 
-        <div className="mt-10 flex justify-center">
+        {/* Footer */}
+        <div className="mt-8 flex flex-col items-center gap-3">
           <BlkdomBadge />
+          <div className="font-display text-[9px] tracking-[0.4em] text-foreground/30">
+            OGUN · WAR IN YORUBA
+          </div>
         </div>
       </div>
     </main>
   );
 }
 
-function ControlsCard({
-  name, color, rows,
-}: { name: string; color: string; rows: [string, string][] }) {
+function TitleSlab() {
+  return (
+    <div className="relative my-3 flex flex-col items-center">
+      {/* Burst */}
+      <div
+        aria-hidden
+        className="absolute inset-x-0 top-1/2 -translate-y-1/2 mx-auto h-40 w-[110%]"
+        style={{
+          background:
+            "conic-gradient(from 0deg, transparent 0 18deg, color-mix(in oklab, var(--gold) 35%, transparent) 18deg 22deg, transparent 22deg 40deg, color-mix(in oklab, var(--gold) 25%, transparent) 40deg 44deg, transparent 44deg)",
+          filter: "blur(1px)",
+          opacity: 0.6,
+          maskImage:
+            "radial-gradient(ellipse at center, black 30%, transparent 75%)",
+        }}
+      />
+      <div
+        className="relative font-display text-[68px] leading-[0.82] text-foreground"
+        style={{
+          letterSpacing: "-0.04em",
+          textShadow:
+            "0 0 0 var(--background), 3px 3px 0 color-mix(in oklab, var(--villain) 90%, transparent), -2px -2px 0 color-mix(in oklab, var(--hero) 90%, transparent)",
+        }}
+      >
+        OGUN
+      </div>
+      <div
+        className="relative font-display text-[28px] tracking-[0.45em] mt-1"
+        style={{
+          color: "var(--paper)",
+          WebkitTextStroke: "1px var(--gold)",
+        }}
+      >
+        ARENA
+      </div>
+    </div>
+  );
+}
+
+function FighterPanel({ side }: { side: "hero" | "villain" }) {
+  const isHero = side === "hero";
+  const tint = isHero ? "var(--hero)" : "var(--villain)";
+  const glow = isHero ? "var(--hero-glow)" : "var(--villain-glow)";
+  const name = isHero ? "HERO" : "VILLAIN";
+  const tag = isHero ? "PLAYER 01" : "PLAYER 02";
+  const rows: [string, string][] = isHero
+    ? [
+        ["MOVE", "A · D"],
+        ["JUMP", "W"],
+        ["BLAST", "F"],
+        ["WARP", "G + TAP"],
+      ]
+    : [
+        ["MOVE", "← →"],
+        ["JUMP", "↑"],
+        ["BLAST", "K"],
+        ["WARP", "L + TAP"],
+      ];
+
   return (
     <div
-      className="border rounded-sm p-4 backdrop-blur-sm"
-      style={{ borderColor: `color-mix(in oklab, ${color} 40%, transparent)`, background: "oklch(0.14 0.04 270 / 0.5)" }}
+      className={`relative ${isHero ? "self-start" : "self-end"} w-[88%]`}
+      style={{
+        transform: isHero ? "rotate(-1deg)" : "rotate(1deg)",
+      }}
     >
-      <div className="font-mono text-xs tracking-widest uppercase mb-3" style={{ color }}>
-        {name}
-      </div>
-      <dl className="space-y-1.5">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between font-mono text-xs">
-            <dt className="text-foreground/60">{k}</dt>
-            <dd style={{ color }}>{v}</dd>
+      <div
+        className="relative p-4 backdrop-blur-sm"
+        style={{
+          background:
+            "linear-gradient(180deg, color-mix(in oklab, " +
+            tint +
+            " 14%, var(--background)) 0%, color-mix(in oklab, var(--background) 92%, " +
+            tint +
+            " 8%) 100%)",
+          clipPath: isHero
+            ? "polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%)"
+            : "polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))",
+          boxShadow: `inset 0 0 0 2px ${tint}, 0 18px 40px -20px ${glow}`,
+        }}
+      >
+        {/* Side label */}
+        <div className="flex items-baseline justify-between mb-3">
+          <div
+            className="font-display text-2xl tracking-tight"
+            style={{ color: tint, textShadow: `0 0 18px ${glow}` }}
+          >
+            {name}
           </div>
-        ))}
-      </dl>
+          <div
+            className="font-display text-[10px] tracking-[0.35em]"
+            style={{ color: "color-mix(in oklab, var(--paper) 60%, transparent)" }}
+          >
+            {tag}
+          </div>
+        </div>
+
+        {/* Controls grid */}
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
+          {rows.map(([k, v]) => (
+            <div
+              key={k}
+              className="flex items-center justify-between border-b border-dashed pb-1"
+              style={{ borderColor: "color-mix(in oklab, var(--paper) 22%, transparent)" }}
+            >
+              <dt className="font-display text-[10px] tracking-[0.25em] text-foreground/55">
+                {k}
+              </dt>
+              <dd
+                className="font-display text-[12px] tracking-[0.1em]"
+                style={{ color: "var(--paper)" }}
+              >
+                {v}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      {/* Corner stamp */}
+      <div
+        className={`absolute ${isHero ? "-top-2 -right-2" : "-top-2 -left-2"} px-2 py-0.5 font-display text-[9px] tracking-[0.3em]`}
+        style={{
+          background: tint,
+          color: "var(--background)",
+          transform: isHero ? "rotate(4deg)" : "rotate(-4deg)",
+          boxShadow: `0 4px 18px -4px ${glow}`,
+        }}
+      >
+        {isHero ? "◆ JUSTICE" : "◆ CHAOS"}
+      </div>
     </div>
   );
 }
