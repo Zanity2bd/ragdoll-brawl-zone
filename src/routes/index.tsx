@@ -102,8 +102,13 @@ function Landing() {
         </div>
 
         {/* Mobile hint */}
-        <div className="mt-8 mx-auto px-3 py-1.5 font-display text-[9px] tracking-[0.35em] uppercase text-background hazard">
-          on-screen pads on mobile
+        <div className="mt-8 mx-auto relative inline-flex hazard p-[3px]">
+          <span
+            className="px-3 py-1.5 font-display text-[9px] tracking-[0.35em] uppercase"
+            style={{ background: "var(--background)", color: "var(--paper)" }}
+          >
+            on-screen pads on mobile
+          </span>
         </div>
 
         {/* Footer */}
