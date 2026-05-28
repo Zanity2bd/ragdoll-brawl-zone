@@ -73,13 +73,10 @@ export const MOVES: Record<SkinId, MoveSpec> = {
     windupSfx: "whoosh", hitSfx: "punch",
   },
   spiderman: {
-    // Snap-yank: rip the opponent in close and launch them with a vault kick.
-    // Was: 16 dmg / 320 kbX / -240 kbY / 0.45 ragdoll.
-    // Now: 22 dmg / 460 kbX / -360 kbY / 0.7 ragdoll — full sky-arc punish.
     kind: "webYank", name: "Web Yank",
-    windup: 0.18, active: 0.3, recover: 0.26, cooldown: 1.3,
-    range: 460, damage: 22, knockbackX: 460, knockbackY: -360,
-    hitstop: 0.2, slowmoT: 0.22, shake: 20, ragdollT: 0.7,
+    windup: 0.2, active: 0.28, recover: 0.28, cooldown: 1.3,
+    range: 420, damage: 16, knockbackX: 320, knockbackY: -240,
+    hitstop: 0.14, slowmoT: 0.16, shake: 14, ragdollT: 0.45,
     windupSfx: "chirp", hitSfx: "punch",
   },
   ironman: {
