@@ -6429,15 +6429,54 @@ export class GameEngine {
         ctx.lineTo(0, 3); ctx.closePath(); ctx.fill();
         ctx.restore();
       } else if (pr.kind === "web") {
+        // Sticky web strand: tapered cord with subtle sag + droplet beads,
+        // splat-shaped tip. Reads as "web", not a generic line.
         const owner = pr.owner === "p1" ? this.p1 : this.p2;
-        ctx.strokeStyle = pr.color;
-        ctx.lineWidth = 1.4;
+        const ox = owner.x + owner.facing * 14;
+        const oy = owner.y + 28;
+        const dx = pr.x - ox;
+        const dy = pr.y - oy;
+        const len = Math.max(1, Math.hypot(dx, dy));
+        // Sag perpendicular to the strand — small, so it still snaps fast
+        const px = -dy / len, py = dx / len;
+        const sag = Math.min(8, len * 0.04);
+        const mx = (ox + pr.x) / 2 + px * sag;
+        const my = (oy + pr.y) / 2 + py * sag;
+        ctx.save();
+        ctx.lineCap = "round";
+        // Outer glow pass
+        ctx.strokeStyle = "rgba(255,255,255,0.22)";
+        ctx.lineWidth = 3.2;
         ctx.beginPath();
-        ctx.moveTo(owner.x + owner.facing * 14, owner.y + 28);
-        ctx.lineTo(pr.x, pr.y);
+        ctx.moveTo(ox, oy);
+        ctx.quadraticCurveTo(mx, my, pr.x, pr.y);
         ctx.stroke();
+        // Crisp inner strand
+        ctx.strokeStyle = pr.color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(ox, oy);
+        ctx.quadraticCurveTo(mx, my, pr.x, pr.y);
+        ctx.stroke();
+        // Sticky beads along the cord
         ctx.fillStyle = pr.color;
-        ctx.beginPath(); ctx.arc(pr.x, pr.y, 4, 0, Math.PI * 2); ctx.fill();
+        for (let i = 1; i <= 3; i++) {
+          const u = i / 4;
+          const bx = (1 - u) * (1 - u) * ox + 2 * (1 - u) * u * mx + u * u * pr.x;
+          const by = (1 - u) * (1 - u) * oy + 2 * (1 - u) * u * my + u * u * pr.y;
+          ctx.beginPath(); ctx.arc(bx, by, 1.4, 0, Math.PI * 2); ctx.fill();
+        }
+        // Splat tip — three-lobed star instead of a single dot
+        ctx.beginPath(); ctx.arc(pr.x, pr.y, 4.5, 0, Math.PI * 2); ctx.fill();
+        const tipAng = Math.atan2(dy, dx);
+        for (let i = 0; i < 3; i++) {
+          const a = tipAng + (i - 1) * 0.9;
+          ctx.beginPath();
+          ctx.arc(pr.x + Math.cos(a) * 4, pr.y + Math.sin(a) * 4, 1.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
       } else if (pr.kind === "crowbar") {
         // Render in source-over so the dark iron reads against bright bgs.
         ctx.save();
