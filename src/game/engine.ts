@@ -4256,13 +4256,39 @@ export class GameEngine {
           break;
         }
         case "speedFlurry": {
-          // Multi-hit: tick a hit every 0.1s during active window
+          // Sprint-through combo: every 0.1s tick, A-Train micro-dashes toward
+          // the target (so the attack reads as a rush, not a stationary jab
+          // spam) and leaves a crimson afterimage streak in his wake.
           if (inActive) {
             const tick = Math.floor((t - m.windup) / 0.1);
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
+            if (!f.meleeHitMask.has(tick) && f.ragdollT <= 0 && f.downedT <= 0) {
+              const minGap = 28; // px in front of target where we stop
+              const advance = 14;
+              if (dx > minGap) {
+                f.x = Math.max(40, Math.min(W - 40, f.x + f.facing * Math.min(advance, dx - minGap)));
+              }
+              // Crimson ground streak behind the runner
+              this.particles.push({
+                x: f.x - f.facing * 10, y: f.y + FIGHTER_H - 4,
+                vx: -f.facing * (180 + Math.random() * 160), vy: -10 - Math.random() * 30,
+                life: 0.3, maxLife: 0.3,
+                color: "oklch(0.62 0.22 25)", size: 1.8 + Math.random() * 1.6,
+              });
+              // Bright afterimage dust at chest height
+              for (let i = 0; i < 2; i++) {
+                this.particles.push({
+                  x: f.x - f.facing * (6 + Math.random() * 10),
+                  y: f.y + 20 + Math.random() * 36,
+                  vx: -f.facing * (140 + Math.random() * 200),
+                  vy: (Math.random() - 0.5) * 24,
+                  life: 0.22, maxLife: 0.22,
+                  color: "oklch(0.85 0.18 25)", size: 1 + Math.random() * 1.2,
+                });
+              }
+            }
             if (!f.meleeHitMask.has(tick) && dx > -10 && dx < m.range && Math.abs(target.y - f.y) < FIGHTER_H) {
-              // Cover blocks the flurry tick (and takes damage)
               if (this.meleeBlockedByProp(f, m.range, m.damage)) {
                 f.meleeHitMask.add(tick);
                 break;
@@ -4277,7 +4303,6 @@ export class GameEngine {
               this.impactFlash = Math.max(this.impactFlash, 0.3);
               this.hitstopT = Math.max(this.hitstopT, 0.04);
               this.burst(target.x, target.y + 40, f.skin.glow, 6);
-              // Speed lines streaking off the target
               for (let i = 0; i < 4; i++) {
                 this.particles.push({
                   x: target.x + (Math.random() - 0.5) * 18,
