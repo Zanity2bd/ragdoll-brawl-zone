@@ -2006,12 +2006,43 @@ export class GameEngine {
         target.hp = Math.max(0, target.hp - dmg);
         target.hitFlash = 0.35;
         if (pr.kind === "web") {
-          // pull target toward owner
+          // Stick + yank: the strand snaps tight, hooks the target chest, and
+          // rips them toward Spider-Man. A tiny "stick" beat (iframes->0, brief
+          // stagger) reads as the web grabbing before the pull launches.
           const owner = pr.owner === "p1" ? this.p1 : this.p2;
-          target.vx = -Math.sign(target.x - owner.x) * 720;
-          target.vy = -180;
+          const dir = -Math.sign(target.x - owner.x) || 1;
+          target.vx = dir * 760;
+          target.vy = -210;
           target.onGround = false;
+          target.slowedT = Math.max(target.slowedT ?? 0, 0.35);
+          if (target.wobble.staggerImmuneT <= 0) {
+            target.wobble.staggerT = 0.25;
+            target.wobble.staggerDir = dir as 1 | -1;
+            target.wobble.staggerMag = 0.7;
+            applyImpulse(target.wobble, dir as 1 | -1, -0.4, 0.8);
+          }
+          // White splat at impact point
+          this.shockwaves.push({
+            x: pr.x, y: pr.y, r: 4, rMax: 38, life: 0.28, maxLife: 0.28,
+            color: "oklch(0.98 0.01 250)",
+          });
+          spawnFx(this.attackFx, "impactStar", pr.x, pr.y, {
+            size: 22, life: 0.22, grow: 50, spin: 3,
+          });
+          // Sticky strand fragments flying off the splat
+          for (let i = 0; i < 10; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const s = 80 + Math.random() * 180;
+            this.particles.push({
+              x: pr.x, y: pr.y,
+              vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40,
+              life: 0.35, maxLife: 0.35,
+              color: "oklch(0.96 0.01 250)",
+              size: 1.2 + Math.random() * 1.4,
+            });
+          }
           Sfx.play("whoosh", 0.7);
+
         } else if (pr.kind === "crowbar") {
           // Heavy iron strike: massive launch + ragdoll.
           const dir = (Math.sign(pr.vx) || 1) as 1 | -1;
