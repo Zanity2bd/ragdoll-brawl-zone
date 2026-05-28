@@ -59,10 +59,13 @@ export const MOVES: Record<SkinId, MoveSpec> = {
     windupSfx: "whoosh", hitSfx: "boom",
   },
   atrain: {
+    // Faster, denser flurry — longer active window with bigger per-tick punch
+    // and a real shove at the end. Was: 0.6s / 4 dmg / 70 kbX (~24 total).
+    // Now: 0.9s / 7 dmg / 130 kbX (~63 total) — feels like a true sprint combo.
     kind: "speedFlurry", name: "Speed Flurry",
-    windup: 0.1, active: 0.6, recover: 0.22, cooldown: 1.5,
-    range: 60, damage: 4, knockbackX: 70, knockbackY: 0,
-    hitstop: 0.05, slowmoT: 0, shake: 4, ragdollT: 0,
+    windup: 0.08, active: 0.9, recover: 0.24, cooldown: 1.6,
+    range: 72, damage: 7, knockbackX: 130, knockbackY: -20,
+    hitstop: 0.06, slowmoT: 0, shake: 6, ragdollT: 0,
     hitSfx: "jab",
   },
   flash: {
