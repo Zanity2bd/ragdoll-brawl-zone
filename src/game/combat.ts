@@ -59,13 +59,10 @@ export const MOVES: Record<SkinId, MoveSpec> = {
     windupSfx: "whoosh", hitSfx: "boom",
   },
   atrain: {
-    // Faster, denser flurry — longer active window with bigger per-tick punch
-    // and a real shove at the end. Was: 0.6s / 4 dmg / 70 kbX (~24 total).
-    // Now: 0.9s / 7 dmg / 130 kbX (~63 total) — feels like a true sprint combo.
     kind: "speedFlurry", name: "Speed Flurry",
-    windup: 0.08, active: 0.9, recover: 0.24, cooldown: 1.6,
-    range: 72, damage: 7, knockbackX: 130, knockbackY: -20,
-    hitstop: 0.06, slowmoT: 0, shake: 6, ragdollT: 0,
+    windup: 0.1, active: 0.6, recover: 0.22, cooldown: 1.5,
+    range: 60, damage: 4, knockbackX: 70, knockbackY: 0,
+    hitstop: 0.05, slowmoT: 0, shake: 4, ragdollT: 0,
     hitSfx: "jab",
   },
   flash: {
@@ -76,13 +73,10 @@ export const MOVES: Record<SkinId, MoveSpec> = {
     windupSfx: "whoosh", hitSfx: "punch",
   },
   spiderman: {
-    // Snap-yank: rip the opponent in close and launch them with a vault kick.
-    // Was: 16 dmg / 320 kbX / -240 kbY / 0.45 ragdoll.
-    // Now: 22 dmg / 460 kbX / -360 kbY / 0.7 ragdoll — full sky-arc punish.
     kind: "webYank", name: "Web Yank",
-    windup: 0.18, active: 0.3, recover: 0.26, cooldown: 1.3,
-    range: 460, damage: 22, knockbackX: 460, knockbackY: -360,
-    hitstop: 0.2, slowmoT: 0.22, shake: 20, ragdollT: 0.7,
+    windup: 0.2, active: 0.28, recover: 0.28, cooldown: 1.3,
+    range: 420, damage: 16, knockbackX: 320, knockbackY: -240,
+    hitstop: 0.14, slowmoT: 0.16, shake: 14, ragdollT: 0.45,
     windupSfx: "chirp", hitSfx: "punch",
   },
   ironman: {

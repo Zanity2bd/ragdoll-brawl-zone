@@ -2006,12 +2006,43 @@ export class GameEngine {
         target.hp = Math.max(0, target.hp - dmg);
         target.hitFlash = 0.35;
         if (pr.kind === "web") {
-          // pull target toward owner
+          // Stick + yank: the strand snaps tight, hooks the target chest, and
+          // rips them toward Spider-Man. A tiny "stick" beat (iframes->0, brief
+          // stagger) reads as the web grabbing before the pull launches.
           const owner = pr.owner === "p1" ? this.p1 : this.p2;
-          target.vx = -Math.sign(target.x - owner.x) * 720;
-          target.vy = -180;
+          const dir = -Math.sign(target.x - owner.x) || 1;
+          target.vx = dir * 760;
+          target.vy = -210;
           target.onGround = false;
+          target.slowedT = Math.max(target.slowedT ?? 0, 0.35);
+          if (target.wobble.staggerImmuneT <= 0) {
+            target.wobble.staggerT = 0.25;
+            target.wobble.staggerDir = dir as 1 | -1;
+            target.wobble.staggerMag = 0.7;
+            applyImpulse(target.wobble, dir as 1 | -1, -0.4, 0.8);
+          }
+          // White splat at impact point
+          this.shockwaves.push({
+            x: pr.x, y: pr.y, r: 4, rMax: 38, life: 0.28, maxLife: 0.28,
+            color: "oklch(0.98 0.01 250)",
+          });
+          spawnFx(this.attackFx, "impactStar", pr.x, pr.y, {
+            size: 22, life: 0.22, grow: 50, spin: 3,
+          });
+          // Sticky strand fragments flying off the splat
+          for (let i = 0; i < 10; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const s = 80 + Math.random() * 180;
+            this.particles.push({
+              x: pr.x, y: pr.y,
+              vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40,
+              life: 0.35, maxLife: 0.35,
+              color: "oklch(0.96 0.01 250)",
+              size: 1.2 + Math.random() * 1.4,
+            });
+          }
           Sfx.play("whoosh", 0.7);
+
         } else if (pr.kind === "crowbar") {
           // Heavy iron strike: massive launch + ragdoll.
           const dir = (Math.sign(pr.vx) || 1) as 1 | -1;
@@ -4225,13 +4256,39 @@ export class GameEngine {
           break;
         }
         case "speedFlurry": {
-          // Multi-hit: tick a hit every 0.1s during active window
+          // Sprint-through combo: every 0.1s tick, A-Train micro-dashes toward
+          // the target (so the attack reads as a rush, not a stationary jab
+          // spam) and leaves a crimson afterimage streak in his wake.
           if (inActive) {
             const tick = Math.floor((t - m.windup) / 0.1);
             const target = f.id === "p1" ? this.p2 : this.p1;
             const dx = (target.x - f.x) * f.facing;
+            if (!f.meleeHitMask.has(tick) && f.ragdollT <= 0 && f.downedT <= 0) {
+              const minGap = 28; // px in front of target where we stop
+              const advance = 14;
+              if (dx > minGap) {
+                f.x = Math.max(40, Math.min(W - 40, f.x + f.facing * Math.min(advance, dx - minGap)));
+              }
+              // Crimson ground streak behind the runner
+              this.particles.push({
+                x: f.x - f.facing * 10, y: f.y + FIGHTER_H - 4,
+                vx: -f.facing * (180 + Math.random() * 160), vy: -10 - Math.random() * 30,
+                life: 0.3, maxLife: 0.3,
+                color: "oklch(0.62 0.22 25)", size: 1.8 + Math.random() * 1.6,
+              });
+              // Bright afterimage dust at chest height
+              for (let i = 0; i < 2; i++) {
+                this.particles.push({
+                  x: f.x - f.facing * (6 + Math.random() * 10),
+                  y: f.y + 20 + Math.random() * 36,
+                  vx: -f.facing * (140 + Math.random() * 200),
+                  vy: (Math.random() - 0.5) * 24,
+                  life: 0.22, maxLife: 0.22,
+                  color: "oklch(0.85 0.18 25)", size: 1 + Math.random() * 1.2,
+                });
+              }
+            }
             if (!f.meleeHitMask.has(tick) && dx > -10 && dx < m.range && Math.abs(target.y - f.y) < FIGHTER_H) {
-              // Cover blocks the flurry tick (and takes damage)
               if (this.meleeBlockedByProp(f, m.range, m.damage)) {
                 f.meleeHitMask.add(tick);
                 break;
@@ -4246,7 +4303,6 @@ export class GameEngine {
               this.impactFlash = Math.max(this.impactFlash, 0.3);
               this.hitstopT = Math.max(this.hitstopT, 0.04);
               this.burst(target.x, target.y + 40, f.skin.glow, 6);
-              // Speed lines streaking off the target
               for (let i = 0; i < 4; i++) {
                 this.particles.push({
                   x: target.x + (Math.random() - 0.5) * 18,
@@ -6429,15 +6485,54 @@ export class GameEngine {
         ctx.lineTo(0, 3); ctx.closePath(); ctx.fill();
         ctx.restore();
       } else if (pr.kind === "web") {
+        // Sticky web strand: tapered cord with subtle sag + droplet beads,
+        // splat-shaped tip. Reads as "web", not a generic line.
         const owner = pr.owner === "p1" ? this.p1 : this.p2;
-        ctx.strokeStyle = pr.color;
-        ctx.lineWidth = 1.4;
+        const ox = owner.x + owner.facing * 14;
+        const oy = owner.y + 28;
+        const dx = pr.x - ox;
+        const dy = pr.y - oy;
+        const len = Math.max(1, Math.hypot(dx, dy));
+        // Sag perpendicular to the strand — small, so it still snaps fast
+        const px = -dy / len, py = dx / len;
+        const sag = Math.min(8, len * 0.04);
+        const mx = (ox + pr.x) / 2 + px * sag;
+        const my = (oy + pr.y) / 2 + py * sag;
+        ctx.save();
+        ctx.lineCap = "round";
+        // Outer glow pass
+        ctx.strokeStyle = "rgba(255,255,255,0.22)";
+        ctx.lineWidth = 3.2;
         ctx.beginPath();
-        ctx.moveTo(owner.x + owner.facing * 14, owner.y + 28);
-        ctx.lineTo(pr.x, pr.y);
+        ctx.moveTo(ox, oy);
+        ctx.quadraticCurveTo(mx, my, pr.x, pr.y);
         ctx.stroke();
+        // Crisp inner strand
+        ctx.strokeStyle = pr.color;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(ox, oy);
+        ctx.quadraticCurveTo(mx, my, pr.x, pr.y);
+        ctx.stroke();
+        // Sticky beads along the cord
         ctx.fillStyle = pr.color;
-        ctx.beginPath(); ctx.arc(pr.x, pr.y, 4, 0, Math.PI * 2); ctx.fill();
+        for (let i = 1; i <= 3; i++) {
+          const u = i / 4;
+          const bx = (1 - u) * (1 - u) * ox + 2 * (1 - u) * u * mx + u * u * pr.x;
+          const by = (1 - u) * (1 - u) * oy + 2 * (1 - u) * u * my + u * u * pr.y;
+          ctx.beginPath(); ctx.arc(bx, by, 1.4, 0, Math.PI * 2); ctx.fill();
+        }
+        // Splat tip — three-lobed star instead of a single dot
+        ctx.beginPath(); ctx.arc(pr.x, pr.y, 4.5, 0, Math.PI * 2); ctx.fill();
+        const tipAng = Math.atan2(dy, dx);
+        for (let i = 0; i < 3; i++) {
+          const a = tipAng + (i - 1) * 0.9;
+          ctx.beginPath();
+          ctx.arc(pr.x + Math.cos(a) * 4, pr.y + Math.sin(a) * 4, 1.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
       } else if (pr.kind === "crowbar") {
         // Render in source-over so the dark iron reads against bright bgs.
         ctx.save();
