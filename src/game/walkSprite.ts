@@ -4,6 +4,7 @@
 // hot-path render is one drawImage per fighter per frame.
 
 import sheetUrl from "@/assets/walk-sheet.png";
+import spiderMaskUrl from "@/assets/spider-mask.png";
 import { WALK_ANCHORS } from "./walkAnchors";
 import type { Skin } from "./skins";
 
