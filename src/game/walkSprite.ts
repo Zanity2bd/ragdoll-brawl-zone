@@ -728,39 +728,8 @@ function drawEyes(
   const ey = hy - r * 0.05;
   const ex = r * 0.38;
 
-  // Spider-Man — iconic large white teardrop lenses, black-outlined,
-  // tilted outward (~0.35 rad) for the classic angry shape, with a subtle
-  // inner highlight. All sized off head radius `r` so they scale per-frame.
-  if (skin.id === "spiderman") {
-    const lensCx = r * 0.42;
-    const lensCy = ey - r * 0.05;
-    [-1, 1].forEach((s) => {
-      // Black outline (slightly larger)
-      ctx.fillStyle = "oklch(0.10 0.02 260)";
-      ctx.beginPath();
-      ctx.ellipse(hx + s * lensCx, lensCy, r * 0.42, r * 0.30, s * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      // White lens fill
-      ctx.fillStyle = "oklch(0.97 0.01 220)";
-      ctx.beginPath();
-      ctx.ellipse(hx + s * lensCx, lensCy, r * 0.34, r * 0.24, s * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      // Inner highlight
-      ctx.fillStyle = "oklch(0.78 0.02 220)";
-      ctx.beginPath();
-      ctx.ellipse(
-        hx + s * lensCx + s * r * 0.05,
-        lensCy + r * 0.05,
-        r * 0.10,
-        r * 0.06,
-        s * 0.35,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    });
-    return;
-  }
+  // Spider-Man eyes are baked in bakeSpidermanFrames() — never reaches here.
+
 
   // Iron Man slits
   if (skin.id === "ironman") {
