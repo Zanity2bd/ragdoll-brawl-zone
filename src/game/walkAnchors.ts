@@ -1,5 +1,11 @@
 // Per-frame anatomy anchors extracted from walk-sheet.png alpha.
 // Drives where overlays (face, mask, eyes, chest emblem, cape) get pinned.
+//
+// Combat frames (10..29) re-measured by sprite-alpha topology scan: find the
+// topmost compact run (head ball, width 8..36) that opens ≥14 rows downward,
+// then take chest as the densest band 28..54 px below head top. Walk frames
+// (0..9) retain the legacy convention (hy=head center ≈ ytop+13, hr=13) so
+// existing skin overlays still align.
 export interface WalkAnchor {
   hx: number; hy: number; hr: number;
   cx: number; cy: number;
@@ -11,51 +17,51 @@ export const WALK_FRAME_H = 200;
 
 export const WALK_ANCHORS: ReadonlyArray<WalkAnchor> = [
   // Walk loop (0..9)
-  { hx: 66, hy: 14, hr: 13, cx: 65, cy: 45, hipY: 106, footY: 193 },
-  { hx: 78, hy: 14, hr: 13, cx: 74, cy: 46, hipY: 106, footY: 193 },
-  { hx: 73, hy: 14, hr: 13, cx: 72, cy: 45, hipY: 106, footY: 193 },
-  { hx: 69, hy: 14, hr: 13, cx: 69, cy: 46, hipY: 106, footY: 193 },
-  { hx: 66, hy: 14, hr: 13, cx: 65, cy: 45, hipY: 106, footY: 193 },
-  { hx: 78, hy: 14, hr: 13, cx: 74, cy: 46, hipY: 106, footY: 193 },
-  { hx: 73, hy: 14, hr: 13, cx: 72, cy: 45, hipY: 106, footY: 193 },
-  { hx: 69, hy: 14, hr: 13, cx: 69, cy: 46, hipY: 106, footY: 193 },
-  { hx: 78, hy: 14, hr: 13, cx: 74, cy: 46, hipY: 106, footY: 193 },
-  { hx: 84, hy: 15, hr: 14, cx: 79, cy: 47, hipY: 106, footY: 193 },
+  { hx: 66, hy: 13, hr: 13, cx: 63, cy: 40, hipY: 106, footY: 193 },
+  { hx: 78, hy: 13, hr: 13, cx: 74, cy: 40, hipY: 106, footY: 193 },
+  { hx: 73, hy: 13, hr: 13, cx: 71, cy: 40, hipY: 106, footY: 193 },
+  { hx: 69, hy: 13, hr: 13, cx: 67, cy: 40, hipY: 106, footY: 193 },
+  { hx: 66, hy: 13, hr: 13, cx: 63, cy: 40, hipY: 106, footY: 193 },
+  { hx: 78, hy: 13, hr: 13, cx: 74, cy: 40, hipY: 106, footY: 193 },
+  { hx: 73, hy: 13, hr: 13, cx: 71, cy: 40, hipY: 106, footY: 193 },
+  { hx: 69, hy: 13, hr: 13, cx: 67, cy: 40, hipY: 106, footY: 193 },
+  { hx: 78, hy: 13, hr: 13, cx: 73, cy: 40, hipY: 106, footY: 193 },
+  { hx: 85, hy: 13, hr: 13, cx: 76, cy: 40, hipY: 106, footY: 193 },
   // Punch (10..13)
-  { hx: 71, hy: 15, hr: 14, cx: 67, cy: 46, hipY: 106, footY: 193 },
-  { hx: 87, hy: 56, hr: 14, cx: 72, cy: 84, hipY: 123, footY: 193 },
-  { hx: 98, hy: 27, hr: 14, cx: 94, cy: 50, hipY: 110, footY: 193 },
-  { hx: 105, hy: 16, hr: 14, cx: 98, cy: 46, hipY: 106, footY: 193 },
+  { hx: 71, hy: 13, hr: 13, cx: 63, cy: 40, hipY: 106, footY: 193 },
+  { hx: 87, hy: 51, hr: 13, cx: 76, cy: 78, hipY: 123, footY: 193 },
+  { hx: 98, hy: 22, hr: 13, cx: 98, cy: 49, hipY: 110, footY: 193 },
+  { hx: 106, hy: 13, hr: 13, cx: 96, cy: 40, hipY: 106, footY: 193 },
   // Punch recovery (14)
-  { hx: 70, hy: 15, hr: 13, cx: 63, cy: 45, hipY: 106, footY: 193 },
+  { hx: 71, hy: 13, hr: 13, cx: 62, cy: 40, hipY: 106, footY: 193 },
   // Jump takeoff (15) — squat
-  { hx: 105, hy: 16, hr: 14, cx: 91, cy: 45, hipY: 106, footY: 193 },
+  { hx: 105, hy: 13, hr: 13, cx: 97, cy: 40, hipY: 106, footY: 193 },
   // Jump rising (16)
-  { hx: 71, hy: 14, hr: 13, cx: 78, cy: 45, hipY: 106, footY: 193 },
+  { hx: 70, hy: 13, hr: 13, cx: 80, cy: 40, hipY: 106, footY: 193 },
   // Jump apex (17)
-  { hx: 95, hy: 15, hr: 14, cx: 78, cy: 45, hipY: 106, footY: 193 },
+  { hx: 95, hy: 13, hr: 13, cx: 85, cy: 40, hipY: 106, footY: 193 },
   // Jump landing (18) — squash
-  { hx: 73, hy: 15, hr: 14, cx: 78, cy: 42, hipY: 106, footY: 193 },
+  { hx: 72, hy: 13, hr: 13, cx: 82, cy: 40, hipY: 106, footY: 193 },
   // Downed flat (19) — body horizontal, head left side
-  { hx: 69, hy: 115, hr: 14, cx: 68, cy: 150, hipY: 149, footY: 193 },
+  { hx: 69, hy: 110, hr: 13, cx: 69, cy: 137, hipY: 149, footY: 193 },
   // Get-up A (20)
-  { hx: 118, hy: 72, hr: 14, cx: 121, cy: 101, hipY: 130, footY: 193 },
+  { hx: 117, hy: 67, hr: 13, cx: 111, cy: 94, hipY: 130, footY: 193 },
   // Get-up B (21)
-  { hx: 75, hy: 62, hr: 14, cx: 66, cy: 91, hipY: 125, footY: 193 },
-  // Hurt / recoil (22)
-  { hx: 68, hy: 14, hr: 14, cx: 73, cy: 46, hipY: 106, footY: 193 },
-  // High kick chamber (23) — supporting leg, kick leg horizontal
-  { hx: 78, hy: 18, hr: 13, cx: 76, cy: 50, hipY: 110, footY: 193 },
+  { hx: 75, hy: 57, hr: 13, cx: 75, cy: 84, hipY: 125, footY: 193 },
+  // Hurt / recoil (22) — head drops significantly on recoil; was previously wrong (hy:14)
+  { hx: 66, hy: 33, hr: 13, cx: 76, cy: 60, hipY: 106, footY: 193 },
+  // High kick chamber (23) — head far left, supporting leg right; was very wrong (hx:78)
+  { hx: 38, hy: 33, hr: 13, cx: 26, cy: 60, hipY: 110, footY: 193 },
   // High kick extend (24) — leg up & forward
-  { hx: 70, hy: 18, hr: 13, cx: 73, cy: 52, hipY: 112, footY: 193 },
-  // Knee chamber (25) — crouched low, head right
-  { hx: 80, hy: 88, hr: 13, cx: 75, cy: 115, hipY: 145, footY: 193 },
+  { hx: 53, hy: 17, hr: 13, cx: 63, cy: 44, hipY: 112, footY: 193 },
+  // Knee chamber (25) — crouched low
+  { hx: 57, hy: 71, hr: 13, cx: 68, cy: 98, hipY: 145, footY: 193 },
   // Knee strike (26) — driving knee up
-  { hx: 65, hy: 32, hr: 13, cx: 72, cy: 64, hipY: 124, footY: 193 },
-  // Slash windup (27) — coiled
-  { hx: 76, hy: 22, hr: 13, cx: 73, cy: 54, hipY: 116, footY: 193 },
+  { hx: 48, hy: 28, hr: 13, cx: 59, cy: 55, hipY: 124, footY: 193 },
+  // Slash windup (27) — deeply coiled; was very wrong (hy:22 vs actual 80)
+  { hx: 76, hy: 80, hr: 13, cx: 61, cy: 106, hipY: 116, footY: 193 },
   // Slash forward (28) — weapon out, body extended
-  { hx: 76, hy: 18, hr: 13, cx: 73, cy: 50, hipY: 110, footY: 193 },
+  { hx: 55, hy: 13, hr: 13, cx: 65, cy: 40, hipY: 110, footY: 193 },
   // Slash recover (29) — weapon overhead
-  { hx: 64, hy: 22, hr: 13, cx: 70, cy: 52, hipY: 112, footY: 193 },
+  { hx: 51, hy: 22, hr: 13, cx: 51, cy: 49, hipY: 112, footY: 193 },
 ];
