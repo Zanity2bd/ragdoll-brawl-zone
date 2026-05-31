@@ -42,14 +42,14 @@ export const WALK_ANCHORS: ReadonlyArray<WalkAnchor> = [
   { hx: 95, hy: 13, hr: 13, cx: 85, cy: 40, hipY: 106, footY: 193 },
   // Jump landing (18) — squash
   { hx: 72, hy: 13, hr: 13, cx: 82, cy: 40, hipY: 106, footY: 193 },
-  // Downed flat (19) — body horizontal, head left side
-  { hx: 69, hy: 110, hr: 13, cx: 69, cy: 137, hipY: 149, footY: 193 },
-  // Get-up A (20)
-  { hx: 117, hy: 67, hr: 13, cx: 111, cy: 94, hipY: 130, footY: 193 },
-  // Get-up B (21)
-  { hx: 75, hy: 57, hr: 13, cx: 75, cy: 84, hipY: 125, footY: 193 },
-  // Hurt / recoil (22) — head drops significantly on recoil; was previously wrong (hy:14)
-  { hx: 66, hy: 33, hr: 13, cx: 76, cy: 60, hipY: 106, footY: 193 },
+  // Downed flat (19) — body horizontal, re-measured from sprite alpha
+  { hx: 67, hy: 113, hr: 13, cx: 59, cy: 133, hipY: 150, footY: 193 },
+  // Get-up A (20) — head right, chest below; chest re-measured (cx 99 not 111)
+  { hx: 119, hy: 69, hr: 13, cx: 99, cy: 93, hipY: 128, footY: 193 },
+  // Get-up B (21) — chest re-measured (cx 61 not 75), hy 62 not 57
+  { hx: 74, hy: 62, hr: 13, cx: 61, cy: 84, hipY: 124, footY: 193 },
+  // Hurt / recoil (22) — actual sprite: head stays near top, NOT dropped
+  { hx: 67, hy: 12, hr: 13, cx: 73, cy: 42, hipY: 106, footY: 193 },
   // High kick chamber (23) — head far left, supporting leg right; was very wrong (hx:78)
   { hx: 38, hy: 33, hr: 13, cx: 26, cy: 60, hipY: 110, footY: 193 },
   // High kick extend (24) — leg up & forward
