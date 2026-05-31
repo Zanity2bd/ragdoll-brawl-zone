@@ -7966,11 +7966,53 @@ export class GameEngine {
       ctx.fill();
     }
 
+    // Spider-Man mask: subtle web lines + iconic teardrop white eyes with black rim.
+    if (skin.id === "spiderman" && !ghost) {
+      ctx.save();
+      // Clip web lines inside the head disc so they hug the mask.
+      ctx.beginPath(); ctx.arc(0, headY, headR - 0.5, 0, Math.PI * 2); ctx.clip();
+      ctx.strokeStyle = "oklch(0.18 0.04 260)";
+      ctx.lineWidth = 0.5;
+      ctx.globalAlpha = 0.55;
+      // Radial spokes from top-center of mask
+      const cx0 = 0, cy0 = headY - headR + 1;
+      ctx.beginPath();
+      for (let i = -3; i <= 3; i++) {
+        const a = (i / 3) * 1.05 + Math.PI / 2; // fan downward
+        ctx.moveTo(cx0, cy0);
+        ctx.lineTo(cx0 + Math.cos(a) * (headR * 2.2), cy0 + Math.sin(a) * (headR * 2.2));
+      }
+      // 2 concentric web arcs
+      ctx.moveTo(cx0 + headR * 0.55, cy0 + headR * 0.4);
+      ctx.arc(cx0, cy0, headR * 0.7, 0.2, Math.PI - 0.2);
+      ctx.moveTo(cx0 + headR * 1.0, cy0 + headR * 0.8);
+      ctx.arc(cx0, cy0, headR * 1.15, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     const eyeColor = skin.id === "spiderman" ? "oklch(0.95 0.02 250)" : "oklch(0.10 0 0)";
     ctx.fillStyle = eyeColor;
     if (skin.id === "spiderman") {
-      ctx.beginPath(); ctx.ellipse(-3.5, headY - 1, 3, 2, -0.35, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.ellipse(3.5, headY - 1, 3, 2, 0.35, 0, Math.PI * 2); ctx.fill();
+      // Iconic teardrop web-eyes — fat at outer edge, tapered toward nose.
+      ctx.save();
+      const drawEye = (sx: number, tilt: number) => {
+        ctx.beginPath();
+        // Build asymmetric almond via two quadratic curves
+        ctx.moveTo(sx * 1.2, headY + 0.4);                                 // inner tip
+        ctx.quadraticCurveTo(sx * 4.2, headY - 3.2, sx * 6.0, headY - 1.3); // top outer
+        ctx.quadraticCurveTo(sx * 5.2, headY + 1.8, sx * 2.6, headY + 1.6); // bottom back to inner
+        ctx.closePath();
+        ctx.fillStyle = eyeColor;
+        ctx.fill();
+        // Crisp black rim around the eye
+        ctx.strokeStyle = "oklch(0.10 0.02 260)";
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+      };
+      drawEye(-1, -0.35);
+      drawEye(1, 0.35);
+      ctx.restore();
     } else if (skin.cowlEars) {
       ctx.fillStyle = "oklch(0.92 0.02 250)";
       ctx.fillRect(-5, headY - 1, 3, 1.6);
