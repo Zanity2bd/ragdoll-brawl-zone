@@ -34,7 +34,7 @@ export const SLASH_RECOVER_FRAME = 29;
 export const WALK_FOOT_Y = 189;
 
 // Cache buster — bump when the bake pipeline changes so stale caches are tossed.
-const SKIN_CACHE_VERSION = "v3-joint-mask";
+const SKIN_CACHE_VERSION = "v4-silhouette-mask";
 
 let sheet: HTMLImageElement | null = null;
 let sheetReady = false;
@@ -70,13 +70,12 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
   const ctx = c.getContext("2d");
   if (!ctx) return null;
 
-  // Spider-Man: joint-driven mask bake. The mask is built deterministically
-  // per frame from the same WALK_ANCHORS the silhouette uses — no topology
-  // guessing, no per-pixel scans. Red zones are pinned to head + torso
-  // anchors of each frame, blue fills the rest, then source-in clips the
-  // result against the silhouette alpha. Zero drift by construction.
+  // Spider-Man: silhouette-locked mask bake. The base sprite is tinted blue,
+  // then the red suit zones are rebuilt from the real silhouette pixels of
+  // each frame. This removes the old anchor-drawn torso blob that could slide
+  // around inside wide/extreme poses.
   if (skin.id === "spiderman") {
-    bakeSpidermanJointMask(ctx, sheet, W, H);
+    bakeSpidermanSilhouetteMask(ctx, sheet, W, H);
     skinCache.set(cacheKey, c);
     return c;
   }
@@ -105,12 +104,11 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
 
 // ---------------------------------------------------------------------------
 // Spider-Man rendering lives in exactly two places:
-//   1. WALK_ANCHORS (per-frame skeleton — shared with the silhouette)
-//   2. bakeSpidermanJointMask() below
+//   1. walk-sheet.png (the silhouette source of truth)
+//   2. bakeSpidermanSilhouetteMask() below
 // No Spider-Man drawing code may exist anywhere else in the project.
-// To tweak Spider-Man's look, edit the painter below. Red/blue boundaries
-// follow the joint anchors of each frame, so they cannot drift relative to
-// the body.
+// The suit colors are classified from the real silhouette pixels of each
+// frame, with WALK_ANCHORS used only as soft guidance for semantic regions.
 // ---------------------------------------------------------------------------
 
 const SPIDER_RED = "#c8312b";
