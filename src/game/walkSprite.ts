@@ -73,18 +73,158 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
   ctx.globalCompositeOperation = "source-over";
 
   // ---- Step 2: per-frame overlays ----
-  for (let i = 0; i < WALK_FRAME_COUNT; i++) {
-    const a = WALK_ANCHORS[i];
-    const ox = i * WALK_FRAME_W;
-    // Silhouette-authored skins (Butcher) bake unified body mass into the
-    // frame before legacy overlays so coat/shoulders/jaw/beard read as one
-    // continuous shape that follows every pose without anchor drift.
-    if (skin.silhouette) buildSilhouetteContour(ctx, skin, ox, a, i);
-    drawOverlays(ctx, skin, ox, a);
+  // Spider-Man is a SINGLE-SILHOUETTE bake: recolor the silhouette alpha
+  // itself (head + central torso run) so red is part of the body, not a
+  // shape stacked at anchors. No overlay can drift because there are none.
+  if (skin.id === "spiderman") {
+    bakeSpidermanFrames(ctx, c.width, c.height, skin);
+  } else {
+    for (let i = 0; i < WALK_FRAME_COUNT; i++) {
+      const a = WALK_ANCHORS[i];
+      const ox = i * WALK_FRAME_W;
+      // Silhouette-authored skins (Butcher) bake unified body mass into the
+      // frame before legacy overlays so coat/shoulders/jaw/beard read as one
+      // continuous shape that follows every pose without anchor drift.
+      if (skin.silhouette) buildSilhouetteContour(ctx, skin, ox, a, i);
+      drawOverlays(ctx, skin, ox, a);
+    }
   }
 
   skinCache.set(skin.id, c);
   return c;
+}
+
+// ---------------------------------------------------------------------------
+// Spider-Man — single-silhouette bake.
+//
+// Doctrine: Spider-Man is a stickman first. Red is encoded INTO the
+// silhouette alpha (no decorative shapes placed at anchors). For each
+// frame we walk the per-row central run of silhouette pixels in the torso
+// band and the contiguous head region, and recolor those pixels red. Arms
+// extend as their own runs and stay blue. The spider emblem and teardrop
+// eyes are then drawn with source-atop so they can never extend past the
+// body and never shift relative to it. No Spider-Man drawing exists
+// outside this function.
+// ---------------------------------------------------------------------------
+function parseColorToRGBA(color: string): [number, number, number, number] {
+  const t = document.createElement("canvas");
+  t.width = 1; t.height = 1;
+  const tc = t.getContext("2d")!;
+  tc.fillStyle = color;
+  tc.fillRect(0, 0, 1, 1);
+  const d = tc.getImageData(0, 0, 1, 1).data;
+  return [d[0], d[1], d[2], d[3]];
+}
+
+function bakeSpidermanFrames(
+  ctx: CanvasRenderingContext2D,
+  sheetW: number,
+  sheetH: number,
+  skin: Skin,
+) {
+  // Step A: pixel-level recolor of head + central torso run -----------------
+  const red = parseColorToRGBA(skin.head ?? skin.body);
+  const img = ctx.getImageData(0, 0, sheetW, sheetH);
+  const data = img.data;
+  const ALPHA_T = 24;
+
+  const pxAlpha = (x: number, y: number) => {
+    if (x < 0 || x >= sheetW || y < 0 || y >= sheetH) return 0;
+    return data[(y * sheetW + x) * 4 + 3];
+  };
+  const paintRed = (x: number, y: number) => {
+    const i = (y * sheetW + x) * 4;
+    if (data[i + 3] < ALPHA_T) return;
+    data[i] = red[0]; data[i + 1] = red[1]; data[i + 2] = red[2];
+  };
+
+  for (let f = 0; f < WALK_FRAME_COUNT; f++) {
+    const a = WALK_ANCHORS[f];
+    const ox = f * WALK_FRAME_W;
+    const hxAbs = ox + a.hx;
+    const cxAbs = ox + a.cx;
+    const r = a.hr;
+
+    // Head: recolor opaque pixels inside a generous head disc.
+    const headR = r + 5;
+    const hMinX = Math.max(ox, hxAbs - headR);
+    const hMaxX = Math.min(ox + WALK_FRAME_W - 1, hxAbs + headR);
+    const hMinY = Math.max(0, a.hy - headR);
+    const hMaxY = Math.min(sheetH - 1, a.hy + headR);
+    const headR2 = headR * headR;
+    for (let y = hMinY; y <= hMaxY; y++) {
+      const dy = y - a.hy;
+      for (let x = hMinX; x <= hMaxX; x++) {
+        const dx = x - hxAbs;
+        if (dx * dx + dy * dy <= headR2) paintRed(x, y);
+      }
+    }
+
+    // Torso: per row, recolor the central contiguous silhouette run.
+    // Arms extend as separate runs and remain blue.
+    const trunkTop = Math.max(0, Math.round(a.hy + r * 1.0));
+    const trunkBot = Math.min(sheetH - 1, Math.round(a.hipY + 1));
+    const maxHalfWidth = Math.round(r * 1.0);
+    for (let y = trunkTop; y <= trunkBot; y++) {
+      let seed = cxAbs;
+      if (pxAlpha(seed, y) < ALPHA_T) {
+        let found = -1;
+        for (let k = 1; k <= maxHalfWidth; k++) {
+          if (pxAlpha(cxAbs - k, y) >= ALPHA_T) { found = cxAbs - k; break; }
+          if (pxAlpha(cxAbs + k, y) >= ALPHA_T) { found = cxAbs + k; break; }
+        }
+        if (found < 0) continue;
+        seed = found;
+      }
+      let left = seed;
+      while (left - 1 >= ox && pxAlpha(left - 1, y) >= ALPHA_T && (seed - (left - 1)) <= maxHalfWidth) left--;
+      let right = seed;
+      const rightLimit = ox + WALK_FRAME_W - 1;
+      while (right + 1 <= rightLimit && pxAlpha(right + 1, y) >= ALPHA_T && ((right + 1) - seed) <= maxHalfWidth) right++;
+      for (let x = left; x <= right; x++) paintRed(x, y);
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+
+  // Step B: bake emblem + teardrop eyes via source-atop (clips to silhouette).
+  for (let f = 0; f < WALK_FRAME_COUNT; f++) {
+    const a = WALK_ANCHORS[f];
+    const ox = f * WALK_FRAME_W;
+    const hxAbs = ox + a.hx;
+    const cxAbs = ox + a.cx;
+    const r = a.hr;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+
+    if (skin.emblem) drawEmblem(ctx, skin, cxAbs, a.cy, r * 1.05);
+
+    const ey = a.hy - r * 0.05;
+    const lensCx = r * 0.42;
+    const lensCy = ey - r * 0.05;
+    for (const s of [-1, 1] as const) {
+      ctx.fillStyle = "oklch(0.10 0.02 260)";
+      ctx.beginPath();
+      ctx.ellipse(hxAbs + s * lensCx, lensCy, r * 0.42, r * 0.30, s * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "oklch(0.97 0.01 220)";
+      ctx.beginPath();
+      ctx.ellipse(hxAbs + s * lensCx, lensCy, r * 0.34, r * 0.24, s * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "oklch(0.78 0.02 220)";
+      ctx.beginPath();
+      ctx.ellipse(
+        hxAbs + s * lensCx + s * r * 0.05,
+        lensCy + r * 0.05,
+        r * 0.10, r * 0.06,
+        s * 0.35, 0, Math.PI * 2,
+      );
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -551,17 +691,8 @@ function drawOverlays(
   // ---- Eyes ----
   drawEyes(ctx, skin, hx, hy, r);
 
-  // ---- Spider-Man web pattern on mask (3 thin radial strokes) ----
-  if (skin.id === "spiderman") {
-    ctx.strokeStyle = "oklch(0.16 0.04 25 / 0.55)";
-    ctx.lineWidth = 0.6;
-    [-0.5, 0, 0.5].forEach((a) => {
-      ctx.beginPath();
-      ctx.moveTo(hx, hy - r * 0.85);
-      ctx.lineTo(hx + Math.sin(a) * r * 0.85, hy + Math.cos(a) * r * 0.65);
-      ctx.stroke();
-    });
-  }
+  // ---- Spider-Man web pattern on mask — REMOVED. Spider-Man is fully
+  // baked in bakeSpidermanFrames() and never reaches drawOverlays.
 
   // ---- Beard (Butcher) ----
   if (skin.beard) {
@@ -576,34 +707,14 @@ function drawOverlays(
   if (skin.emblem) drawEmblem(ctx, skin, cx, cy, r * 1.05);
 
   // ---- Body recolor over chest ----
-  // Stickman skins want a SLIM vertical torso stripe in body color, not a
-  // chest blob — preserves the stickman silhouette while still reading as
-  // a colored uniform. Other two-tone skins keep the legacy chest ellipse.
+  // Legacy chest ellipse for two-tone skins (Hulk, Iron Man, Butcher etc.).
+  // Spider-Man is fully baked in bakeSpidermanFrames() and never reaches here.
   if (skin.body !== (skin.limb ?? skin.body) && !skin.arms) {
     ctx.save();
     ctx.fillStyle = skin.body;
-    if (skin.id === "spiderman") {
-      // Slim red torso stripe — width matches a standard stickman line.
-      // Capsule shape from just below the neck to just above hips.
-      const torsoTopY = cy - r * 0.55;
-      const torsoBotY = a.hipY + r * 0.05;
-      const stripeW = r * 0.42; // standard stickman torso width
-      ctx.beginPath();
-      ctx.moveTo(cx - stripeW * 0.5, torsoTopY + r * 0.15);
-      ctx.quadraticCurveTo(cx - stripeW * 0.5, torsoTopY, cx, torsoTopY);
-      ctx.quadraticCurveTo(cx + stripeW * 0.5, torsoTopY, cx + stripeW * 0.5, torsoTopY + r * 0.15);
-      ctx.lineTo(cx + stripeW * 0.5, torsoBotY - r * 0.12);
-      ctx.quadraticCurveTo(cx + stripeW * 0.45, torsoBotY, cx, torsoBotY);
-      ctx.quadraticCurveTo(cx - stripeW * 0.45, torsoBotY, cx - stripeW * 0.5, torsoBotY - r * 0.12);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      // Legacy chest ellipse for other two-tone skins.
-      ctx.beginPath();
-      ctx.ellipse(cx, cy + r * 0.2, r * 1.0, r * 1.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // re-draw emblem on top (lands cleanly on the new chest fill)
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.2, r * 1.0, r * 1.6, 0, 0, Math.PI * 2);
+    ctx.fill();
     if (skin.emblem) drawEmblem(ctx, skin, cx, cy, r * 1.05);
     ctx.restore();
   }
@@ -617,39 +728,8 @@ function drawEyes(
   const ey = hy - r * 0.05;
   const ex = r * 0.38;
 
-  // Spider-Man — iconic large white teardrop lenses, black-outlined,
-  // tilted outward (~0.35 rad) for the classic angry shape, with a subtle
-  // inner highlight. All sized off head radius `r` so they scale per-frame.
-  if (skin.id === "spiderman") {
-    const lensCx = r * 0.42;
-    const lensCy = ey - r * 0.05;
-    [-1, 1].forEach((s) => {
-      // Black outline (slightly larger)
-      ctx.fillStyle = "oklch(0.10 0.02 260)";
-      ctx.beginPath();
-      ctx.ellipse(hx + s * lensCx, lensCy, r * 0.42, r * 0.30, s * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      // White lens fill
-      ctx.fillStyle = "oklch(0.97 0.01 220)";
-      ctx.beginPath();
-      ctx.ellipse(hx + s * lensCx, lensCy, r * 0.34, r * 0.24, s * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      // Inner highlight
-      ctx.fillStyle = "oklch(0.78 0.02 220)";
-      ctx.beginPath();
-      ctx.ellipse(
-        hx + s * lensCx + s * r * 0.05,
-        lensCy + r * 0.05,
-        r * 0.10,
-        r * 0.06,
-        s * 0.35,
-        0,
-        Math.PI * 2,
-      );
-      ctx.fill();
-    });
-    return;
-  }
+  // Spider-Man eyes are baked in bakeSpidermanFrames() — never reaches here.
+
 
   // Iron Man slits
   if (skin.id === "ironman") {

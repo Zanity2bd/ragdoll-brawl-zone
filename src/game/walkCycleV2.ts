@@ -316,20 +316,8 @@ function drawOverlaysV2(
 function drawEyesV2(ctx: CanvasRenderingContext2D, skin: Skin, hx: number, hy: number, r: number) {
   const ey = hy - r * 0.05;
   const ex = r * 0.38;
-  if (skin.id === "spiderman") {
-    ctx.fillStyle = "oklch(0.96 0.02 220)";
-    ctx.strokeStyle = "oklch(0.16 0.04 260)";
-    ctx.lineWidth = 1;
-    [-1, 1].forEach((s) => {
-      ctx.beginPath();
-      ctx.moveTo(hx + s * ex * 0.3, ey - r * 0.2);
-      ctx.quadraticCurveTo(hx + s * ex * 1.4, ey, hx + s * ex * 0.5, ey + r * 0.35);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    });
-    return;
-  }
+  // Spider-Man eyes live only in walkSprite.ts (single-silhouette bake).
+
   if (skin.id === "ironman" || skin.id === "batman") {
     ctx.fillStyle = skin.id === "ironman" ? "oklch(0.92 0.18 200)" : "oklch(0.95 0.04 100)";
     [-1, 1].forEach((s) => ctx.fillRect(hx + s * ex - 4, ey - 1, 6, 3));

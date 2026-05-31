@@ -326,10 +326,10 @@ function SkinThumb({ skin }: { skin: Skin }) {
           else if (skin.emblem.shape === "shield") { ctx.beginPath(); ctx.moveTo(cx - 6, ey - 4); ctx.lineTo(cx + 6, ey - 4); ctx.lineTo(cx, ey + 6); ctx.fill(); }
           else if (skin.emblem.shape === "stripe") { ctx.fillRect(cx - 2.5, shoulderY + 4, 5, hipY - shoulderY - 8); }
           else if (skin.emblem.shape === "spider") {
-            ctx.beginPath(); ctx.arc(cx, ey, 3, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = skin.emblem.color; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(cx - 6, ey - 3); ctx.lineTo(cx + 6, ey + 3); ctx.moveTo(cx + 6, ey - 3); ctx.lineTo(cx - 6, ey + 3); ctx.stroke();
+            // Spider-Man emblem is owned by walkSprite.ts (single-silhouette
+            // bake). Intentionally no procedural draw in the lobby preview.
           } else if (skin.emblem.shape === "lightning") {
+
             ctx.beginPath();
             ctx.moveTo(cx - 3, ey - 6); ctx.lineTo(cx + 2, ey - 1); ctx.lineTo(cx - 1, ey - 1);
             ctx.lineTo(cx + 3, ey + 6); ctx.lineTo(cx - 2, ey + 1); ctx.lineTo(cx + 1, ey + 1);
@@ -374,13 +374,11 @@ function SkinThumb({ skin }: { skin: Skin }) {
           ctx.beginPath(); ctx.ellipse(cx, headY + 5, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
           ctx.fillRect(cx - 5, headY + 1, 10, 1.4);
         }
-        // eyes
-        const eyeColor = skin.id === "spiderman" ? "oklch(0.95 0.02 250)" : "oklch(0.10 0 0)";
-        ctx.fillStyle = eyeColor;
-        if (skin.id === "spiderman") {
-          ctx.beginPath(); ctx.ellipse(cx - 4, headY - 1, 3.5, 2.2, -0.35, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(cx + 4, headY - 1, 3.5, 2.2, 0.35, 0, Math.PI * 2); ctx.fill();
-        } else if (skin.cowlEars) {
+        // eyes — Spider-Man eyes live only in walkSprite.ts; lobby preview
+        // falls through to generic dots for that skin.
+        ctx.fillStyle = "oklch(0.10 0 0)";
+        if (skin.cowlEars) {
+
           ctx.fillStyle = "oklch(0.92 0.02 250)";
           ctx.fillRect(cx - 6, headY - 1, 4, 1.8);
           ctx.fillRect(cx + 2, headY - 1, 4, 1.8);

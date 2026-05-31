@@ -7966,54 +7966,12 @@ export class GameEngine {
       ctx.fill();
     }
 
-    // Spider-Man mask: subtle web lines + iconic teardrop white eyes with black rim.
-    if (skin.id === "spiderman" && !ghost) {
-      ctx.save();
-      // Clip web lines inside the head disc so they hug the mask.
-      ctx.beginPath(); ctx.arc(0, headY, headR - 0.5, 0, Math.PI * 2); ctx.clip();
-      ctx.strokeStyle = "oklch(0.18 0.04 260)";
-      ctx.lineWidth = 0.5;
-      ctx.globalAlpha = 0.55;
-      // Radial spokes from top-center of mask
-      const cx0 = 0, cy0 = headY - headR + 1;
-      ctx.beginPath();
-      for (let i = -3; i <= 3; i++) {
-        const a = (i / 3) * 1.05 + Math.PI / 2; // fan downward
-        ctx.moveTo(cx0, cy0);
-        ctx.lineTo(cx0 + Math.cos(a) * (headR * 2.2), cy0 + Math.sin(a) * (headR * 2.2));
-      }
-      // 2 concentric web arcs
-      ctx.moveTo(cx0 + headR * 0.55, cy0 + headR * 0.4);
-      ctx.arc(cx0, cy0, headR * 0.7, 0.2, Math.PI - 0.2);
-      ctx.moveTo(cx0 + headR * 1.0, cy0 + headR * 0.8);
-      ctx.arc(cx0, cy0, headR * 1.15, 0.2, Math.PI - 0.2);
-      ctx.stroke();
-      ctx.restore();
-    }
+    // Spider-Man rendering is fully baked in walkSprite.ts (single-silhouette
+    // bake). No runtime Spider-Man drawing exists here — the body, mask,
+    // eyes, and emblem all ship inside the cached sprite frame.
 
-    const eyeColor = skin.id === "spiderman" ? "oklch(0.95 0.02 250)" : "oklch(0.10 0 0)";
-    ctx.fillStyle = eyeColor;
-    if (skin.id === "spiderman") {
-      // Iconic teardrop web-eyes — fat at outer edge, tapered toward nose.
-      ctx.save();
-      const drawEye = (sx: number, tilt: number) => {
-        ctx.beginPath();
-        // Build asymmetric almond via two quadratic curves
-        ctx.moveTo(sx * 1.2, headY + 0.4);                                 // inner tip
-        ctx.quadraticCurveTo(sx * 4.2, headY - 3.2, sx * 6.0, headY - 1.3); // top outer
-        ctx.quadraticCurveTo(sx * 5.2, headY + 1.8, sx * 2.6, headY + 1.6); // bottom back to inner
-        ctx.closePath();
-        ctx.fillStyle = eyeColor;
-        ctx.fill();
-        // Crisp black rim around the eye
-        ctx.strokeStyle = "oklch(0.10 0.02 260)";
-        ctx.lineWidth = 0.7;
-        ctx.stroke();
-      };
-      drawEye(-1, -0.35);
-      drawEye(1, 0.35);
-      ctx.restore();
-    } else if (skin.cowlEars) {
+    ctx.fillStyle = "oklch(0.10 0 0)";
+    if (skin.cowlEars) {
       ctx.fillStyle = "oklch(0.92 0.02 250)";
       ctx.fillRect(-5, headY - 1, 3, 1.6);
       ctx.fillRect(2, headY - 1, 3, 1.6);
@@ -8303,38 +8261,10 @@ function drawEmblem(
       ctx.lineTo(0, ey + 5); ctx.closePath(); ctx.fill(); break;
     case "stripe":
       ctx.fillRect(-2, shoulderY + 2, 4, hipY - shoulderY - 4); break;
-    case "spider": {
-      // Stick-figure spider — NO oval body. Vertical body stick + 8 thin legs.
-      ctx.lineCap = "round";
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      // Body: short vertical stick (cephalothorax + abdomen as two segments)
-      ctx.moveTo(0, ey - 3);
-      ctx.lineTo(0, ey + 3);
-      // Tiny head dot at top of body stick
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(0, ey - 3.5, 0.9, 0, Math.PI * 2);
-      ctx.fill();
-      // 8 legs — 4 each side, bent mid-joint for spidery silhouette
-      ctx.lineWidth = 0.9;
-      const legs: Array<[number, number, number, number, number, number]> = [
-        // [hipX, hipY, kneeX, kneeY, footX, footY] mirrored per side
-        [0, ey - 2, -3.5, ey - 4, -5.5, ey - 5.5],
-        [0, ey - 1, -4,   ey - 1.5, -6,   ey - 2],
-        [0, ey + 1, -4,   ey + 1.5, -6,   ey + 2.5],
-        [0, ey + 2, -3.5, ey + 4,   -5.5, ey + 5.5],
-      ];
-      ctx.beginPath();
-      for (const [hxL, hyL, kxL, kyL, fxL, fyL] of legs) {
-        // left
-        ctx.moveTo(hxL, hyL); ctx.lineTo(kxL, kyL); ctx.lineTo(fxL, fyL);
-        // right (mirror)
-        ctx.moveTo(-hxL, hyL); ctx.lineTo(-kxL, kyL); ctx.lineTo(-fxL, fyL);
-      }
-      ctx.stroke();
+    case "spider":
+      // Spider-Man emblem is fully baked in walkSprite.ts. No runtime
+      // procedural draw — intentionally no-op here.
       break;
-    }
     case "lightning":
       ctx.beginPath();
       ctx.moveTo(-3, ey - 5);

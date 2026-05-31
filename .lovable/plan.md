@@ -1,81 +1,100 @@
-# Butcher — Torso Silhouette Shape Refinement (tuned)
+# Spider-Man — Single-Silhouette Bake
 
-Pure shape-language pass inside `buildSilhouetteContour()` in `src/game/walkSprite.ts`. No new tiers, no overlays, no runtime cost change, no new systems. Only the primary path geometry changes. Tertiary (limbs) and secondary (head/jaw/beard) stay as-is.
+## Goal
 
-## Problem
+Spider-Man becomes ONE baked image per frame. Red is part of the silhouette itself (recolored alpha), not a shape stacked on top. The chest emblem and white eyes are baked into the same cached frame. At gameplay time the engine only runs `drawImage(spriteFrame)` — no Spider-Man-specific drawing, no anchor-attached decorations, no overlays.
 
-Current primary path is a near-rectangular trapezoid: flat shoulder top, parallel vertical sides from shoulders to hem, no waist, no chest curve. At 393×583 it reads as "dark rectangle on sticks."
+Result: rotate, ragdoll, recoil, launch — the entire character moves as one image. No blue leakage, no shifting markings, no detached torso.
 
-## Target silhouette language
+## Approach
 
-```text
-        ___---___              ← sloped trapezius (no flat top)
-       /         \             ← shoulder peak = widest point
-      |           |
-       \         /             ← chest taper inward
-        |       |              ← waist (~84% of shoulder, gently pinched)
-       /         \             ← coat re-widens below waist
-      /           \            ← hem flare (with subtle asymmetry in motion)
-     (_____________)           ← softened hem with side-drop
-```
+The walk sheet is a grayscale silhouette. Today Spider-Man:
 
-Hierarchy: shoulders widest → waist narrowest → hem second-widest → legs taper in beneath. Beard ≤ shoulder × `beardMaxOfShoulder` (already enforced).
+1. tints the whole alpha blue,
+2. draws a red circle at the head anchor,
+3. draws a red capsule at the torso anchor,
+4. draws web lines + eyes + emblem on top.
 
-## Geometry changes (single continuous Path2D)
+Steps 2–4 are decorative shapes placed at anchors. They can never perfectly match the silhouette mass on the 20 combat frames, so blue leaks and red slides.
 
-Replace the current 4-curve trapezoid (lines ~198–249) with a 6-anchor cubic-bezier contour per side, mirrored, one `fill()`:
+New build (inside `getSkinSheet` in `src/game/walkSprite.ts`, for Spider-Man only):
 
-1. **Trapezius merge (top)** — no flat edge. Path starts at neck-side anchor `(cx ± neckW*0.5, torsoTop - r*0.02)` and uses a **cubic** `bezierCurveTo` (not quadratic) to ease out and down to the shoulder peak. Control points pulled horizontally so the curve reads as a sloped trapezius, not "neck glued onto a box":
-   - cp1: `(cx ± neckW*0.5 + r*0.18, torsoTop - r*0.01)` — short horizontal pull from neck
-   - cp2: `(cx ± shoulderHalf * 0.85, torsoTop + r*0.02)` — long pull toward peak, slightly above peak y
-   - end: shoulder peak at `(cx ± shoulderHalf, torsoTop + r*0.08)`
-2. **Shoulder peak** — widest point of the whole figure.
-3. **Chest taper** — cubic from peak to chest at `(cx ± shoulderHalf * 0.94, torsoTop + r*0.45)`. Subtle (~6% inward).
-4. **Waist pinch** — cubic to waist at `(cx ± shoulderHalf * waistMul, torsoTop + r*0.95)`.
-   - `waistMul = 0.85` default (softer than original 0.82 plan to avoid hourglass at mobile scale).
-   - Safe tuning range `0.84–0.86` if it still reads too pinched after preview.
-5. **Coat re-flare** — cubic from waist outward to lower-coat at `(cx ± hemHalf * 0.92, torsoTop + r*1.45)`, then to hem corner at `(cx ± hemHalf, tBot)`.
-6. **Hem soften** — quadratic hem retained, control point pushed to `tBot + sideDrop * 1.4` so it reads as hanging fabric.
+1. **Base coat** — fill the silhouette alpha with **blue** (the limb color). This becomes arms + legs.
+2. **Red head region (per frame)** — clip to the silhouette alpha via `source-atop`, then fill a generous disc centered on `(hx, hy)` with radius `hr + 4`. Because we composite with `source-atop`, only existing silhouette pixels turn red — the head outline is exactly the silhouette's head, no decorative circle, no leakage.
+3. **Red torso column (per frame)** — same `source-atop` trick, but the fill region is a vertical band centered on `cx`, spanning from `neckY` to `hipY`, width ≈ `r * 1.0`. Pixels outside this band (arms extending sideways) stay blue. Pixels inside that exist in the silhouette become red. No capsule shape, no shifting.
+4. **Red hands/feet (per frame)** — small `source-atop` discs at the four limb tips (sampled from the existing anchor pelvis/foot/wrist positions or fixed offsets from `(cx, hipY)` and `(cx, footY)`). Optional polish; can be skipped on v1 if it complicates.
+5. **Spider emblem (per frame)** — drawn into the red torso column with `source-atop` so it can never extend past the body (`drawEmblem` reused as-is, no anchor change).
+6. **White teardrop eyes + black rim (per frame)** — drawn inside the head disc with `source-atop` so they clip to the actual head silhouette and cannot drift outside it.
 
-Left side mirrors right; one `closePath()` + one `fill()`. The gradient-clip and shoulder highlight that follow stay inside the new shape unchanged.
+Everything happens during the one-time sheet bake. The hot path stays one `drawImage` per fighter per frame.
 
-## Subtle hem asymmetry (motion-only, no new system)
+## Files to change
 
-Reuse the existing `coatAsymX` and `hemSkewX` from `MOTION_SHAPING` — no new fields. Inside the path:
+### `src/game/walkSprite.ts`
 
-- Left hem corner y: `tBot + Math.max(0, -coatAsym) * 1.2`
-- Right hem corner y: `tBot + Math.max(0, coatAsym) * 1.2`
+- Add a Spider-Man-only branch inside the per-frame loop in `getSkinSheet` (currently calls `drawOverlays` for every skin).
+- Implement steps 1–6 above using the existing per-frame `WALK_ANCHORS[i]` to know where the head/torso/hips sit for that frame.
+- The Spider-Man branch **skips** the normal `drawOverlays` path entirely — no head circle, no jaw ellipse, no skin-tone face, no cape, no body-thickening, no torso ellipse, no separate emblem-on-top pass, no `drawEyes` call.
+- Remove the existing Spider-Man special cases inside `drawOverlays` / `drawEyes` (web strokes block at ~554–564, spider eyes block at ~620–652, spider torso stripe at ~585–599) since the new branch owns them.
 
-`coatAsym` is already 0 on idle frames (1–2px on motion-heavy frames like kicks, recoil, jump apex). Result: on idle the hem is bilaterally symmetric; in motion one side hangs 1–2px lower while the opposite tightens — exactly what was requested, zero added logic.
+### `src/game/engine.ts`
 
-Same `coatAsym` magnitude is also added/subtracted to the waist x on its respective side (`waistHalf ± coatAsym * 0.3`) so the entire coat side reads as drifting, not just the hem corner.
+- Delete the runtime Spider-Man head-mask + teardrop-eye block (lines 7969–7992 and the spider branch in ~7994–8015) and the spider branch inside the runtime `drawEmblem` (8306). These run only when the sprite sheet is not ready; once removed, Spider-Man is always 100% baked.
+- Keep all gameplay code (web swing, web snare, AI hints) untouched.
 
-## Shoulder slope removes the flat top
+### `src/components/game/Lobby.tsx`
 
-Top of silhouette is now the two cubic curves above; there is no horizontal closing edge across the top. Neck path (secondary tier) still overlaps by 3px so the union remains seamless.
-
-## Anti-flatness gradient and shoulder highlight
-
-Existing gradient clip retained. Shoulder highlight ellipse x-radius reduced from `baseShoulderHalf * 0.95` → `baseShoulderHalf * 0.7`, y centered on the slope peak (`torsoTop + r*0.06`), so it catches light on the trapezius slope rather than across a flat top.
-
-## Hierarchy and taper rule checks
-
-`taperRule.shoulderIsMax` and `taperRule.beardMaxOfShoulder` already enforce shoulders-widest and beard cap. Add one local clamp in the new path: if `MOTION_SHAPING` ever pushes `shoulderHalf * waistMul` to where `shoulderHalf < hemHalf`, bump shoulder back up to `hemHalf + 1`. Single `Math.max` — no new system.
-
-## Files affected
-
-- `src/game/walkSprite.ts` — only inside `buildSilhouetteContour()`, replace the PRIMARY block (lines ~198–249). All other code unchanged.
-
-## Out of scope
-
-- `src/game/skins.ts` — no profile changes (waist/asym are renderer-side shape language; future skins can add `waist: { widthMul }` later).
-- `MOTION_SHAPING` — unchanged (reuses existing `coatAsymX`, `hemSkewX`).
-- Tertiary limb path, secondary head/beard path, stances, other skins, gameplay, ragdoll — unchanged.
+- Remove the residual procedural spider preview in the splash lobby (~328 and ~378–380) so the selector and lobby both rely solely on `drawWalkFrame`. (SkinSelect already does.)
 
 ## Verification
 
-1. `bunx tsc --noEmit` clean.
-2. At 393×583: idle Butcher reads as broad-shouldered trench coat with gentle waist (not hourglass) and lower-coat flare. No flat top. Trapezius slope visible from neck out to shoulder.
-3. Motion frames (kick / jump apex / hurt): one coat side hangs ~1–2px lower than the other; idle remains symmetric.
-4. Shoulders clearly widest in all 30 frames; hem second; waist narrowest mid-section.
-5. Other 10 skins bit-identical.
+- Hard reload to bust the cached Spider-Man sheet.
+- 393×583 mobile preview: check idle walk, jumps, kicks (frames 23–26), hurt (22), ragdoll (19), get-up (20–21), slash (27–29).
+- Black-out test: silhouette should read as classic stickman. Color test: head is fully red with NO blue pixels around it; torso column is red with arms remaining blue all the way to the shoulders; emblem stays glued to the torso through every attack and ragdoll tumble.
+- No frame-rate impact — bake cost is one-time, hot path is unchanged.
+
+## Out of scope
+
+Other skins (Batman, Iron Man, Superman, Hulk, Homelander, Butcher, Heatwave, A-Train, Flash, Nightcrawler) — not touched. Gameplay, AI, physics, web-swing — not touched.
+
+Additional Requirements
+
+Spider-Man must remain a stickman first and a superhero second.
+
+Color carries identity.
+
+Silhouette carries readability.
+
+The silhouette must not become:
+
+- a capsule
+
+- a rectangle
+
+- a trench coat
+
+- a body suit blob
+
+The torso recolor must follow the actual silhouette mass of each frame rather than painting a centered stripe.
+
+Spider-Man visual rendering must exist only in walkSprite.ts during sprite-sheet baking.
+
+No Spider-Man-specific drawing logic may exist in:
+
+- engine.ts
+
+- animation.ts
+
+- ragdoll.ts
+
+- drawFighter()
+
+- drawFighterAt()
+
+- runtime overlay systems
+
+The baked sprite sheet becomes the single source of truth.
+
+Run a black-silhouette test on all combat frames.
+
+If a frame stops reading as a clean athletic stickman, reduce detail instead of adding more.
