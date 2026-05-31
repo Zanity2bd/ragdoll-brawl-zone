@@ -326,10 +326,10 @@ function SkinThumb({ skin }: { skin: Skin }) {
           else if (skin.emblem.shape === "shield") { ctx.beginPath(); ctx.moveTo(cx - 6, ey - 4); ctx.lineTo(cx + 6, ey - 4); ctx.lineTo(cx, ey + 6); ctx.fill(); }
           else if (skin.emblem.shape === "stripe") { ctx.fillRect(cx - 2.5, shoulderY + 4, 5, hipY - shoulderY - 8); }
           else if (skin.emblem.shape === "spider") {
-            ctx.beginPath(); ctx.arc(cx, ey, 3, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = skin.emblem.color; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(cx - 6, ey - 3); ctx.lineTo(cx + 6, ey + 3); ctx.moveTo(cx + 6, ey - 3); ctx.lineTo(cx - 6, ey + 3); ctx.stroke();
+            // Spider-Man emblem is owned by walkSprite.ts (single-silhouette
+            // bake). Intentionally no procedural draw in the lobby preview.
           } else if (skin.emblem.shape === "lightning") {
+
             ctx.beginPath();
             ctx.moveTo(cx - 3, ey - 6); ctx.lineTo(cx + 2, ey - 1); ctx.lineTo(cx - 1, ey - 1);
             ctx.lineTo(cx + 3, ey + 6); ctx.lineTo(cx - 2, ey + 1); ctx.lineTo(cx + 1, ey + 1);
