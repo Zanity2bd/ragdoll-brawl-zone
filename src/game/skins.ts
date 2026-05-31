@@ -46,11 +46,12 @@ export interface Skin {
 export const SKINS: Skin[] = [
   // Marvel
   { id: "spiderman", name: "Spider-Man", universe: "Marvel",
+    // Pure stickman silhouette: blue limbs, red head/hands/feet, slim red torso stripe.
+    // NO thickBody — Spider-Man is athletic + agile, not a tank.
     body: "oklch(0.50 0.16 25)", limb: "oklch(0.32 0.12 260)",
     head: "oklch(0.50 0.16 25)",
     gloves: "oklch(0.50 0.16 25)", boots: "oklch(0.50 0.16 25)",
-    emblem: { shape: "spider", color: "oklch(0.18 0.04 260)" },
-    thickBody: true,
+    emblem: { shape: "spider", color: "oklch(0.14 0.04 260)" },
     glow: "oklch(0.55 0.18 20)" },
 
   { id: "ironman", name: "Iron Man", universe: "Marvel",
