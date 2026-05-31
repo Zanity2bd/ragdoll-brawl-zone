@@ -141,9 +141,10 @@ function SkinPicker({
 function SkinPreview({ skin }: { skin: Skin }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    const c = ref.current!;
+    const c = ref.current;
+    if (!c) return;
     const ctx = c.getContext("2d")!;
-    const dpr = Math.min(devicePixelRatio || 1, 1.5);
+    const dpr = Math.min(devicePixelRatio || 1, 2);
     const resize = () => {
       const r = c.getBoundingClientRect();
       c.width = Math.floor(r.width * dpr);
@@ -151,168 +152,42 @@ function SkinPreview({ skin }: { skin: Skin }) {
     };
     resize();
     window.addEventListener("resize", resize);
+
     let raf = 0;
     const t0 = performance.now();
     let last = t0;
+    // Logical viewport — same 5:6 aspect as the canvas DOM box.
     const W = 200, H = 240;
+    const FRAMES = 10;
+    const FPS = 9; // matches in-match walk cadence
+
     const loop = (now: number) => {
-      if (now - last >= 40) {
+      if (now - last >= 1000 / 30) {
         last = now;
         const t = (now - t0) / 1000;
         ctx.save();
         ctx.setTransform(c.width / W, 0, 0, c.height / H, 0, 0);
         ctx.clearRect(0, 0, W, H);
 
-        // subtle background plate (no neon)
-        const grad = ctx.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, 140);
+        // Subtle backdrop plate
+        const grad = ctx.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, 150);
         grad.addColorStop(0, "oklch(0.22 0.02 280 / 0.5)");
         grad.addColorStop(1, "oklch(0.10 0.02 280 / 0)");
         ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
 
         const cx = W / 2;
-        const breath = Math.sin(t * 1.5) * 1.2;
-        const headR = 13;
-        const headY = 56 + breath;
-        const shoulderY = 86 + breath;
-        const hipY = 142;
-        const feetY = 206;
+        const feetY = H - 18;
+        const fighterH = 200; // matches in-match FIGHTER_H
 
-        // contact shadow
-        ctx.fillStyle = "oklch(0 0 0 / 0.3)";
-        ctx.beginPath(); ctx.ellipse(cx, feetY + 5, 24, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+        // Contact shadow
+        ctx.fillStyle = "oklch(0 0 0 / 0.32)";
+        ctx.beginPath(); ctx.ellipse(cx, feetY + 4, 26, 4.5, 0, 0, Math.PI * 2); ctx.fill();
 
-        // cape
-        if (skin.cape) {
-          const sway = Math.sin(t * 1.2) * 4;
-          ctx.fillStyle = skin.cape;
-          ctx.beginPath();
-          ctx.moveTo(cx - 10, shoulderY);
-          ctx.lineTo(cx + 10, shoulderY);
-          ctx.quadraticCurveTo(cx + 16 + sway, hipY + 26, cx + 6 + sway, hipY + 56);
-          ctx.lineTo(cx - 6 + sway, hipY + 56);
-          ctx.quadraticCurveTo(cx - 16 + sway, hipY + 26, cx - 10, shoulderY);
-          ctx.fill();
-          if (skin.capeAccent) {
-            ctx.fillStyle = skin.capeAccent;
-            ctx.fillRect(cx - 1.5 + sway * 0.3, shoulderY, 3, hipY + 52 - shoulderY);
-          }
-        }
-
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-
-        // limbs
-        const armSwing = Math.sin(t * 2) * 5;
-        ctx.strokeStyle = skin.limb ?? skin.body;
-        ctx.lineWidth = skin.thickBody ? 5 : 4;
-        const handLX = cx - 20 + armSwing;
-        const handRX = cx + 20 - armSwing;
-        const handY = shoulderY + 42;
-        ctx.beginPath();
-        ctx.moveTo(cx - 4, shoulderY); ctx.quadraticCurveTo(cx - 16, shoulderY + 20, handLX, handY); ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(cx + 4, shoulderY); ctx.quadraticCurveTo(cx + 16, shoulderY + 20, handRX, handY); ctx.stroke();
-        const legSway = Math.sin(t * 2 + Math.PI) * 2;
-        const footLX = cx - 10 + legSway;
-        const footRX = cx + 10 - legSway;
-        ctx.beginPath();
-        ctx.moveTo(cx - 3, hipY); ctx.quadraticCurveTo(cx - 9, (hipY + feetY) / 2 + 4, footLX, feetY); ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(cx + 3, hipY); ctx.quadraticCurveTo(cx + 9, (hipY + feetY) / 2 + 4, footRX, feetY); ctx.stroke();
-
-        // boots
-        if (skin.boots) {
-          ctx.fillStyle = skin.boots;
-          ctx.beginPath(); ctx.ellipse(footLX, feetY - 1, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(footRX, feetY - 1, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
-        }
-        // gloves
-        if (skin.gloves) {
-          ctx.fillStyle = skin.gloves;
-          ctx.beginPath(); ctx.arc(handLX, handY, 4, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.arc(handRX, handY, 4, 0, Math.PI * 2); ctx.fill();
-        }
-
-        // torso
-        ctx.strokeStyle = skin.body;
-        ctx.lineWidth = skin.thickBody ? 7 : 5;
-        ctx.beginPath(); ctx.moveTo(cx, shoulderY); ctx.lineTo(cx, hipY); ctx.stroke();
-        ctx.fillStyle = skin.body;
-        ctx.beginPath(); ctx.arc(cx - 4, shoulderY, 2.8, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx + 4, shoulderY, 2.8, 0, Math.PI * 2); ctx.fill();
-
-        // emblem
-        if (skin.emblem) {
-          const ey = (shoulderY + hipY) / 2;
-          ctx.fillStyle = skin.emblem.color;
-          if (skin.emblem.shape === "oval") { ctx.beginPath(); ctx.ellipse(cx, ey, 8, 4, 0, 0, Math.PI * 2); ctx.fill(); }
-          else if (skin.emblem.shape === "circle") { ctx.beginPath(); ctx.arc(cx, ey, 5.5, 0, Math.PI * 2); ctx.fill(); }
-          else if (skin.emblem.shape === "shield") { ctx.beginPath(); ctx.moveTo(cx - 7, ey - 5); ctx.lineTo(cx + 7, ey - 5); ctx.lineTo(cx, ey + 7); ctx.fill(); }
-          else if (skin.emblem.shape === "stripe") { ctx.fillRect(cx - 3, shoulderY + 4, 6, hipY - shoulderY - 8); }
-          else if (skin.emblem.shape === "spider") {
-            ctx.beginPath(); ctx.arc(cx, ey, 3.2, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = skin.emblem.color; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(cx - 7, ey - 3); ctx.lineTo(cx + 7, ey + 3); ctx.moveTo(cx + 7, ey - 3); ctx.lineTo(cx - 7, ey + 3); ctx.stroke();
-          } else if (skin.emblem.shape === "lightning") {
-            ctx.beginPath();
-            ctx.moveTo(cx - 3, ey - 7); ctx.lineTo(cx + 2, ey - 1); ctx.lineTo(cx - 1, ey - 1);
-            ctx.lineTo(cx + 3, ey + 7); ctx.lineTo(cx - 2, ey + 1); ctx.lineTo(cx + 1, ey + 1);
-            ctx.closePath(); ctx.fill();
-          }
-        }
-
-        // HEAD — filled mask + optional skin tone face
-        ctx.fillStyle = skin.head ?? skin.body;
-        ctx.beginPath(); ctx.arc(cx, headY, headR, 0, Math.PI * 2); ctx.fill();
-        if (skin.skinTone) {
-          ctx.fillStyle = skin.skinTone;
-          ctx.beginPath(); ctx.ellipse(cx + 1.5, headY + 2, headR - 3, headR - 4.5, 0, 0, Math.PI * 2); ctx.fill();
-        }
-        if (skin.cowlEars) {
-          ctx.fillStyle = skin.head ?? skin.body;
-          ctx.beginPath(); ctx.moveTo(cx - 10, headY - 9); ctx.lineTo(cx - 14, headY - 22); ctx.lineTo(cx - 1, headY - 11); ctx.fill();
-          ctx.beginPath(); ctx.moveTo(cx + 10, headY - 9); ctx.lineTo(cx + 14, headY - 22); ctx.lineTo(cx + 1, headY - 11); ctx.fill();
-        }
-        if (skin.id === "homelander") {
-          ctx.fillStyle = "oklch(0.78 0.10 85)";
-          ctx.beginPath();
-          ctx.moveTo(cx - 10, headY - 9);
-          ctx.quadraticCurveTo(cx + 4, headY - 17, cx + 10, headY - 9);
-          ctx.quadraticCurveTo(cx, headY - 12, cx - 10, headY - 9);
-          ctx.fill();
-        }
-        if (skin.id === "superman") {
-          ctx.fillStyle = "oklch(0.18 0.02 30)";
-          ctx.beginPath();
-          ctx.moveTo(cx - 10, headY - 8);
-          ctx.quadraticCurveTo(cx, headY - 17, cx + 10, headY - 8);
-          ctx.quadraticCurveTo(cx + 7, headY - 4, cx - 7, headY - 4);
-          ctx.fill();
-          ctx.beginPath(); ctx.arc(cx - 1, headY - 3, 1.7, 0, Math.PI * 2); ctx.fill();
-        }
-        if (skin.beard) {
-          ctx.fillStyle = "oklch(0.14 0.02 60)";
-          ctx.beginPath(); ctx.ellipse(cx, headY + 5, 8, 4.5, 0, 0, Math.PI * 2); ctx.fill();
-          ctx.fillRect(cx - 5, headY + 1, 10, 1.5);
-        }
-        // eyes
-        const eyeColor = skin.id === "spiderman" ? "oklch(0.95 0.02 250)" : "oklch(0.10 0 0)";
-        ctx.fillStyle = eyeColor;
-        if (skin.id === "spiderman") {
-          ctx.beginPath(); ctx.ellipse(cx - 4, headY - 1, 3.8, 2.4, -0.35, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(cx + 4, headY - 1, 3.8, 2.4, 0.35, 0, Math.PI * 2); ctx.fill();
-        } else if (skin.cowlEars) {
-          ctx.fillStyle = "oklch(0.92 0.02 250)";
-          ctx.fillRect(cx - 6, headY - 1, 4, 2);
-          ctx.fillRect(cx + 2, headY - 1, 4, 2);
-        } else {
-          ctx.beginPath(); ctx.arc(cx - 3, headY, 1.6, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.arc(cx + 3, headY, 1.6, 0, Math.PI * 2); ctx.fill();
-        }
-        if (skin.glowingEyes) {
-          ctx.fillStyle = skin.glowingEyes;
-          ctx.beginPath(); ctx.arc(cx - 3, headY, 2.2, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.arc(cx + 3, headY, 2.2, 0, Math.PI * 2); ctx.fill();
+        const frame = Math.floor(t * FPS) % FRAMES;
+        const ok = drawWalkFrame(ctx, skin, frame, cx, feetY, 1, fighterH);
+        if (!ok) {
+          ctx.fillStyle = "oklch(0.6 0.02 280 / 0.25)";
+          ctx.beginPath(); ctx.arc(cx, feetY - fighterH * 0.5, 14, 0, Math.PI * 2); ctx.fill();
         }
 
         ctx.restore();
