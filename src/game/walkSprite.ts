@@ -3,6 +3,7 @@
 // (mask, eyes, emblem, cape, cowl, beard) into a cached canvas so the
 // hot-path render is one drawImage per fighter per frame.
 
+import spiderMaskUrl from "@/assets/spider-mask.png";
 import sheetUrl from "@/assets/walk-sheet.png";
 import { WALK_ANCHORS } from "./walkAnchors";
 import type { Skin } from "./skins";
@@ -34,10 +35,12 @@ export const SLASH_RECOVER_FRAME = 29;
 export const WALK_FOOT_Y = 189;
 
 // Cache buster — bump when the bake pipeline changes so stale caches are tossed.
-const SKIN_CACHE_VERSION = "v4-silhouette-mask";
+const SKIN_CACHE_VERSION = "v5-authored-spider-atlas";
 
 let sheet: HTMLImageElement | null = null;
 let sheetReady = false;
+let spiderMask: HTMLImageElement | null = null;
+let spiderMaskReady = false;
 
 const skinCache = new Map<string, HTMLCanvasElement>();
 
@@ -49,11 +52,18 @@ export function loadWalkSheet() {
     img.src = sheetUrl;
     sheet = img;
   }
+  if (!spiderMask) {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => { spiderMaskReady = true; };
+    img.src = spiderMaskUrl;
+    spiderMask = img;
+  }
   return sheet;
 }
 
 export function isWalkSheetReady() {
-  return sheetReady;
+  return sheetReady && spiderMaskReady;
 }
 
 /** Build (or return cached) per-skin sprite sheet with overlays. */
@@ -70,12 +80,11 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
   const ctx = c.getContext("2d");
   if (!ctx) return null;
 
-  // Spider-Man: silhouette-locked mask bake. The base sprite is tinted blue,
-  // then the red suit zones are rebuilt from the real silhouette pixels of
-  // each frame. This removes the old anchor-drawn torso blob that could slide
-  // around inside wide/extreme poses.
+  // Spider-Man: final authored atlas path. No runtime classification,
+  // no frame-by-frame region guessing, no attack-pose heuristics.
   if (skin.id === "spiderman") {
-    bakeSpidermanSilhouetteMask(ctx, sheet, W, H);
+    if (!spiderMask || !spiderMaskReady) return null;
+    bakeSpidermanAtlas(ctx, sheet, spiderMask, W, H);
     skinCache.set(cacheKey, c);
     return c;
   }
@@ -105,337 +114,22 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
 // ---------------------------------------------------------------------------
 // Spider-Man rendering lives in exactly two places:
 //   1. walk-sheet.png (the silhouette source of truth)
-//   2. bakeSpidermanSilhouetteMask() below
+//   2. spider-mask.png + bakeSpidermanAtlas() below
 // No Spider-Man drawing code may exist anywhere else in the project.
-// The suit colors are classified from the real silhouette pixels of each
-// frame, with WALK_ANCHORS used only as soft guidance for semantic regions.
+// The suit is a hand-authored atlas, then hard-clipped to silhouette alpha.
 // ---------------------------------------------------------------------------
 
-const SPIDER_RED = "#c8312b";
-const SPIDER_BLUE = "#1f3f9e";
-const SPIDER_EYE = "#f3f6ff";
-
-function bakeSpidermanSilhouetteMask(
+function bakeSpidermanAtlas(
   ctx: CanvasRenderingContext2D,
   silhouette: HTMLImageElement,
+  mask: HTMLImageElement,
   W: number,
   H: number,
 ) {
-  const readCanvas = document.createElement("canvas");
-  readCanvas.width = W;
-  readCanvas.height = H;
-  const rctx = readCanvas.getContext("2d", { willReadFrequently: true });
-  if (!rctx) {
-    ctx.drawImage(silhouette, 0, 0);
-    return;
-  }
-  rctx.drawImage(silhouette, 0, 0);
-
   ctx.drawImage(silhouette, 0, 0);
   ctx.globalCompositeOperation = "source-in";
-  ctx.fillStyle = SPIDER_BLUE;
-  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(mask, 0, 0, W, H);
   ctx.globalCompositeOperation = "source-over";
-
-  const overlay = document.createElement("canvas");
-  overlay.width = W;
-  overlay.height = H;
-  const octx = overlay.getContext("2d");
-  if (!octx) return;
-
-  for (let i = 0; i < WALK_FRAME_COUNT; i++) {
-    const ox = i * WALK_FRAME_W;
-    const frame = rctx.getImageData(ox, 0, WALK_FRAME_W, WALK_FRAME_H);
-    const painted = buildSpiderFrameMask(frame, WALK_ANCHORS[i]);
-    octx.putImageData(painted, ox, 0);
-  }
-
-  ctx.globalCompositeOperation = "source-atop";
-  ctx.drawImage(overlay, 0, 0);
-  ctx.globalCompositeOperation = "source-over";
-}
-
-function buildSpiderFrameMask(
-  frame: ImageData,
-  a: typeof WALK_ANCHORS[number],
-) {
-  const out = new ImageData(WALK_FRAME_W, WALK_FRAME_H);
-  const alpha = frame.data;
-  const pixelCount = WALK_FRAME_W * WALK_FRAME_H;
-  const opaque = new Uint8Array(pixelCount);
-  const rowMin = new Int16Array(WALK_FRAME_H);
-  const rowMax = new Int16Array(WALK_FRAME_H);
-
-  for (let y = 0; y < WALK_FRAME_H; y++) {
-    rowMin[y] = WALK_FRAME_W;
-    rowMax[y] = -1;
-  }
-
-  for (let y = 0; y < WALK_FRAME_H; y++) {
-    for (let x = 0; x < WALK_FRAME_W; x++) {
-      const idx = y * WALK_FRAME_W + x;
-      if (alpha[idx * 4 + 3] <= 8) continue;
-      opaque[idx] = 1;
-      if (x < rowMin[y]) rowMin[y] = x;
-      if (x > rowMax[y]) rowMax[y] = x;
-    }
-  }
-
-  const dist = computeOpaqueDistance(opaque, WALK_FRAME_W, WALK_FRAME_H);
-  const red = new Uint8Array(pixelCount);
-  const headMask = new Uint8Array(pixelCount);
-  const torsoCore = new Uint8Array(pixelCount);
-
-  const headCx = a.hx;
-  const headCy = a.hy + a.hr * 0.18;
-  const headBandTop = clamp(Math.floor(headCy - a.hr * 1.2), 0, WALK_FRAME_H - 1);
-  const headBottom = clamp(Math.round(Math.min(a.cy - a.hr * 0.12, headCy + a.hr * 1.55)), 0, WALK_FRAME_H - 1);
-  const [headSeedX, headSeedY] = findNearestOpaque(opaque, WALK_FRAME_W, WALK_FRAME_H, a.hx, a.hy, 10);
-  const headBand = (x: number, y: number) => {
-    if (y < headBandTop || y > headBottom) return false;
-    const idx = y * WALK_FRAME_W + x;
-    return opaque[idx] === 1 && Math.abs(x - headCx) <= a.hr * 1.85 && dist[idx] >= 1;
-  };
-
-  if (headSeedX >= 0 && headBand(headSeedX, headSeedY)) {
-    floodFillMask(headSeedX, headSeedY, WALK_FRAME_W, WALK_FRAME_H, headBand, headMask);
-    expandMask(headMask, opaque, WALK_FRAME_W, WALK_FRAME_H, 1, headBandTop, headBottom);
-  }
-
-  const torsoTop = clamp(Math.floor(headBottom - a.hr * 0.12), 0, WALK_FRAME_H - 1);
-  const torsoBottom = clamp(Math.ceil(a.hipY + a.hr * 0.35), 0, WALK_FRAME_H - 1);
-  const chestRange = Math.max(1, a.cy - torsoTop);
-  const torsoRange = Math.max(1, torsoBottom - torsoTop);
-
-  for (let y = torsoTop; y <= torsoBottom; y++) {
-    if (rowMax[y] < rowMin[y]) continue;
-    const rowLeft = rowMin[y];
-    const rowRight = rowMax[y];
-    const rowWidth = rowRight - rowLeft + 1;
-    const chestT = clamp((y - torsoTop) / chestRange, 0, 1);
-    const bodyT = clamp((y - torsoTop) / torsoRange, 0, 1);
-    const centerGuide = lerp(headCx, a.cx, chestT);
-    const rowMid = (rowLeft + rowRight) * 0.5;
-    const center = clamp(Math.round(lerp(centerGuide, rowMid, 0.3)), rowLeft, rowRight);
-    const shoulderHalf = Math.max(a.hr * 1.24, rowWidth * 0.32);
-    const waistHalf = Math.max(a.hr * 0.74, rowWidth * 0.18);
-    const bandHalf = Math.min(lerp(shoulderHalf, waistHalf, smoothstep(bodyT)), rowWidth * 0.42);
-    const left = Math.max(rowLeft, Math.floor(center - bandHalf));
-    const right = Math.min(rowRight, Math.ceil(center + bandHalf));
-
-    for (let x = left; x <= right; x++) {
-      const idx = y * WALK_FRAME_W + x;
-      if (!opaque[idx] || headMask[idx]) continue;
-      torsoCore[idx] = 1;
-    }
-  }
-
-  for (let i = 0; i < pixelCount; i++) {
-    if (headMask[i] || torsoCore[i]) red[i] = 1;
-  }
-
-  const canTintFeet = a.footY - a.hipY > a.hr * 3;
-  if (canTintFeet) {
-    const footTop = clamp(a.footY - Math.max(8, Math.round(a.hr * 0.7)), 0, WALK_FRAME_H - 1);
-    for (let y = footTop; y < WALK_FRAME_H; y++) {
-      let left = -1;
-      let right = -1;
-      for (let x = 0; x < WALK_FRAME_W; x++) {
-        const idx = y * WALK_FRAME_W + x;
-        if (opaque[idx]) {
-          left = x;
-          break;
-        }
-      }
-      for (let x = WALK_FRAME_W - 1; x >= 0; x--) {
-        const idx = y * WALK_FRAME_W + x;
-        if (opaque[idx]) {
-          right = x;
-          break;
-        }
-      }
-      if (left >= 0) {
-        for (let x = left; x <= Math.min(left + 5, WALK_FRAME_W - 1); x++) {
-          const idx = y * WALK_FRAME_W + x;
-          if (opaque[idx]) red[idx] = 1;
-        }
-      }
-      if (right >= 0) {
-        for (let x = Math.max(0, right - 5); x <= right; x++) {
-          const idx = y * WALK_FRAME_W + x;
-          if (opaque[idx]) red[idx] = 1;
-        }
-      }
-    }
-  }
-
-  const handTop = clamp(Math.floor(a.cy - a.hr * 0.4), 0, WALK_FRAME_H - 1);
-  const handBottom = clamp(Math.ceil(a.hipY + a.hr * 0.55), 0, WALK_FRAME_H - 1);
-  for (let y = handTop; y <= handBottom; y++) {
-    let left = -1;
-    let right = -1;
-    for (let x = 0; x < WALK_FRAME_W; x++) {
-      const idx = y * WALK_FRAME_W + x;
-      if (opaque[idx]) {
-        left = x;
-        break;
-      }
-    }
-    for (let x = WALK_FRAME_W - 1; x >= 0; x--) {
-      const idx = y * WALK_FRAME_W + x;
-      if (opaque[idx]) {
-        right = x;
-        break;
-      }
-    }
-    if (left >= 0 && Math.abs(left - a.cx) > a.hr * 1.35) {
-      for (let x = left; x <= Math.min(left + 3, WALK_FRAME_W - 1); x++) {
-        const idx = y * WALK_FRAME_W + x;
-        if (opaque[idx] && !torsoCore[idx]) red[idx] = 1;
-      }
-    }
-    if (right >= 0 && Math.abs(right - a.cx) > a.hr * 1.35) {
-      for (let x = Math.max(0, right - 3); x <= right; x++) {
-        const idx = y * WALK_FRAME_W + x;
-        if (opaque[idx] && !torsoCore[idx]) red[idx] = 1;
-      }
-    }
-  }
-
-  for (let i = 0; i < pixelCount; i++) {
-    if (!red[i]) continue;
-    const p = i * 4;
-    out.data[p] = 200;
-    out.data[p + 1] = 49;
-    out.data[p + 2] = 43;
-    out.data[p + 3] = 255;
-  }
-
-  const eyeY = headCy - a.hr * 0.12;
-  const eyeOffset = a.hr * 0.42;
-  const eyeRx = a.hr * 0.28;
-  const eyeRy = a.hr * 0.22;
-  for (const side of [-1, 1] as const) {
-    const eyeCx = headCx + side * eyeOffset;
-    for (let y = clamp(Math.floor(eyeY - eyeRy - 1), 0, WALK_FRAME_H - 1); y <= clamp(Math.ceil(eyeY + eyeRy + 1), 0, WALK_FRAME_H - 1); y++) {
-      for (let x = clamp(Math.floor(eyeCx - eyeRx - 1), 0, WALK_FRAME_W - 1); x <= clamp(Math.ceil(eyeCx + eyeRx + 1), 0, WALK_FRAME_W - 1); x++) {
-        const idx = y * WALK_FRAME_W + x;
-        if (!opaque[idx]) continue;
-        const nx = (x - eyeCx) / Math.max(1, eyeRx);
-        const ny = (y - eyeY) / Math.max(1, eyeRy);
-        if (nx * nx + ny * ny <= 1) {
-          const p = idx * 4;
-          out.data[p] = 243;
-          out.data[p + 1] = 246;
-          out.data[p + 2] = 255;
-          out.data[p + 3] = 255;
-        }
-      }
-    }
-  }
-
-  return out;
-}
-
-function computeOpaqueDistance(mask: Uint8Array, w: number, h: number) {
-  const inf = 1e9;
-  const dist = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) dist[i] = mask[i] ? inf : 0;
-
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const idx = y * w + x;
-      if (!mask[idx]) continue;
-      if (x > 0) dist[idx] = Math.min(dist[idx], dist[idx - 1] + 1);
-      if (y > 0) dist[idx] = Math.min(dist[idx], dist[idx - w] + 1);
-    }
-  }
-
-  for (let y = h - 1; y >= 0; y--) {
-    for (let x = w - 1; x >= 0; x--) {
-      const idx = y * w + x;
-      if (!mask[idx]) continue;
-      if (x + 1 < w) dist[idx] = Math.min(dist[idx], dist[idx + 1] + 1);
-      if (y + 1 < h) dist[idx] = Math.min(dist[idx], dist[idx + w] + 1);
-    }
-  }
-
-  return dist;
-}
-
-function findNearestOpaque(mask: Uint8Array, w: number, h: number, sx: number, sy: number, radius: number): [number, number] {
-  const cx = clamp(Math.round(sx), 0, w - 1);
-  const cy = clamp(Math.round(sy), 0, h - 1);
-  for (let r = 0; r <= radius; r++) {
-    const x0 = clamp(cx - r, 0, w - 1);
-    const x1 = clamp(cx + r, 0, w - 1);
-    const y0 = clamp(cy - r, 0, h - 1);
-    const y1 = clamp(cy + r, 0, h - 1);
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        if (!mask[y * w + x]) continue;
-        return [x, y];
-      }
-    }
-  }
-  return [-1, -1];
-}
-
-function floodFillMask(
-  sx: number,
-  sy: number,
-  w: number,
-  h: number,
-  test: (x: number, y: number) => boolean,
-  out: Uint8Array,
-) {
-  const qx = new Int16Array(w * h);
-  const qy = new Int16Array(w * h);
-  let head = 0;
-  let tail = 0;
-  qx[tail] = sx;
-  qy[tail] = sy;
-  tail++;
-
-  while (head < tail) {
-    const x = qx[head];
-    const y = qy[head];
-    head++;
-    const idx = y * w + x;
-    if (out[idx] || !test(x, y)) continue;
-    out[idx] = 1;
-
-    if (x > 0) { qx[tail] = x - 1; qy[tail] = y; tail++; }
-    if (x + 1 < w) { qx[tail] = x + 1; qy[tail] = y; tail++; }
-    if (y > 0) { qx[tail] = x; qy[tail] = y - 1; tail++; }
-    if (y + 1 < h) { qx[tail] = x; qy[tail] = y + 1; tail++; }
-  }
-}
-
-function expandMask(
-  mask: Uint8Array,
-  opaque: Uint8Array,
-  w: number,
-  h: number,
-  passes: number,
-  minY: number,
-  maxY: number,
-) {
-  for (let pass = 0; pass < passes; pass++) {
-    const next = mask.slice();
-    for (let y = minY; y <= maxY; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = y * w + x;
-        if (!opaque[idx] || mask[idx]) continue;
-        const left = x > 0 && mask[idx - 1];
-        const right = x + 1 < w && mask[idx + 1];
-        const up = y > minY && mask[idx - w];
-        const down = y < maxY && mask[idx + w];
-        if (left || right || up || down) next[idx] = 1;
-      }
-    }
-    mask.set(next);
-  }
 }
 
 function clamp(n: number, min: number, max: number) {
