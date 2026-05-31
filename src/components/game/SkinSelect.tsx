@@ -1,4 +1,5 @@
 import { SKINS, type SkinId, type Universe, getSkin, type Skin } from "@/game/skins";
+import { drawWalkFrame } from "@/game/walkSprite";
 import type { Difficulty } from "@/game/ai";
 import { useEffect, useRef, useState } from "react";
 
