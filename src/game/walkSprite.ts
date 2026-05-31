@@ -691,17 +691,8 @@ function drawOverlays(
   // ---- Eyes ----
   drawEyes(ctx, skin, hx, hy, r);
 
-  // ---- Spider-Man web pattern on mask (3 thin radial strokes) ----
-  if (skin.id === "spiderman") {
-    ctx.strokeStyle = "oklch(0.16 0.04 25 / 0.55)";
-    ctx.lineWidth = 0.6;
-    [-0.5, 0, 0.5].forEach((a) => {
-      ctx.beginPath();
-      ctx.moveTo(hx, hy - r * 0.85);
-      ctx.lineTo(hx + Math.sin(a) * r * 0.85, hy + Math.cos(a) * r * 0.65);
-      ctx.stroke();
-    });
-  }
+  // ---- Spider-Man web pattern on mask — REMOVED. Spider-Man is fully
+  // baked in bakeSpidermanFrames() and never reaches drawOverlays.
 
   // ---- Beard (Butcher) ----
   if (skin.beard) {
@@ -716,34 +707,14 @@ function drawOverlays(
   if (skin.emblem) drawEmblem(ctx, skin, cx, cy, r * 1.05);
 
   // ---- Body recolor over chest ----
-  // Stickman skins want a SLIM vertical torso stripe in body color, not a
-  // chest blob — preserves the stickman silhouette while still reading as
-  // a colored uniform. Other two-tone skins keep the legacy chest ellipse.
+  // Legacy chest ellipse for two-tone skins (Hulk, Iron Man, Butcher etc.).
+  // Spider-Man is fully baked in bakeSpidermanFrames() and never reaches here.
   if (skin.body !== (skin.limb ?? skin.body) && !skin.arms) {
     ctx.save();
     ctx.fillStyle = skin.body;
-    if (skin.id === "spiderman") {
-      // Slim red torso stripe — width matches a standard stickman line.
-      // Capsule shape from just below the neck to just above hips.
-      const torsoTopY = cy - r * 0.55;
-      const torsoBotY = a.hipY + r * 0.05;
-      const stripeW = r * 0.42; // standard stickman torso width
-      ctx.beginPath();
-      ctx.moveTo(cx - stripeW * 0.5, torsoTopY + r * 0.15);
-      ctx.quadraticCurveTo(cx - stripeW * 0.5, torsoTopY, cx, torsoTopY);
-      ctx.quadraticCurveTo(cx + stripeW * 0.5, torsoTopY, cx + stripeW * 0.5, torsoTopY + r * 0.15);
-      ctx.lineTo(cx + stripeW * 0.5, torsoBotY - r * 0.12);
-      ctx.quadraticCurveTo(cx + stripeW * 0.45, torsoBotY, cx, torsoBotY);
-      ctx.quadraticCurveTo(cx - stripeW * 0.45, torsoBotY, cx - stripeW * 0.5, torsoBotY - r * 0.12);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      // Legacy chest ellipse for other two-tone skins.
-      ctx.beginPath();
-      ctx.ellipse(cx, cy + r * 0.2, r * 1.0, r * 1.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // re-draw emblem on top (lands cleanly on the new chest fill)
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.2, r * 1.0, r * 1.6, 0, 0, Math.PI * 2);
+    ctx.fill();
     if (skin.emblem) drawEmblem(ctx, skin, cx, cy, r * 1.05);
     ctx.restore();
   }
