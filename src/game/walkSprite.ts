@@ -442,6 +442,15 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+function smoothstep(t: number) {
+  const x = clamp(t, 0, 1);
+  return x * x * (3 - 2 * x);
+}
+
 
 // ---------------------------------------------------------------------------
 // Motion shaping: per-frame deltas applied inside buildSilhouetteContour.
