@@ -4,7 +4,6 @@
 // hot-path render is one drawImage per fighter per frame.
 
 import sheetUrl from "@/assets/walk-sheet.png";
-import spiderMaskUrl from "@/assets/spider-mask.png";
 import { WALK_ANCHORS } from "./walkAnchors";
 import type { Skin } from "./skins";
 
@@ -34,10 +33,11 @@ export const SLASH_HIT_FRAME = 28;
 export const SLASH_RECOVER_FRAME = 29;
 export const WALK_FOOT_Y = 189;
 
+// Cache buster — bump when the bake pipeline changes so stale caches are tossed.
+const SKIN_CACHE_VERSION = "v3-joint-mask";
+
 let sheet: HTMLImageElement | null = null;
 let sheetReady = false;
-let spiderMask: HTMLImageElement | null = null;
-let spiderMaskReady = false;
 
 const skinCache = new Map<string, HTMLCanvasElement>();
 
@@ -49,13 +49,6 @@ export function loadWalkSheet() {
     img.src = sheetUrl;
     sheet = img;
   }
-  if (!spiderMask) {
-    const m = new Image();
-    m.decoding = "async";
-    m.onload = () => { spiderMaskReady = true; };
-    m.src = spiderMaskUrl;
-    spiderMask = m;
-  }
   return sheet;
 }
 
@@ -66,9 +59,8 @@ export function isWalkSheetReady() {
 /** Build (or return cached) per-skin sprite sheet with overlays. */
 function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
   if (!sheet || !sheetReady) return null;
-  // Spider-Man requires the authored mask atlas. Wait — never cache a partial bake.
-  if (skin.id === "spiderman" && (!spiderMask || !spiderMaskReady)) return null;
-  const cached = skinCache.get(skin.id);
+  const cacheKey = `${SKIN_CACHE_VERSION}:${skin.id}`;
+  const cached = skinCache.get(cacheKey);
   if (cached) return cached;
 
   const W = sheet.naturalWidth;
@@ -78,16 +70,14 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
   const ctx = c.getContext("2d");
   if (!ctx) return null;
 
-  // Spider-Man: authored atlas bake. The mask PNG is the single source of
-  // truth for red/blue/eye distribution. Silhouette alpha is the hard clip —
-  // any mask pixel outside the silhouette is physically discarded.
-  // No anchors, no per-row scans, no torso bands, no runtime heuristics.
+  // Spider-Man: joint-driven mask bake. The mask is built deterministically
+  // per frame from the same WALK_ANCHORS the silhouette uses — no topology
+  // guessing, no per-pixel scans. Red zones are pinned to head + torso
+  // anchors of each frame, blue fills the rest, then source-in clips the
+  // result against the silhouette alpha. Zero drift by construction.
   if (skin.id === "spiderman") {
-    ctx.drawImage(sheet, 0, 0);
-    ctx.globalCompositeOperation = "source-in";
-    ctx.drawImage(spiderMask!, 0, 0);
-    ctx.globalCompositeOperation = "source-over";
-    skinCache.set(skin.id, c);
+    bakeSpidermanJointMask(ctx, sheet, W, H);
+    skinCache.set(cacheKey, c);
     return c;
   }
 
@@ -109,17 +99,108 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
     drawOverlays(ctx, skin, ox, a);
   }
 
-  skinCache.set(skin.id, c);
+  skinCache.set(cacheKey, c);
   return c;
 }
 
 // ---------------------------------------------------------------------------
 // Spider-Man rendering lives in exactly two places:
-//   1. src/assets/spider-mask.png  (the authored atlas — source of truth)
-//   2. The Spider-Man branch in getSkinSheet() above (one drawImage + source-in)
+//   1. WALK_ANCHORS (per-frame skeleton — shared with the silhouette)
+//   2. bakeSpidermanJointMask() below
 // No Spider-Man drawing code may exist anywhere else in the project.
-// To tweak Spider-Man's look, edit the PNG. Never add runtime branches.
+// To tweak Spider-Man's look, edit the painter below. Red/blue boundaries
+// follow the joint anchors of each frame, so they cannot drift relative to
+// the body.
 // ---------------------------------------------------------------------------
+
+const SPIDER_RED = "#c8312b";
+const SPIDER_BLUE = "#1f3f9e";
+const SPIDER_EYE = "#f3f6ff";
+
+function bakeSpidermanJointMask(
+  ctx: CanvasRenderingContext2D,
+  silhouette: HTMLImageElement,
+  W: number,
+  H: number,
+) {
+  // 1. Paint the joint-driven mask onto an offscreen canvas.
+  const mask = document.createElement("canvas");
+  mask.width = W; mask.height = H;
+  const mctx = mask.getContext("2d");
+  if (!mctx) {
+    ctx.drawImage(silhouette, 0, 0);
+    return;
+  }
+
+  for (let i = 0; i < WALK_FRAME_COUNT; i++) {
+    const a = WALK_ANCHORS[i];
+    const ox = i * WALK_FRAME_W;
+    paintSpiderFrame(mctx, ox, a);
+  }
+
+  // 2. Draw silhouette as the alpha base, then clip the mask to it.
+  ctx.drawImage(silhouette, 0, 0);
+  ctx.globalCompositeOperation = "source-in";
+  ctx.drawImage(mask, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+}
+
+function paintSpiderFrame(
+  ctx: CanvasRenderingContext2D,
+  ox: number,
+  a: typeof WALK_ANCHORS[number],
+) {
+  const hx = ox + a.hx;
+  const hy = a.hy;
+  const hr = a.hr;
+  const cx = ox + a.cx;
+  const cy = a.cy;
+  const hipY = a.hipY;
+
+  // BASE LAYER — fill the whole cell blue. source-in against the silhouette
+  // will discard everything outside the body, so this safely paints every
+  // limb pixel blue regardless of pose.
+  ctx.fillStyle = SPIDER_BLUE;
+  ctx.fillRect(ox, 0, WALK_FRAME_W, WALK_FRAME_H);
+
+  // RED HEAD — generous circle around the head anchor. Pad slightly larger
+  // than hr so the red fully covers the silhouette's head ball at every
+  // pose (including downed/getup frames where the head is far from origin).
+  ctx.fillStyle = SPIDER_RED;
+  ctx.beginPath();
+  ctx.arc(hx, hy, hr + 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // RED TORSO — tapered shape from below the head down to the hip anchor,
+  // centered on the chest anchor. Built as a rounded trapezoid so it reads
+  // as a costume torso, not a stripe. Width follows hr so it stays
+  // proportional across all frames.
+  const torsoTop = Math.min(hy + hr * 0.6, cy - hr * 0.2);
+  const torsoBot = hipY + 2;
+  const topHalf = hr * 0.55;
+  const midHalf = hr * 0.85;
+  const botHalf = hr * 0.70;
+  const midY = (torsoTop + torsoBot) * 0.5;
+
+  ctx.beginPath();
+  ctx.moveTo(cx - topHalf, torsoTop);
+  ctx.quadraticCurveTo(cx - midHalf, midY, cx - botHalf, torsoBot);
+  ctx.lineTo(cx + botHalf, torsoBot);
+  ctx.quadraticCurveTo(cx + midHalf, midY, cx + topHalf, torsoTop);
+  ctx.closePath();
+  ctx.fill();
+
+  // EYES — two angular white teardrops on the head. Pinned to head anchor
+  // so they track exactly with the head in every frame.
+  ctx.fillStyle = SPIDER_EYE;
+  const ey = hy - hr * 0.1;
+  const ex = hr * 0.42;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(hx + side * ex, ey, hr * 0.28, hr * 0.22, side * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
 
 
 // ---------------------------------------------------------------------------
