@@ -66,6 +66,8 @@ export function isWalkSheetReady() {
 /** Build (or return cached) per-skin sprite sheet with overlays. */
 function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
   if (!sheet || !sheetReady) return null;
+  // Spider-Man requires the authored mask atlas. Wait — never cache a partial bake.
+  if (skin.id === "spiderman" && (!spiderMask || !spiderMaskReady)) return null;
   const cached = skinCache.get(skin.id);
   if (cached) return cached;
 
@@ -76,6 +78,19 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
   const ctx = c.getContext("2d");
   if (!ctx) return null;
 
+  // Spider-Man: authored atlas bake. The mask PNG is the single source of
+  // truth for red/blue/eye distribution. Silhouette alpha is the hard clip —
+  // any mask pixel outside the silhouette is physically discarded.
+  // No anchors, no per-row scans, no torso bands, no runtime heuristics.
+  if (skin.id === "spiderman") {
+    ctx.drawImage(sheet, 0, 0);
+    ctx.globalCompositeOperation = "source-in";
+    ctx.drawImage(spiderMask!, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    skinCache.set(skin.id, c);
+    return c;
+  }
+
   // ---- Step 1: silhouette tinted as legs/limbs ----
   ctx.drawImage(sheet, 0, 0);
   ctx.globalCompositeOperation = "source-in";
@@ -84,21 +99,14 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
   ctx.globalCompositeOperation = "source-over";
 
   // ---- Step 2: per-frame overlays ----
-  // Spider-Man is a SINGLE-SILHOUETTE bake: recolor the silhouette alpha
-  // itself (head + central torso run) so red is part of the body, not a
-  // shape stacked at anchors. No overlay can drift because there are none.
-  if (skin.id === "spiderman") {
-    bakeSpidermanFrames(ctx, c.width, c.height, skin);
-  } else {
-    for (let i = 0; i < WALK_FRAME_COUNT; i++) {
-      const a = WALK_ANCHORS[i];
-      const ox = i * WALK_FRAME_W;
-      // Silhouette-authored skins (Butcher) bake unified body mass into the
-      // frame before legacy overlays so coat/shoulders/jaw/beard read as one
-      // continuous shape that follows every pose without anchor drift.
-      if (skin.silhouette) buildSilhouetteContour(ctx, skin, ox, a, i);
-      drawOverlays(ctx, skin, ox, a);
-    }
+  for (let i = 0; i < WALK_FRAME_COUNT; i++) {
+    const a = WALK_ANCHORS[i];
+    const ox = i * WALK_FRAME_W;
+    // Silhouette-authored skins (Butcher) bake unified body mass into the
+    // frame before legacy overlays so coat/shoulders/jaw/beard read as one
+    // continuous shape that follows every pose without anchor drift.
+    if (skin.silhouette) buildSilhouetteContour(ctx, skin, ox, a, i);
+    drawOverlays(ctx, skin, ox, a);
   }
 
   skinCache.set(skin.id, c);
