@@ -8261,14 +8261,38 @@ function drawEmblem(
       ctx.lineTo(0, ey + 5); ctx.closePath(); ctx.fill(); break;
     case "stripe":
       ctx.fillRect(-2, shoulderY + 2, 4, hipY - shoulderY - 4); break;
-    case "spider":
-      ctx.beginPath(); ctx.arc(0, ey, 2.5, 0, Math.PI * 2); ctx.fill();
-      ctx.lineWidth = 1;
+    case "spider": {
+      // Stick-figure spider — NO oval body. Vertical body stick + 8 thin legs.
+      ctx.lineCap = "round";
+      ctx.lineWidth = 1.1;
       ctx.beginPath();
-      ctx.moveTo(-5, ey - 3); ctx.lineTo(5, ey + 3);
-      ctx.moveTo(5, ey - 3); ctx.lineTo(-5, ey + 3);
+      // Body: short vertical stick (cephalothorax + abdomen as two segments)
+      ctx.moveTo(0, ey - 3);
+      ctx.lineTo(0, ey + 3);
+      // Tiny head dot at top of body stick
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, ey - 3.5, 0.9, 0, Math.PI * 2);
+      ctx.fill();
+      // 8 legs — 4 each side, bent mid-joint for spidery silhouette
+      ctx.lineWidth = 0.9;
+      const legs: Array<[number, number, number, number, number, number]> = [
+        // [hipX, hipY, kneeX, kneeY, footX, footY] mirrored per side
+        [0, ey - 2, -3.5, ey - 4, -5.5, ey - 5.5],
+        [0, ey - 1, -4,   ey - 1.5, -6,   ey - 2],
+        [0, ey + 1, -4,   ey + 1.5, -6,   ey + 2.5],
+        [0, ey + 2, -3.5, ey + 4,   -5.5, ey + 5.5],
+      ];
+      ctx.beginPath();
+      for (const [hxL, hyL, kxL, kyL, fxL, fyL] of legs) {
+        // left
+        ctx.moveTo(hxL, hyL); ctx.lineTo(kxL, kyL); ctx.lineTo(fxL, fyL);
+        // right (mirror)
+        ctx.moveTo(-hxL, hyL); ctx.lineTo(-kxL, kyL); ctx.lineTo(-fxL, fyL);
+      }
       ctx.stroke();
       break;
+    }
     case "lightning":
       ctx.beginPath();
       ctx.moveTo(-3, ey - 5);
