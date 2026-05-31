@@ -36,17 +36,27 @@ export const WALK_FOOT_Y = 189;
 
 let sheet: HTMLImageElement | null = null;
 let sheetReady = false;
+let spiderMask: HTMLImageElement | null = null;
+let spiderMaskReady = false;
 
 const skinCache = new Map<string, HTMLCanvasElement>();
 
 export function loadWalkSheet() {
-  if (sheet) return sheet;
-  const img = new Image();
-  img.decoding = "async";
-  img.onload = () => { sheetReady = true; };
-  img.src = sheetUrl;
-  sheet = img;
-  return img;
+  if (!sheet) {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => { sheetReady = true; };
+    img.src = sheetUrl;
+    sheet = img;
+  }
+  if (!spiderMask) {
+    const m = new Image();
+    m.decoding = "async";
+    m.onload = () => { spiderMaskReady = true; };
+    m.src = spiderMaskUrl;
+    spiderMask = m;
+  }
+  return sheet;
 }
 
 export function isWalkSheetReady() {
