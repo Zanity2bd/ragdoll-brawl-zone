@@ -587,7 +587,7 @@ function drawOverlays(
   drawEyes(ctx, skin, hx, hy, r);
 
   // ---- Spider-Man web pattern on mask — REMOVED. Spider-Man is fully
-  // baked in bakeSpidermanFrames() and never reaches drawOverlays.
+  // baked in the spider-mask.png atlas and never reaches drawOverlays.
 
   // ---- Beard (Butcher) ----
   if (skin.beard) {
@@ -603,7 +603,7 @@ function drawOverlays(
 
   // ---- Body recolor over chest ----
   // Legacy chest ellipse for two-tone skins (Hulk, Iron Man, Butcher etc.).
-  // Spider-Man is fully baked in bakeSpidermanFrames() and never reaches here.
+  // Spider-Man is fully baked in the spider-mask.png atlas and never reaches here.
   if (skin.body !== (skin.limb ?? skin.body) && !skin.arms) {
     ctx.save();
     ctx.fillStyle = skin.body;
@@ -623,7 +623,7 @@ function drawEyes(
   const ey = hy - r * 0.05;
   const ex = r * 0.38;
 
-  // Spider-Man eyes are baked in bakeSpidermanFrames() — never reaches here.
+  // Spider-Man eyes are baked in the spider-mask.png atlas — never reaches here.
 
 
   // Iron Man slits
