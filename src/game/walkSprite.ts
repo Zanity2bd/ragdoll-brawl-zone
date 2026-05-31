@@ -89,26 +89,315 @@ function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
     return c;
   }
 
-  // ---- Step 1: silhouette tinted as legs/limbs ----
-  ctx.drawImage(sheet, 0, 0);
-  ctx.globalCompositeOperation = "source-in";
-  ctx.fillStyle = skin.limb ?? skin.body;
-  ctx.fillRect(0, 0, W, H);
-  ctx.globalCompositeOperation = "source-over";
+  // Butcher uses authored silhouette contour (coat + jaw + beard as one mass).
+  if (skin.silhouette) {
+    ctx.drawImage(sheet, 0, 0);
+    ctx.globalCompositeOperation = "source-in";
+    ctx.fillStyle = skin.limb ?? skin.body;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "source-over";
+    for (let i = 0; i < WALK_FRAME_COUNT; i++) {
+      const a = WALK_ANCHORS[i];
+      const ox = i * WALK_FRAME_W;
+      buildSilhouetteContour(ctx, skin, ox, a, i);
+      drawOverlays(ctx, skin, ox, a);
+    }
+    skinCache.set(cacheKey, c);
+    return c;
+  }
 
-  // ---- Step 2: per-frame overlays ----
+  // ---- All other skins: anchor-painted costume, hard-clipped to silhouette
+  // alpha per frame. Same zero-shift discipline as Spider-Man — overlays
+  // physically cannot exist outside the sprite body.
+  bakeCharacterAtlas(ctx, sheet, skin, W, H);
+  skinCache.set(cacheKey, c);
+  return c;
+}
+
+// ---------------------------------------------------------------------------
+// Unified per-character atlas baker.
+// For each frame: paint a full costume composition into a scratch canvas,
+// then destination-in clip with the silhouette slice. Anything outside the
+// silhouette is discarded — zero anchor drift across any pose.
+// ---------------------------------------------------------------------------
+function bakeCharacterAtlas(
+  ctx: CanvasRenderingContext2D,
+  silhouette: HTMLImageElement,
+  skin: Skin,
+  W: number,
+  H: number,
+) {
+  const tmp = document.createElement("canvas");
+  tmp.width = WALK_FRAME_W;
+  tmp.height = WALK_FRAME_H;
+  const tctx = tmp.getContext("2d");
+  if (!tctx) return;
+
   for (let i = 0; i < WALK_FRAME_COUNT; i++) {
     const a = WALK_ANCHORS[i];
     const ox = i * WALK_FRAME_W;
-    // Silhouette-authored skins (Butcher) bake unified body mass into the
-    // frame before legacy overlays so coat/shoulders/jaw/beard read as one
-    // continuous shape that follows every pose without anchor drift.
-    if (skin.silhouette) buildSilhouetteContour(ctx, skin, ox, a, i);
-    drawOverlays(ctx, skin, ox, a);
+    tctx.globalCompositeOperation = "source-over";
+    tctx.clearRect(0, 0, WALK_FRAME_W, WALK_FRAME_H);
+    paintCostumeFrame(tctx, skin, a);
+    // Clip to silhouette alpha for THIS frame.
+    tctx.globalCompositeOperation = "destination-in";
+    tctx.drawImage(
+      silhouette,
+      ox, 0, WALK_FRAME_W, WALK_FRAME_H,
+      0, 0, WALK_FRAME_W, WALK_FRAME_H,
+    );
+    tctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(tmp, ox, 0);
+  }
+}
+
+/** Paint a single character frame as layered color zones anchored to the
+ *  pose. The scratch canvas is then alpha-clipped to the silhouette, so
+ *  paint outside the body is discarded — premium look, zero drift. */
+function paintCostumeFrame(
+  tctx: CanvasRenderingContext2D,
+  skin: Skin,
+  a: typeof WALK_ANCHORS[number],
+) {
+  const W = WALK_FRAME_W;
+  const H = WALK_FRAME_H;
+  const hx = a.hx, hy = a.hy, r = a.hr;
+  const cx = a.cx, cy = a.cy;
+  const hipY = a.hipY, footY = a.footY;
+
+  // 1) Base — legs / pants (limb color)
+  tctx.fillStyle = skin.limb ?? skin.body;
+  tctx.fillRect(0, 0, W, H);
+
+  // 2) Upper body band — arms+torso color (above hipY)
+  const upperColor = skin.arms ?? skin.body;
+  if (upperColor !== (skin.limb ?? skin.body)) {
+    tctx.fillStyle = upperColor;
+    tctx.fillRect(0, 0, W, hipY + 2);
   }
 
-  skinCache.set(cacheKey, c);
-  return c;
+  // 3) Torso plate — body color ellipse around chest.
+  // Wider than shoulders so arms during punches/slashes stay tinted body.
+  tctx.fillStyle = skin.body;
+  tctx.beginPath();
+  tctx.ellipse(cx, (cy + hipY) / 2, r * 2.2, (hipY - cy) * 0.65 + r * 1.2, 0, 0, Math.PI * 2);
+  tctx.fill();
+
+  // 4) Cape (drawn over torso area; clipped to silhouette so only visible
+  //    where the sprite includes cape pixels — currently absent in source,
+  //    so this stays a no-op for now but is correctly wired).
+  if (skin.cape) {
+    tctx.fillStyle = skin.cape;
+    tctx.beginPath();
+    tctx.moveTo(cx - r * 1.0, cy - r * 0.3);
+    tctx.quadraticCurveTo(cx - r * 1.8, hipY + 22, cx - r * 0.4, footY - 20);
+    tctx.lineTo(cx + r * 0.4, footY - 20);
+    tctx.quadraticCurveTo(cx + r * 1.8, hipY + 22, cx + r * 1.0, cy - r * 0.3);
+    tctx.closePath();
+    tctx.fill();
+    if (skin.capeAccent) {
+      tctx.fillStyle = skin.capeAccent;
+      tctx.fillRect(cx - r * 0.18, cy - r * 0.3, r * 0.36, (footY - 20) - (cy - r * 0.3));
+    }
+  }
+
+  // 5) Boots — bottom band
+  if (skin.boots) {
+    tctx.fillStyle = skin.boots;
+    tctx.fillRect(0, footY - 18, W, 24);
+  }
+
+  // 6) Head plate — anchored circle. Always paint head color here so the
+  //    skull silhouette is solid even when masked off-frame during combat.
+  const headCx = hx;
+  const headCy = hy + r * 0.18;
+  const headR = r * 1.30;
+  tctx.fillStyle = skin.head ?? skin.body;
+  tctx.beginPath();
+  tctx.arc(headCx, headCy, headR, 0, Math.PI * 2);
+  tctx.fill();
+  // Soften jaw
+  tctx.beginPath();
+  tctx.ellipse(headCx, headCy + headR * 0.45, headR * 0.78, headR * 0.55, 0, 0, Math.PI * 2);
+  tctx.fill();
+
+  // 7) Cowl ears (Batman) — paint as triangles ABOVE the head; clip
+  //    discards them unless silhouette has the height (it doesn't, so they
+  //    won't add hard spikes — but the head color is fine).
+  if (skin.cowlEars) {
+    tctx.fillStyle = skin.head ?? skin.body;
+    tctx.beginPath();
+    tctx.moveTo(headCx - r * 0.7, hy - r * 0.4);
+    tctx.lineTo(headCx - r * 0.35, hy - r * 1.6);
+    tctx.lineTo(headCx - r * 0.1, hy - r * 0.5);
+    tctx.closePath();
+    tctx.moveTo(headCx + r * 0.7, hy - r * 0.4);
+    tctx.lineTo(headCx + r * 0.35, hy - r * 1.6);
+    tctx.lineTo(headCx + r * 0.1, hy - r * 0.5);
+    tctx.closePath();
+    tctx.fill();
+  }
+
+  // 8) Face / skin tone
+  if (skin.skinTone) {
+    tctx.fillStyle = skin.skinTone;
+    tctx.beginPath();
+    if (skin.skinToneMode === "fullHead") {
+      tctx.arc(headCx, headCy, headR * 0.94, 0, Math.PI * 2);
+      tctx.fill();
+      // Hair cap back on
+      tctx.fillStyle = skin.head ?? "oklch(0.18 0.02 30)";
+      tctx.beginPath();
+      tctx.arc(headCx, headCy - headR * 0.12, headR * 0.92, Math.PI, Math.PI * 2);
+      tctx.fill();
+    } else {
+      // Face oval (lower 2/3) + hair cap on top
+      tctx.ellipse(headCx, headCy + r * 0.05, r * 0.78, r * 0.88, 0, 0, Math.PI * 2);
+      tctx.fill();
+      tctx.fillStyle = skin.head ?? "oklch(0.18 0.02 30)";
+      tctx.beginPath();
+      tctx.arc(headCx, hy - r * 0.15, r * 0.95, Math.PI, Math.PI * 2);
+      tctx.fill();
+    }
+  }
+
+  // 9) Eyes / lenses
+  paintFrameEyes(tctx, skin, headCx, headCy, r);
+
+  // 10) Emblem at chest
+  if (skin.emblem) {
+    paintFrameEmblem(tctx, skin, cx, cy + r * 0.15, r * 1.05);
+  }
+
+  // 11) Streaks (Flash / A-Train) — thin accent bands on forearms / calves.
+  if (skin.streaks) {
+    tctx.fillStyle = skin.streaks;
+    // Calf band just above boots
+    tctx.fillRect(0, footY - 26, W, 3);
+    // Wrist band at hipY level edges (arms drift wide during attacks; clip
+    // hides the rest)
+    tctx.fillRect(0, cy + r * 0.4, W, 3);
+  }
+
+  // 12) Subtle vertical body shading for dimensional weight
+  const shade = tctx.createLinearGradient(0, hipY - 4, 0, footY + 4);
+  shade.addColorStop(0, "oklch(0 0 0 / 0)");
+  shade.addColorStop(1, "oklch(0 0 0 / 0.18)");
+  tctx.fillStyle = shade;
+  tctx.fillRect(0, hipY - 4, W, footY - hipY + 8);
+}
+
+function paintFrameEyes(
+  tctx: CanvasRenderingContext2D,
+  skin: Skin,
+  hx: number, hy: number, r: number,
+) {
+  const ey = hy - r * 0.05;
+  const ex = r * 0.36;
+
+  // Mask slits — Iron Man, Batman
+  if (skin.id === "ironman" || skin.id === "batman") {
+    tctx.fillStyle = skin.id === "ironman"
+      ? "oklch(0.95 0.18 200)"
+      : "oklch(0.96 0.04 100)";
+    for (const s of [-1, 1]) {
+      tctx.beginPath();
+      tctx.ellipse(hx + s * ex, ey, r * 0.22, r * 0.10, 0, 0, Math.PI * 2);
+      tctx.fill();
+    }
+    return;
+  }
+
+  if (skin.glowingEyes) {
+    // Outer glow halo
+    tctx.fillStyle = "oklch(1 0 0 / 0.18)";
+    for (const s of [-1, 1]) {
+      tctx.beginPath();
+      tctx.arc(hx + s * ex, ey, r * 0.22, 0, Math.PI * 2);
+      tctx.fill();
+    }
+    tctx.fillStyle = skin.glowingEyes;
+    for (const s of [-1, 1]) {
+      tctx.beginPath();
+      tctx.arc(hx + s * ex, ey, r * 0.13, 0, Math.PI * 2);
+      tctx.fill();
+    }
+    return;
+  }
+
+  if (skin.skinTone) {
+    tctx.fillStyle = "oklch(0.14 0.02 260)";
+    for (const s of [-1, 1]) {
+      tctx.beginPath();
+      tctx.arc(hx + s * ex, ey, r * 0.10, 0, Math.PI * 2);
+      tctx.fill();
+    }
+  }
+}
+
+function paintFrameEmblem(
+  tctx: CanvasRenderingContext2D,
+  skin: Skin,
+  cx: number, cy: number, r: number,
+) {
+  if (!skin.emblem) return;
+  tctx.save();
+  tctx.fillStyle = skin.emblem.color;
+  tctx.strokeStyle = skin.emblem.color;
+  switch (skin.emblem.shape) {
+    case "shield":
+      tctx.beginPath();
+      tctx.moveTo(cx, cy - r * 0.55);
+      tctx.lineTo(cx + r * 0.5, cy - r * 0.2);
+      tctx.lineTo(cx + r * 0.35, cy + r * 0.55);
+      tctx.lineTo(cx - r * 0.35, cy + r * 0.55);
+      tctx.lineTo(cx - r * 0.5, cy - r * 0.2);
+      tctx.closePath();
+      tctx.fill();
+      break;
+    case "oval":
+      tctx.beginPath();
+      tctx.ellipse(cx, cy, r * 0.55, r * 0.32, 0, 0, Math.PI * 2);
+      tctx.fill();
+      tctx.fillStyle = "oklch(0.18 0.02 280)";
+      tctx.beginPath();
+      tctx.moveTo(cx - r * 0.5, cy);
+      tctx.lineTo(cx, cy - r * 0.05);
+      tctx.lineTo(cx + r * 0.5, cy);
+      tctx.lineTo(cx, cy + r * 0.05);
+      tctx.closePath();
+      tctx.fill();
+      break;
+    case "circle":
+      tctx.beginPath();
+      tctx.arc(cx, cy, r * 0.32, 0, Math.PI * 2);
+      tctx.fill();
+      tctx.lineWidth = 1.6;
+      tctx.beginPath();
+      tctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2);
+      tctx.stroke();
+      break;
+    case "lightning":
+      tctx.beginPath();
+      tctx.moveTo(cx - r * 0.15, cy - r * 0.5);
+      tctx.lineTo(cx + r * 0.2, cy - r * 0.05);
+      tctx.lineTo(cx - r * 0.05, cy - r * 0.05);
+      tctx.lineTo(cx + r * 0.15, cy + r * 0.55);
+      tctx.lineTo(cx - r * 0.2, cy + r * 0.05);
+      tctx.lineTo(cx + r * 0.05, cy + r * 0.05);
+      tctx.closePath();
+      tctx.fill();
+      break;
+    case "stripe":
+      tctx.fillRect(cx - r * 0.55, cy - r * 0.1, r * 1.1, r * 0.2);
+      break;
+    case "spider":
+      tctx.beginPath();
+      tctx.ellipse(cx, cy, r * 0.18, r * 0.26, 0, 0, Math.PI * 2);
+      tctx.fill();
+      break;
+  }
+  tctx.restore();
 }
 
 // ---------------------------------------------------------------------------
