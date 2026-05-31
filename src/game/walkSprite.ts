@@ -685,35 +685,44 @@ function drawEmblem(
 
   switch (skin.emblem.shape) {
     case "spider": {
-      // Cleaner spider: small head + larger abdomen, 8 thin curved legs.
-      ctx.fillStyle = skin.emblem.color;
+      // Stick-figure spider — NO oval body. Vertical body stick + 8 thin bent legs.
       ctx.strokeStyle = skin.emblem.color;
-      // Abdomen (larger, lower)
-      ctx.beginPath();
-      ctx.ellipse(cx, cy + r * 0.12, r * 0.26, r * 0.34, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Head (smaller, above)
-      ctx.beginPath();
-      ctx.ellipse(cx, cy - r * 0.26, r * 0.17, r * 0.20, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // 8 legs — 4 each side, gently curved outward
-      ctx.lineWidth = 1.4;
+      ctx.fillStyle = skin.emblem.color;
       ctx.lineCap = "round";
-      const legAngles = [-0.95, -0.5, -0.1, 0.3];
-      legAngles.forEach((ang) => {
+      ctx.lineJoin = "round";
+      // Body: short vertical stick
+      ctx.lineWidth = Math.max(1.4, r * 0.10);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 0.28);
+      ctx.lineTo(cx, cy + r * 0.32);
+      ctx.stroke();
+      // Tiny head dot at top
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.34, Math.max(1.1, r * 0.08), 0, Math.PI * 2);
+      ctx.fill();
+      // 8 legs — 4 per side, two-segment (hip → knee → foot) for spidery silhouette
+      ctx.lineWidth = Math.max(1.0, r * 0.07);
+      const legs: Array<[number, number, number, number]> = [
+        // [bodyYFactor, kneeOutFactor, kneeYFactor, footYFactor]
+        [-0.22, 0.42, -0.46, -0.58],
+        [-0.06, 0.50, -0.16, -0.22],
+        [ 0.10, 0.50,  0.20,  0.26],
+        [ 0.26, 0.42,  0.50,  0.62],
+      ];
+      ctx.beginPath();
+      legs.forEach(([byF, koF, kyF, fyF]) => {
+        const hipY = cy + r * byF;
         [-1, 1].forEach((s) => {
-          const x1 = cx;
-          const y1 = cy + ang * r * 0.4;
-          const x2 = cx + s * r * 0.55;
-          const y2 = cy + ang * r * 0.55 + (Math.abs(ang) > 0.5 ? r * 0.1 : 0);
-          const cBendX = cx + s * r * 0.32;
-          const cBendY = y1 + (y2 - y1) * 0.3 - r * 0.18;
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.quadraticCurveTo(cBendX, cBendY, x2, y2);
-          ctx.stroke();
+          const kneeX = cx + s * r * koF;
+          const kneeY = cy + r * kyF;
+          const footX = cx + s * r * (koF + 0.18);
+          const footY = cy + r * fyF;
+          ctx.moveTo(cx, hipY);
+          ctx.lineTo(kneeX, kneeY);
+          ctx.lineTo(footX, footY);
         });
       });
+      ctx.stroke();
       break;
     }
     case "shield": {
