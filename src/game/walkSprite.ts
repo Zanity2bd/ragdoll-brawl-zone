@@ -63,7 +63,7 @@ export function loadWalkSheet() {
 }
 
 export function isWalkSheetReady() {
-  return sheetReady;
+  return sheetReady && spiderMaskReady;
 }
 
 /** Build (or return cached) per-skin sprite sheet with overlays. */
