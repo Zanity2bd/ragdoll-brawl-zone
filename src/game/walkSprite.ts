@@ -35,7 +35,7 @@ export const SLASH_RECOVER_FRAME = 29;
 export const WALK_FOOT_Y = 189;
 
 // Cache buster — bump when the bake pipeline changes so stale caches are tossed.
-const SKIN_CACHE_VERSION = "v7-spider-bluelegs";
+const SKIN_CACHE_VERSION = "v6-spider-iconic";
 
 let sheet: HTMLImageElement | null = null;
 let sheetReady = false;
