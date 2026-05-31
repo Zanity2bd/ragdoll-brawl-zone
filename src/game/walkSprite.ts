@@ -575,16 +575,35 @@ function drawOverlays(
   // ---- Chest emblem ----
   if (skin.emblem) drawEmblem(ctx, skin, cx, cy, r * 1.05);
 
-  // ---- Body recolor over chest (subtle, matches body color) ----
-  // Skip — silhouette already tinted limb; for two-tone skins we layer body
-  // as a chest patch to imply shirt vs limbs.
+  // ---- Body recolor over chest ----
+  // Stickman skins want a SLIM vertical torso stripe in body color, not a
+  // chest blob — preserves the stickman silhouette while still reading as
+  // a colored uniform. Other two-tone skins keep the legacy chest ellipse.
   if (skin.body !== (skin.limb ?? skin.body) && !skin.arms) {
     ctx.save();
     ctx.fillStyle = skin.body;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + r * 0.2, r * 1.0, r * 1.6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // re-draw emblem on top
+    if (skin.id === "spiderman") {
+      // Slim red torso stripe — width matches a standard stickman line.
+      // Capsule shape from just below the neck to just above hips.
+      const torsoTopY = cy - r * 0.55;
+      const torsoBotY = a.hipY + r * 0.05;
+      const stripeW = r * 0.42; // standard stickman torso width
+      ctx.beginPath();
+      ctx.moveTo(cx - stripeW * 0.5, torsoTopY + r * 0.15);
+      ctx.quadraticCurveTo(cx - stripeW * 0.5, torsoTopY, cx, torsoTopY);
+      ctx.quadraticCurveTo(cx + stripeW * 0.5, torsoTopY, cx + stripeW * 0.5, torsoTopY + r * 0.15);
+      ctx.lineTo(cx + stripeW * 0.5, torsoBotY - r * 0.12);
+      ctx.quadraticCurveTo(cx + stripeW * 0.45, torsoBotY, cx, torsoBotY);
+      ctx.quadraticCurveTo(cx - stripeW * 0.45, torsoBotY, cx - stripeW * 0.5, torsoBotY - r * 0.12);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // Legacy chest ellipse for other two-tone skins.
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + r * 0.2, r * 1.0, r * 1.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // re-draw emblem on top (lands cleanly on the new chest fill)
     if (skin.emblem) drawEmblem(ctx, skin, cx, cy, r * 1.05);
     ctx.restore();
   }
