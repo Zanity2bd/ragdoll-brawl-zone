@@ -163,46 +163,75 @@ function buildSpiderFrameMask(
   const alpha = frame.data;
   const pixelCount = WALK_FRAME_W * WALK_FRAME_H;
   const opaque = new Uint8Array(pixelCount);
+  const rowMin = new Int16Array(WALK_FRAME_H);
+  const rowMax = new Int16Array(WALK_FRAME_H);
 
-  for (let i = 0; i < pixelCount; i++) {
-    if (alpha[i * 4 + 3] > 8) opaque[i] = 1;
+  for (let y = 0; y < WALK_FRAME_H; y++) {
+    rowMin[y] = WALK_FRAME_W;
+    rowMax[y] = -1;
+  }
+
+  for (let y = 0; y < WALK_FRAME_H; y++) {
+    for (let x = 0; x < WALK_FRAME_W; x++) {
+      const idx = y * WALK_FRAME_W + x;
+      if (alpha[idx * 4 + 3] <= 8) continue;
+      opaque[idx] = 1;
+      if (x < rowMin[y]) rowMin[y] = x;
+      if (x > rowMax[y]) rowMax[y] = x;
+    }
   }
 
   const dist = computeOpaqueDistance(opaque, WALK_FRAME_W, WALK_FRAME_H);
   const red = new Uint8Array(pixelCount);
+  const headMask = new Uint8Array(pixelCount);
   const torsoCore = new Uint8Array(pixelCount);
-
-  const torsoTop = clamp(Math.floor(Math.min(a.hy + a.hr * 0.55, a.cy - a.hr * 0.25)), 0, WALK_FRAME_H - 1);
-  const torsoBottom = clamp(Math.ceil(a.hipY + a.hr * 0.45), 0, WALK_FRAME_H - 1);
-  const [seedX, seedY] = findNearestOpaque(opaque, WALK_FRAME_W, WALK_FRAME_H, a.cx, a.cy, 12);
-  const torsoThreshold = 2;
-  const torsoBand = (x: number, y: number) => {
-    if (y < torsoTop || y > torsoBottom) return false;
-    const idx = y * WALK_FRAME_W + x;
-    return opaque[idx] === 1 && dist[idx] >= torsoThreshold;
-  };
-
-  if (seedX >= 0 && torsoBand(seedX, seedY)) {
-    floodFillMask(seedX, seedY, WALK_FRAME_W, WALK_FRAME_H, torsoBand, torsoCore);
-    expandMask(torsoCore, opaque, WALK_FRAME_W, WALK_FRAME_H, 2, torsoTop, torsoBottom);
-  }
 
   const headCx = a.hx;
   const headCy = a.hy + a.hr * 0.18;
-  const headRx = a.hr * 1.08;
-  const headRy = a.hr * 1.18;
-  for (let y = clamp(Math.floor(headCy - headRy - 2), 0, WALK_FRAME_H - 1); y <= clamp(Math.ceil(headCy + headRy + 2), 0, WALK_FRAME_H - 1); y++) {
-    for (let x = clamp(Math.floor(headCx - headRx - 2), 0, WALK_FRAME_W - 1); x <= clamp(Math.ceil(headCx + headRx + 2), 0, WALK_FRAME_W - 1); x++) {
+  const headBandTop = clamp(Math.floor(headCy - a.hr * 1.2), 0, WALK_FRAME_H - 1);
+  const headBottom = clamp(Math.round(Math.min(a.cy - a.hr * 0.12, headCy + a.hr * 1.55)), 0, WALK_FRAME_H - 1);
+  const [headSeedX, headSeedY] = findNearestOpaque(opaque, WALK_FRAME_W, WALK_FRAME_H, a.hx, a.hy, 10);
+  const headBand = (x: number, y: number) => {
+    if (y < headBandTop || y > headBottom) return false;
+    const idx = y * WALK_FRAME_W + x;
+    return opaque[idx] === 1 && Math.abs(x - headCx) <= a.hr * 1.85 && dist[idx] >= 1;
+  };
+
+  if (headSeedX >= 0 && headBand(headSeedX, headSeedY)) {
+    floodFillMask(headSeedX, headSeedY, WALK_FRAME_W, WALK_FRAME_H, headBand, headMask);
+    expandMask(headMask, opaque, WALK_FRAME_W, WALK_FRAME_H, 1, headBandTop, headBottom);
+  }
+
+  const torsoTop = clamp(Math.floor(headBottom - a.hr * 0.12), 0, WALK_FRAME_H - 1);
+  const torsoBottom = clamp(Math.ceil(a.hipY + a.hr * 0.35), 0, WALK_FRAME_H - 1);
+  const chestRange = Math.max(1, a.cy - torsoTop);
+  const torsoRange = Math.max(1, torsoBottom - torsoTop);
+
+  for (let y = torsoTop; y <= torsoBottom; y++) {
+    if (rowMax[y] < rowMin[y]) continue;
+    const rowLeft = rowMin[y];
+    const rowRight = rowMax[y];
+    const rowWidth = rowRight - rowLeft + 1;
+    const chestT = clamp((y - torsoTop) / chestRange, 0, 1);
+    const bodyT = clamp((y - torsoTop) / torsoRange, 0, 1);
+    const centerGuide = lerp(headCx, a.cx, chestT);
+    const rowMid = (rowLeft + rowRight) * 0.5;
+    const center = clamp(Math.round(lerp(centerGuide, rowMid, 0.3)), rowLeft, rowRight);
+    const shoulderHalf = Math.max(a.hr * 1.24, rowWidth * 0.32);
+    const waistHalf = Math.max(a.hr * 0.74, rowWidth * 0.18);
+    const bandHalf = Math.min(lerp(shoulderHalf, waistHalf, smoothstep(bodyT)), rowWidth * 0.42);
+    const left = Math.max(rowLeft, Math.floor(center - bandHalf));
+    const right = Math.min(rowRight, Math.ceil(center + bandHalf));
+
+    for (let x = left; x <= right; x++) {
       const idx = y * WALK_FRAME_W + x;
-      if (!opaque[idx]) continue;
-      const nx = (x - headCx) / Math.max(1, headRx);
-      const ny = (y - headCy) / Math.max(1, headRy);
-      if (nx * nx + ny * ny <= 1.05) red[idx] = 1;
+      if (!opaque[idx] || headMask[idx]) continue;
+      torsoCore[idx] = 1;
     }
   }
 
   for (let i = 0; i < pixelCount; i++) {
-    if (torsoCore[i]) red[i] = 1;
+    if (headMask[i] || torsoCore[i]) red[i] = 1;
   }
 
   const canTintFeet = a.footY - a.hipY > a.hr * 3;
