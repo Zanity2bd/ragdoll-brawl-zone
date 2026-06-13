@@ -2822,16 +2822,24 @@ export class GameEngine {
       // Detect a fresh impact this frame (hitFlash jumps upward on hit).
       const impact = f.hitFlash > f.prevHitFlash + 0.05 ? Math.min(1, f.hitFlash) : 0;
       f.prevHitFlash = f.hitFlash;
+      const impactDir = (Math.sign(f.vx) || (f.facing as number) || 1) as 1 | -1;
 
       // Defensive guard: when a light/medium hit lands and the fighter isn't
       // already in heavy ragdoll/down/getup/stun, arms snap up to block while
       // the existing vx pushback continues to shove them backward. Heavy hits
       // (which set ragdollT) bypass this — the tumble owns the silhouette.
       if (impact > 0 && f.ragdollT <= 0 && f.downedT <= 0 && f.getUpT <= 0 && f.stunT <= 0) {
-        const dir = (Math.sign(f.vx) || (f.facing as number) || 1) as 1 | -1;
         f.guardT = Math.max(f.guardT, 0.34);
-        f.guardDir = dir;
+        f.guardDir = impactDir;
         f.guardMag = Math.max(f.guardMag * 0.6, Math.min(1, impact + 0.25));
+        if (f.hitReactT <= 0) {
+          const heavy = impact >= 0.42 || Math.abs(f.vy) > 120;
+          f.hitReactKind = heavy ? "heavy" : "light";
+          f.hitReactT = heavy ? 0.24 : 0.18;
+          f.hitReactDur = f.hitReactT;
+          f.hitReactDir = impactDir;
+          f.hitReactMag = Math.max(0.35, Math.min(1, impact + (heavy ? 0.18 : 0.05)));
+        }
       }
       f.guardT = Math.max(0, f.guardT - dt);
       if (f.guardT <= 0) f.guardMag = 0;
@@ -2848,7 +2856,7 @@ export class GameEngine {
       // Turn whip — fires opposite the NEW facing for that "snap & trail" moment.
       if (turn) f.capeSwingV += -f.facing * 56;
       // Impact kick — heavier shove + a small lift jolt (handled below via capeLift).
-      if (impact > 0) f.capeSwingV += -f.facing * 38 * impact;
+      if (impact > 0) f.capeSwingV += -impactDir * 44 * impact;
       f.capeSwingX += f.capeSwingV * dt;
       f.capeSwingX = Math.max(-30, Math.min(30, f.capeSwingX));
 
@@ -2864,7 +2872,7 @@ export class GameEngine {
       const bk = 55, bc = 9;
       const ba = (0 - f.bodyLagX) * bk - f.bodyLagV * bc;
       f.bodyLagV += ba * dt;
-      if (impact > 0) f.bodyLagV += -f.facing * 130 * impact;
+      if (impact > 0) f.bodyLagV += impactDir * 160 * impact;
       // Acceleration inertia: torso lags opposite to instantaneous accel so
       // sprint starts/stops/direction changes have visible body weight.
       // Read accel from lastVx snapshot (updated at the end of the per-fighter
@@ -2901,7 +2909,7 @@ export class GameEngine {
       const ra = (0 - f.bodyRoll) * rk - f.bodyRollV * rc;
       f.bodyRollV += ra * dt;
       if (turn) f.bodyRollV += f.facing * 7.5;
-      if (impact > 0) f.bodyRollV += -f.facing * 6.0 * impact;
+      if (impact > 0) f.bodyRollV += -impactDir * 7.2 * impact;
       f.bodyRoll += f.bodyRollV * dt;
       f.bodyRoll = Math.max(-0.45, Math.min(0.45, f.bodyRoll));
     }
@@ -6838,21 +6846,24 @@ export class GameEngine {
       const mag = f.hitReactMag;
       switch (hr) {
         case "light":
-          dx = dir * 4 * mag * e; rot = -dir * 0.05 * mag * e; break;
+          dx = dir * 6.5 * mag * e; dy = -1.5 * mag * e;
+          rot = -dir * 0.095 * mag * e;
+          sx = 1 + 0.035 * mag * e; sy = 1 - 0.035 * mag * e; break;
         case "heavy":
-          dx = dir * 9 * mag * e; dy = -3 * mag * e;
-          rot = -dir * 0.13 * mag * e;
-          sy = 1 - 0.07 * mag * e; sx = 1 + 0.05 * mag * e; break;
+          dx = dir * 12 * mag * e; dy = -5 * mag * e;
+          rot = -dir * 0.20 * mag * e;
+          sy = 1 - 0.10 * mag * e; sx = 1 + 0.08 * mag * e; break;
         case "juggle":
-          dx = dir * 5 * mag * e; dy = -6 * mag * e;
-          rot = -dir * (0.18 + Math.min(0.18, f.juggleHits * 0.025)) * mag * e; break;
+          dx = dir * 8 * mag * e; dy = -8 * mag * e;
+          rot = -dir * (0.24 + Math.min(0.18, f.juggleHits * 0.025)) * mag * e;
+          sy = 1 + 0.06 * mag * e; sx = 1 - 0.035 * mag * e; break;
         case "wallBounce":
-          dx = dir * 7 * mag * e; rot = dir * 0.16 * mag * e;
-          sx = 1 - 0.08 * mag * e; sy = 1 + 0.06 * mag * e; break;
+          dx = dir * 10 * mag * e; rot = dir * 0.22 * mag * e;
+          sx = 1 - 0.10 * mag * e; sy = 1 + 0.08 * mag * e; break;
         case "groundBounce":
-          dy = -4 * mag * e;
-          sx = 1 + 0.10 * mag * e; sy = 1 - 0.10 * mag * e;
-          rot = dir * 0.06 * mag * e; break;
+          dy = -6 * mag * e;
+          sx = 1 + 0.13 * mag * e; sy = 1 - 0.13 * mag * e;
+          rot = dir * 0.10 * mag * e; break;
       }
     }
     let torsoAng = (f.rs && f.ragdollT <= 0) ? f.rs.torsoAng : 0;
@@ -7577,7 +7588,21 @@ export class GameEngine {
 
       // ---- Hurt flinch (briefly during heavy hit flash) ----
       if (f.hitFlash > 0.25 && f.meleeKind == null && f.attackAnim <= 0) {
+        const reactU = f.hitReactT > 0 && f.hitReactDur > 0
+          ? Math.min(1, f.hitReactT / f.hitReactDur)
+          : Math.min(1, f.hitFlash * 2.4);
+        const snap = reactU * reactU;
+        const dir = f.hitReactT > 0 ? f.hitReactDir : ((Math.sign(f.vx) || f.facing || 1) as 1 | -1);
+        const mag = Math.max(0.45, f.hitReactMag || Math.min(1, f.hitFlash + 0.2));
+        const hipPx = 0;
+        const hipPy = FIGHTER_H * 0.62;
+        ctx.save();
+        ctx.translate(hipPx + dir * 3.5 * mag * snap, hipPy - 1.5 * mag * snap);
+        ctx.rotate(-dir * 0.12 * mag * snap);
+        ctx.scale(1 + 0.035 * mag * snap, 1 - 0.045 * mag * snap);
+        ctx.translate(-hipPx, -hipPy);
         drawFrame(HURT_FRAME);
+        ctx.restore();
         return;
       }
 
