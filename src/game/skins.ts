@@ -1,9 +1,12 @@
 // Skin catalog — Marvel / DC / The Boys (premium stickman style, non-neon)
 
 export type SkinId =
-  | "spiderman" | "ironman" | "hulk" | "nightcrawler"
-  | "batman" | "superman" | "flash" | "heatwave"
-  | "homelander" | "butcher" | "atrain";
+  | "spiderman" | "ironman" | "wolverine"
+  | "batman" | "superman" | "flash"
+  | "homelander" | "butcher" | "atrain"
+  // Legacy ids are kept type-compatible for existing engine internals and old
+  // saved/debug routes; they are not exposed in the selectable SKINS roster.
+  | "hulk" | "nightcrawler" | "heatwave";
 
 export type Universe = "Marvel" | "DC" | "The Boys";
 
@@ -62,21 +65,13 @@ export const SKINS: Skin[] = [
     thickBody: true,
     glow: "oklch(0.78 0.14 200)" },
 
-  { id: "hulk", name: "Hulk", universe: "Marvel",
-    body: "oklch(0.32 0.18 25)", limb: "oklch(0.36 0.20 25)",
-    head: "oklch(0.30 0.18 25)",
-    gloves: "oklch(0.22 0.12 25)", boots: "oklch(0.18 0.08 25)",
-    glowingEyes: "oklch(0.88 0.22 60)",
-    emblem: { shape: "shield", color: "oklch(0.18 0.08 25)" },
+  { id: "wolverine", name: "Wolverine", universe: "Marvel",
+    body: "oklch(0.78 0.16 86)", limb: "oklch(0.22 0.08 255)",
+    head: "oklch(0.78 0.16 86)",
+    gloves: "oklch(0.16 0.06 255)", boots: "oklch(0.13 0.05 255)",
+    emblem: { shape: "stripe", color: "oklch(0.13 0.05 255)" },
     thickBody: true,
-    glow: "oklch(0.62 0.24 25)" },
-
-  { id: "nightcrawler", name: "Nightcrawler", universe: "Marvel",
-    body: "oklch(0.32 0.12 260)", limb: "oklch(0.32 0.12 260)",
-    head: "oklch(0.32 0.12 260)",
-    gloves: "oklch(0.50 0.16 25)", boots: "oklch(0.50 0.16 25)",
-    glowingEyes: "oklch(0.85 0.18 60)",
-    glow: "oklch(0.55 0.20 280)" },
+    glow: "oklch(0.86 0.14 85)" },
 
   // DC
   { id: "batman", name: "Batman", universe: "DC",
@@ -102,13 +97,6 @@ export const SKINS: Skin[] = [
     streaks: "oklch(0.85 0.16 85)",
     emblem: { shape: "lightning", color: "oklch(0.85 0.16 85)" },
     glow: "oklch(0.78 0.16 85)" },
-
-  { id: "heatwave", name: "Heatwave", universe: "DC",
-    body: "oklch(0.30 0.04 60)", limb: "oklch(0.30 0.04 60)",
-    head: "oklch(0.55 0.20 40)", skinTone: "oklch(0.68 0.10 50)",
-    gloves: "oklch(0.50 0.18 35)", boots: "oklch(0.22 0.02 60)",
-    thickBody: true,
-    glow: "oklch(0.72 0.22 40)" },
 
   // The Boys
   { id: "homelander", name: "Homelander", universe: "The Boys",

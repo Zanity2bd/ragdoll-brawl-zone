@@ -398,7 +398,7 @@ function HUD({ snap, onRematch, onChange, onOpenSettings, onFrenzyP1 }: { snap: 
         </div>
       )}
 
-      {snap.slowmo && (
+      {snap.teleTargeting && (
         <div className="pointer-events-none absolute inset-0 flex items-end justify-center pb-32">
           <div className="font-mono text-xs sm:text-sm tracking-widest text-foreground/70 animate-pulse">
             ◇ SELECT TELEPORT TARGET ◇

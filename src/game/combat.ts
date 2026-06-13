@@ -86,6 +86,13 @@ export const MOVES: Record<SkinId, MoveSpec> = {
     hitstop: 0.1, slowmoT: 0.08, shake: 12, ragdollT: 0.25,
     windupSfx: "blip", hitSfx: "boom",
   },
+  wolverine: {
+    kind: "crowbar", name: "Adamantium Rush",
+    windup: 0.16, active: 0.24, recover: 0.28, cooldown: 1.05,
+    range: 72, damage: 21, knockbackX: 380, knockbackY: -210,
+    hitstop: 0.18, slowmoT: 0.24, shake: 18, ragdollT: 0.45,
+    windupSfx: "whoosh", hitSfx: "heavy",
+  },
   batman: {
     kind: "batCombo", name: "Batarang Combo",
     windup: 0.16, active: 0.28, recover: 0.3, cooldown: 1.2,

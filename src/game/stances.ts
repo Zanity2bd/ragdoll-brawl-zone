@@ -33,6 +33,7 @@ const STANCES: Partial<Record<SkinId, Stance>> = {
   flash:     { bobMul: 0.55, strideMul: 0.75, crouch: 0, lean: 2.2, sway: 0, idleMul: 0.8 },
   // Slight defaults for the rest so they still feel distinct.
   ironman:   { bobMul: 1.1, strideMul: 1.05, crouch: 0, lean: 0.3, sway: 0.2, idleMul: 1 },
+  wolverine: { bobMul: 1.35, strideMul: 0.9, crouch: -1, lean: 1.1, sway: 0.55, idleMul: 1.15 },
   superman:  { bobMul: 0.9, strideMul: 1.1, crouch: 0, lean: 0.8, sway: 0, idleMul: 1 },
   homelander:{ bobMul: 0.85, strideMul: 1.1, crouch: 0, lean: 0, sway: 0, idleMul: 1 },
   batman:    { bobMul: 1, strideMul: 1, crouch: -1, lean: 0.4, sway: 0, idleMul: 1 },

@@ -1,30 +1,28 @@
 // Per-skin walk-sheet renderer.
-// Tints the imported silhouette and bakes character-specific overlays
-// (mask, eyes, emblem, cape, cowl, beard) into a cached canvas so the
-// hot-path render is one drawImage per fighter per frame.
+//
+// The hot path is intentionally boring: drawWalkFrame() does one drawImage from
+// a cached per-skin atlas. The expensive work happens once per skin, where the
+// base alpha sheet is scanned frame-by-frame and skin materials are baked onto
+// the exact pose geometry.
 
-import spiderMaskUrl from "@/assets/spider-mask.png";
 import sheetUrl from "@/assets/walk-sheet.png";
-import { WALK_ANCHORS } from "./walkAnchors";
 import type { Skin } from "./skins";
 
 export const WALK_FRAME_W = 144;
 export const WALK_FRAME_H = 200;
 export const WALK_FRAME_COUNT = 30;
-export const WALK_LOOP_FRAMES = 10;        // walk cycle: frames 0..9
-export const PUNCH_FRAME_START = 10;       // punch: frames 10..13
+export const WALK_LOOP_FRAMES = 10;
+export const PUNCH_FRAME_START = 10;
 export const PUNCH_FRAME_COUNT = 4;
-export const RECOVERY_FRAME = 14;          // post-punch transition
-// Jump + state frames (extended pack)
+export const RECOVERY_FRAME = 14;
 export const JUMP_TAKEOFF_FRAME = 15;
 export const JUMP_RISE_FRAME = 16;
 export const JUMP_APEX_FRAME = 17;
 export const JUMP_LAND_FRAME = 18;
-export const DOWN_FRAME = 19;              // ragdoll / KO silhouette
+export const DOWN_FRAME = 19;
 export const GETUP_FRAME_A = 20;
 export const GETUP_FRAME_B = 21;
 export const HURT_FRAME = 22;
-// Combo extension — high kick (23–24), knee (25–26), slash (27–29)
 export const KICK_CHAMBER_FRAME = 23;
 export const KICK_HIT_FRAME = 24;
 export const KNEE_CHAMBER_FRAME = 25;
@@ -34,13 +32,13 @@ export const SLASH_HIT_FRAME = 28;
 export const SLASH_RECOVER_FRAME = 29;
 export const WALK_FOOT_Y = 189;
 
-// Cache buster — bump when the bake pipeline changes so stale caches are tossed.
-const SKIN_CACHE_VERSION = "v6-spider-iconic";
+const SKIN_CACHE_VERSION = "v1-alpha-authored-materials";
+const ALPHA_THRESHOLD = 24;
+const HEAD_SCAN_R = 13;
 
 let sheet: HTMLImageElement | null = null;
 let sheetReady = false;
-let spiderMask: HTMLImageElement | null = null;
-let spiderMaskReady = false;
+let sheetModel: SheetModel | null = null;
 
 const skinCache = new Map<string, HTMLCanvasElement>();
 
@@ -52,757 +50,1075 @@ export function loadWalkSheet() {
     img.src = sheetUrl;
     sheet = img;
   }
-  if (!spiderMask) {
-    const img = new Image();
-    img.decoding = "async";
-    img.onload = () => { spiderMaskReady = true; };
-    img.src = spiderMaskUrl;
-    spiderMask = img;
-  }
   return sheet;
 }
 
 export function isWalkSheetReady() {
-  return sheetReady && spiderMaskReady;
+  return sheetReady;
 }
 
-/** Build (or return cached) per-skin sprite sheet with overlays. */
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+interface FrameAnatomy {
+  frame: number;
+  bbox: Box;
+  head: Point & { r: number; top: number; bottom: number };
+  chest: Point;
+  hip: Point;
+  shoulderY: number;
+  footY: number;
+  hands: { left: Point; right: Point };
+  feet: { left: Point; right: Point };
+}
+
+interface SheetModel {
+  width: number;
+  height: number;
+  data: Uint8ClampedArray;
+  frames: FrameAnatomy[];
+}
+
+interface SkinLook {
+  base: string;
+  body: string;
+  limb: string;
+  head: string;
+  trim: string;
+  shadow: string;
+  highlight: string;
+  eye: string;
+  metal?: string;
+  suitDark?: string;
+}
+
+/** Build (or return cached) per-skin sprite sheet with authored materials. */
 function getSkinSheet(skin: Skin): HTMLCanvasElement | null {
   if (!sheet || !sheetReady) return null;
+
+  const model = getSheetModel();
+  if (!model) return null;
+
   const cacheKey = `${SKIN_CACHE_VERSION}:${skin.id}`;
   const cached = skinCache.get(cacheKey);
   if (cached) return cached;
 
-  const W = sheet.naturalWidth;
-  const H = sheet.naturalHeight;
   const c = document.createElement("canvas");
-  c.width = W; c.height = H;
+  c.width = model.width;
+  c.height = model.height;
   const ctx = c.getContext("2d");
   if (!ctx) return null;
 
-  // Spider-Man: final authored atlas path. No runtime classification,
-  // no frame-by-frame region guessing, no attack-pose heuristics.
-  if (skin.id === "spiderman") {
-    if (!spiderMask || !spiderMaskReady) return null;
-    bakeSpidermanAtlas(ctx, sheet, spiderMask, W, H);
-    skinCache.set(cacheKey, c);
-    return c;
-  }
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
 
-  // ---- Step 1: silhouette tinted as legs/limbs ----
-  ctx.drawImage(sheet, 0, 0);
-  ctx.globalCompositeOperation = "source-in";
-  ctx.fillStyle = skin.limb ?? skin.body;
-  ctx.fillRect(0, 0, W, H);
-  ctx.globalCompositeOperation = "source-over";
-
-  // ---- Step 2: per-frame overlays ----
   for (let i = 0; i < WALK_FRAME_COUNT; i++) {
-    const a = WALK_ANCHORS[i];
-    const ox = i * WALK_FRAME_W;
-    // Silhouette-authored skins (Butcher) bake unified body mass into the
-    // frame before legacy overlays so coat/shoulders/jaw/beard read as one
-    // continuous shape that follows every pose without anchor drift.
-    if (skin.silhouette) buildSilhouetteContour(ctx, skin, ox, a, i);
-    drawOverlays(ctx, skin, ox, a);
+    paintFrame(ctx, skin, model.frames[i]);
   }
 
   skinCache.set(cacheKey, c);
   return c;
 }
 
-// ---------------------------------------------------------------------------
-// Spider-Man rendering lives in exactly two places:
-//   1. walk-sheet.png (the silhouette source of truth)
-//   2. spider-mask.png + bakeSpidermanAtlas() below
-// No Spider-Man drawing code may exist anywhere else in the project.
-// The suit is a hand-authored atlas, then hard-clipped to silhouette alpha.
-// ---------------------------------------------------------------------------
+function getSheetModel(): SheetModel | null {
+  if (sheetModel) return sheetModel;
+  if (!sheet || !sheetReady) return null;
 
-function bakeSpidermanAtlas(
-  ctx: CanvasRenderingContext2D,
-  silhouette: HTMLImageElement,
-  mask: HTMLImageElement,
-  W: number,
-  H: number,
+  const c = document.createElement("canvas");
+  c.width = sheet.naturalWidth || WALK_FRAME_W * WALK_FRAME_COUNT;
+  c.height = sheet.naturalHeight || WALK_FRAME_H;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+
+  ctx.drawImage(sheet, 0, 0);
+  const image = ctx.getImageData(0, 0, c.width, c.height);
+  const model: SheetModel = {
+    width: c.width,
+    height: c.height,
+    data: image.data,
+    frames: [],
+  };
+
+  for (let i = 0; i < WALK_FRAME_COUNT; i++) {
+    model.frames.push(deriveAnatomy(model, i));
+  }
+
+  sheetModel = model;
+  return sheetModel;
+}
+
+function alphaAt(model: SheetModel, frame: number, x: number, y: number) {
+  if (x < 0 || x >= WALK_FRAME_W || y < 0 || y >= WALK_FRAME_H) return 0;
+  const px = frame * WALK_FRAME_W + x;
+  return model.data[(y * model.width + px) * 4 + 3];
+}
+
+function isSolid(model: SheetModel, frame: number, x: number, y: number) {
+  return alphaAt(model, frame, x, y) > ALPHA_THRESHOLD;
+}
+
+function deriveAnatomy(model: SheetModel, frame: number): FrameAnatomy {
+  const rowCount = new Int16Array(WALK_FRAME_H);
+  const rowSumX = new Int32Array(WALK_FRAME_H);
+  const rowMinX = new Int16Array(WALK_FRAME_H);
+  const rowMaxX = new Int16Array(WALK_FRAME_H);
+  rowMinX.fill(WALK_FRAME_W);
+  rowMaxX.fill(-1);
+
+  let left = WALK_FRAME_W;
+  let right = -1;
+  let top = WALK_FRAME_H;
+  let bottom = -1;
+
+  const integral = new Int32Array((WALK_FRAME_W + 1) * (WALK_FRAME_H + 1));
+
+  for (let y = 0; y < WALK_FRAME_H; y++) {
+    let line = 0;
+    for (let x = 0; x < WALK_FRAME_W; x++) {
+      const solid = isSolid(model, frame, x, y) ? 1 : 0;
+      if (solid) {
+        rowCount[y]++;
+        rowSumX[y] += x;
+        rowMinX[y] = Math.min(rowMinX[y], x);
+        rowMaxX[y] = Math.max(rowMaxX[y], x);
+        left = Math.min(left, x);
+        right = Math.max(right, x);
+        top = Math.min(top, y);
+        bottom = Math.max(bottom, y);
+      }
+      line += solid;
+      const ii = (y + 1) * (WALK_FRAME_W + 1) + (x + 1);
+      integral[ii] = integral[ii - (WALK_FRAME_W + 1)] + line;
+    }
+  }
+
+  if (right < left || bottom < top) {
+    const emptyHead = { x: WALK_FRAME_W / 2, y: 16, r: 13, top: 3, bottom: 29 };
+    return {
+      frame,
+      bbox: { left: 0, top: 0, right: WALK_FRAME_W - 1, bottom: WALK_FRAME_H - 1 },
+      head: emptyHead,
+      chest: { x: WALK_FRAME_W / 2, y: 44 },
+      hip: { x: WALK_FRAME_W / 2, y: 108 },
+      shoulderY: 34,
+      footY: WALK_FOOT_Y,
+      hands: { left: { x: 48, y: 65 }, right: { x: 96, y: 65 } },
+      feet: { left: { x: 54, y: WALK_FOOT_Y }, right: { x: 90, y: WALK_FOOT_Y } },
+    };
+  }
+
+  const bbox = { left, top, right, bottom };
+  const head = findHead(integral, model, frame, bbox);
+  const chest = findChest(rowCount, rowSumX, rowMinX, rowMaxX, head, bbox);
+  const hip = findHip(rowCount, rowSumX, chest, bbox);
+  const hands = findSideEndpoints(model, frame, bbox, head.bottom + 1, Math.min(hip.y + 10, bbox.bottom), chest.y);
+  const feet = findSideEndpoints(model, frame, bbox, Math.max(chest.y + 34, bbox.top), bbox.bottom, bbox.bottom);
+
+  return {
+    frame,
+    bbox,
+    head,
+    chest,
+    hip,
+    shoulderY: clamp(head.bottom + 7, bbox.top + 18, chest.y),
+    footY: bbox.bottom,
+    hands,
+    feet,
+  };
+}
+
+function boxCount(integral: Int32Array, x0: number, y0: number, x1: number, y1: number) {
+  const minX = clamp(Math.floor(x0), 0, WALK_FRAME_W);
+  const minY = clamp(Math.floor(y0), 0, WALK_FRAME_H);
+  const maxX = clamp(Math.ceil(x1), 0, WALK_FRAME_W);
+  const maxY = clamp(Math.ceil(y1), 0, WALK_FRAME_H);
+  const stride = WALK_FRAME_W + 1;
+  return (
+    integral[maxY * stride + maxX]
+    - integral[minY * stride + maxX]
+    - integral[maxY * stride + minX]
+    + integral[minY * stride + minX]
+  );
+}
+
+function findHead(integral: Int32Array, model: SheetModel, frame: number, bbox: Box) {
+  let bestX = (bbox.left + bbox.right) / 2;
+  let bestY = bbox.top + HEAD_SCAN_R;
+  let bestScore = -Infinity;
+  const scanBottom = Math.min(WALK_FRAME_H - 1, bbox.top + 106);
+
+  for (let y = bbox.top; y <= scanBottom; y++) {
+    for (let x = bbox.left; x <= bbox.right; x++) {
+      const filled = boxCount(integral, x - 11, y - 11, x + 12, y + 12);
+      const halo = boxCount(integral, x - 17, y - 17, x + 18, y + 18);
+      const compactness = filled - Math.max(0, halo - filled) * 0.08;
+      const earlyBias = Math.max(0, 90 - (y - bbox.top)) * 0.04;
+      const edgePenalty = Math.abs(x - (bbox.left + bbox.right) / 2) * 0.01;
+      const score = compactness + earlyBias - edgePenalty;
+      if (score > bestScore) {
+        bestScore = score;
+        bestX = x;
+        bestY = y;
+      }
+    }
+  }
+
+  const fit = refineSolidCentroid(model, frame, bestX, bestY, 16);
+  const width = Math.max(1, fit.right - fit.left + 1);
+  const height = Math.max(1, fit.bottom - fit.top + 1);
+  const r = clamp(Math.max(width, height) / 2, 11, 15);
+  return {
+    x: fit.count > 0 ? fit.x : bestX,
+    y: fit.count > 0 ? fit.y : bestY,
+    r,
+    top: fit.count > 0 ? fit.top : bestY - r,
+    bottom: fit.count > 0 ? fit.bottom : bestY + r,
+  };
+}
+
+function refineSolidCentroid(model: SheetModel, frame: number, cx: number, cy: number, r: number) {
+  let sumX = 0;
+  let sumY = 0;
+  let count = 0;
+  let left = WALK_FRAME_W;
+  let right = -1;
+  let top = WALK_FRAME_H;
+  let bottom = -1;
+  const r2 = r * r;
+
+  for (let y = Math.max(0, Math.floor(cy - r)); y <= Math.min(WALK_FRAME_H - 1, Math.ceil(cy + r)); y++) {
+    for (let x = Math.max(0, Math.floor(cx - r)); x <= Math.min(WALK_FRAME_W - 1, Math.ceil(cx + r)); x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      if (dx * dx + dy * dy > r2) continue;
+      if (!isSolid(model, frame, x, y)) continue;
+      sumX += x;
+      sumY += y;
+      count++;
+      left = Math.min(left, x);
+      right = Math.max(right, x);
+      top = Math.min(top, y);
+      bottom = Math.max(bottom, y);
+    }
+  }
+
+  return {
+    x: count ? sumX / count : cx,
+    y: count ? sumY / count : cy,
+    count,
+    left,
+    right,
+    top,
+    bottom,
+  };
+}
+
+function findChest(
+  rowCount: Int16Array,
+  rowSumX: Int32Array,
+  rowMinX: Int16Array,
+  rowMaxX: Int16Array,
+  head: FrameAnatomy["head"],
+  bbox: Box,
+): Point {
+  const bandTop = clamp(Math.round(head.top + 28), bbox.top, bbox.bottom);
+  const bandBottom = clamp(Math.round(head.top + 58), bandTop, bbox.bottom);
+  const rows: Array<{ y: number; score: number; x: number }> = [];
+
+  for (let y = bandTop; y <= bandBottom; y++) {
+    if (rowCount[y] <= 0) continue;
+    const width = rowMaxX[y] - rowMinX[y] + 1;
+    const score = rowCount[y] - Math.max(0, width - 84) * 0.25;
+    rows.push({ y, score, x: rowSumX[y] / rowCount[y] });
+  }
+
+  rows.sort((a, b) => b.score - a.score);
+  const chosen = rows.slice(0, 5);
+  if (!chosen.length) {
+    return { x: head.x, y: clamp(head.bottom + 24, bbox.top, bbox.bottom) };
+  }
+
+  const weight = chosen.reduce((n, row) => n + Math.max(1, row.score), 0);
+  return {
+    x: chosen.reduce((n, row) => n + row.x * Math.max(1, row.score), 0) / weight,
+    y: chosen.reduce((n, row) => n + row.y * Math.max(1, row.score), 0) / weight,
+  };
+}
+
+function findHip(rowCount: Int16Array, rowSumX: Int32Array, chest: Point, bbox: Box): Point {
+  const bandTop = clamp(Math.round(chest.y + 40), bbox.top, bbox.bottom);
+  const bandBottom = clamp(Math.round(chest.y + 86), bandTop, bbox.bottom);
+  let bestY = clamp(Math.round(chest.y + 64), bbox.top, bbox.bottom);
+  let bestCount = -1;
+
+  for (let y = bandTop; y <= bandBottom; y++) {
+    if (rowCount[y] > bestCount) {
+      bestY = y;
+      bestCount = rowCount[y];
+    }
+  }
+
+  const x = bestCount > 0 ? rowSumX[bestY] / rowCount[bestY] : chest.x;
+  return { x, y: bestY };
+}
+
+function findSideEndpoints(
+  model: SheetModel,
+  frame: number,
+  bbox: Box,
+  y0: number,
+  y1: number,
+  preferredY: number,
 ) {
-  ctx.drawImage(silhouette, 0, 0);
+  let minX = WALK_FRAME_W;
+  let maxX = -1;
+  const top = clamp(Math.round(y0), 0, WALK_FRAME_H - 1);
+  const bottom = clamp(Math.round(y1), top, WALK_FRAME_H - 1);
+
+  for (let y = top; y <= bottom; y++) {
+    for (let x = bbox.left; x <= bbox.right; x++) {
+      if (!isSolid(model, frame, x, y)) continue;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+    }
+  }
+
+  if (maxX < minX) {
+    const y = clamp(preferredY, bbox.top, bbox.bottom);
+    return {
+      left: { x: bbox.left, y },
+      right: { x: bbox.right, y },
+    };
+  }
+
+  return {
+    left: averageNearX(model, frame, minX, top, bottom, 5),
+    right: averageNearX(model, frame, maxX, top, bottom, 5),
+  };
+}
+
+function averageNearX(model: SheetModel, frame: number, targetX: number, top: number, bottom: number, radius: number): Point {
+  let sumX = 0;
+  let sumY = 0;
+  let count = 0;
+  for (let y = top; y <= bottom; y++) {
+    for (let x = Math.max(0, targetX - radius); x <= Math.min(WALK_FRAME_W - 1, targetX + radius); x++) {
+      if (!isSolid(model, frame, x, y)) continue;
+      sumX += x;
+      sumY += y;
+      count++;
+    }
+  }
+  return count ? { x: sumX / count, y: sumY / count } : { x: targetX, y: (top + bottom) / 2 };
+}
+
+function paintFrame(ctx: CanvasRenderingContext2D, skin: Skin, a: FrameAnatomy) {
+  if (!sheet) return;
+  const ox = a.frame * WALK_FRAME_W;
+  const look = getLook(skin);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(ox, 0, WALK_FRAME_W, WALK_FRAME_H);
+  ctx.clip();
+  paintSilhouette(ctx, ox, look);
+  drawBodyMass(ctx, skin, ox, a, look);
+  drawCostumePanels(ctx, skin, ox, a, look);
+  drawCape(ctx, skin, ox, a, look);
+  drawHead(ctx, skin, ox, a, look);
+  drawGlovesAndBoots(ctx, skin, ox, a, look);
+  drawEmblem(ctx, skin, ox, a, look);
+  drawSkinSpecificDetails(ctx, skin, ox, a, look);
+  ctx.restore();
+}
+
+function paintSilhouette(ctx: CanvasRenderingContext2D, ox: number, look: SkinLook) {
+  if (!sheet) return;
+
+  ctx.save();
+  ctx.drawImage(sheet, ox, 0, WALK_FRAME_W, WALK_FRAME_H, ox, 0, WALK_FRAME_W, WALK_FRAME_H);
   ctx.globalCompositeOperation = "source-in";
-  ctx.drawImage(mask, 0, 0, W, H);
-  ctx.globalCompositeOperation = "source-over";
+
+  const bodyGrad = ctx.createLinearGradient(ox, 0, ox + WALK_FRAME_W, WALK_FRAME_H);
+  bodyGrad.addColorStop(0, look.highlight);
+  bodyGrad.addColorStop(0.36, look.limb);
+  bodyGrad.addColorStop(1, look.shadow);
+  ctx.fillStyle = bodyGrad;
+  ctx.fillRect(ox, 0, WALK_FRAME_W, WALK_FRAME_H);
+
+  ctx.globalCompositeOperation = "source-atop";
+  const rim = ctx.createLinearGradient(ox, 0, ox + WALK_FRAME_W, 0);
+  rim.addColorStop(0, "oklch(1 0 0 / 0.18)");
+  rim.addColorStop(0.45, "transparent");
+  rim.addColorStop(1, "oklch(0 0 0 / 0.22)");
+  ctx.fillStyle = rim;
+  ctx.fillRect(ox, 0, WALK_FRAME_W, WALK_FRAME_H);
+  ctx.restore();
+}
+
+function drawBodyMass(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  const cx = ox + a.chest.x;
+  const cy = a.chest.y;
+  const hipY = a.hip.y;
+  const r = a.head.r;
+
+  if (skin.silhouette || skin.id === "butcher") {
+    const shoulderHalf = r * 1.45;
+    const hemHalf = r * 1.75;
+    const top = a.shoulderY - 2;
+    const bottom = Math.min(WALK_FRAME_H - 2, hipY + r * 2.2);
+    ctx.save();
+    ctx.fillStyle = look.body;
+    ctx.beginPath();
+    ctx.moveTo(cx - shoulderHalf, top);
+    ctx.bezierCurveTo(cx - hemHalf * 0.75, cy + r * 0.8, cx - hemHalf, bottom - r, cx - hemHalf * 0.7, bottom);
+    ctx.quadraticCurveTo(cx, bottom + r * 0.35, cx + hemHalf * 0.7, bottom);
+    ctx.bezierCurveTo(cx + hemHalf, bottom - r, cx + hemHalf * 0.75, cy + r * 0.8, cx + shoulderHalf, top);
+    ctx.quadraticCurveTo(cx, top - r * 0.4, cx - shoulderHalf, top);
+    ctx.fill();
+
+    const shade = ctx.createLinearGradient(0, top, 0, bottom);
+    shade.addColorStop(0, "transparent");
+    shade.addColorStop(1, "oklch(0 0 0 / 0.30)");
+    ctx.fillStyle = shade;
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  if (!skin.thickBody && skin.id !== "wolverine") return;
+
+  const torsoHalf = r * (skin.id === "ironman" ? 1.12 : skin.id === "wolverine" ? 1.02 : 0.95);
+  const top = a.shoulderY - r * 0.15;
+  const bottom = Math.min(WALK_FRAME_H - 3, hipY + r * 0.45);
+
+  ctx.save();
+  ctx.fillStyle = look.body;
+  ctx.beginPath();
+  ctx.moveTo(cx - torsoHalf, top + r * 0.25);
+  ctx.quadraticCurveTo(cx - torsoHalf * 0.75, top - r * 0.25, cx, top);
+  ctx.quadraticCurveTo(cx + torsoHalf * 0.75, top - r * 0.25, cx + torsoHalf, top + r * 0.25);
+  ctx.lineTo(cx + torsoHalf * 0.62, bottom);
+  ctx.quadraticCurveTo(cx, bottom + r * 0.25, cx - torsoHalf * 0.62, bottom);
+  ctx.closePath();
+  ctx.fill();
+
+  const shade = ctx.createLinearGradient(0, top, 0, bottom);
+  shade.addColorStop(0, "oklch(1 0 0 / 0.10)");
+  shade.addColorStop(0.7, "transparent");
+  shade.addColorStop(1, "oklch(0 0 0 / 0.24)");
+  ctx.fillStyle = shade;
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCostumePanels(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  const cx = ox + a.chest.x;
+  const cy = a.chest.y;
+  const r = a.head.r;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "source-atop";
+
+  if (skin.body !== (skin.limb ?? skin.body)) {
+    ctx.fillStyle = look.body;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + r * 0.55, r * 1.05, r * 1.9, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  switch (skin.id) {
+    case "spiderman": {
+      ctx.fillStyle = look.body;
+      ctx.beginPath();
+      ctx.moveTo(cx, a.shoulderY - r * 0.15);
+      ctx.lineTo(cx + r * 0.8, cy + r * 1.9);
+      ctx.lineTo(cx - r * 0.8, cy + r * 1.9);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case "ironman": {
+      ctx.strokeStyle = look.trim;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.95, cy + r * 0.2);
+      ctx.lineTo(cx, cy + r * 1.05);
+      ctx.lineTo(cx + r * 0.95, cy + r * 0.2);
+      ctx.stroke();
+      break;
+    }
+    case "wolverine": {
+      ctx.fillStyle = look.suitDark ?? look.shadow;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 1.0, a.shoulderY);
+      ctx.lineTo(cx - r * 0.45, a.hip.y + r * 0.25);
+      ctx.lineTo(cx - r * 1.35, a.hip.y + r * 0.15);
+      ctx.closePath();
+      ctx.moveTo(cx + r * 1.0, a.shoulderY);
+      ctx.lineTo(cx + r * 0.45, a.hip.y + r * 0.25);
+      ctx.lineTo(cx + r * 1.35, a.hip.y + r * 0.15);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case "flash":
+    case "atrain": {
+      ctx.strokeStyle = look.trim;
+      ctx.lineWidth = 2.2;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.8, cy - r * 0.2);
+      ctx.lineTo(cx + r * 0.5, cy + r * 0.9);
+      ctx.moveTo(cx - r * 0.55, cy + r * 1.15);
+      ctx.lineTo(cx + r * 0.9, cy + r * 1.6);
+      ctx.stroke();
+      break;
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawCape(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  if (!skin.cape) return;
+  const cx = ox + a.chest.x;
+  const cy = a.chest.y;
+  const r = a.head.r;
+  const sway = capeSway(a.frame);
+  const bottom = Math.min(WALK_FRAME_H - 4, Math.max(a.footY - 8, a.hip.y + r * 4.6));
+
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-over";
+  ctx.fillStyle = skin.cape;
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 1.0, a.shoulderY + r * 0.2);
+  ctx.bezierCurveTo(cx - r * 2.0 + sway, cy + r * 1.4, cx - r * 1.65 + sway, bottom - r * 0.8, cx - r * 0.55 + sway * 0.5, bottom);
+  ctx.quadraticCurveTo(cx + sway * 0.3, bottom + r * 0.45, cx + r * 0.55 + sway * 0.5, bottom);
+  ctx.bezierCurveTo(cx + r * 1.65 + sway, bottom - r * 0.8, cx + r * 2.0 + sway, cy + r * 1.4, cx + r * 1.0, a.shoulderY + r * 0.2);
+  ctx.closePath();
+  ctx.fill();
+
+  if (skin.capeAccent) {
+    ctx.fillStyle = skin.capeAccent;
+    ctx.globalAlpha = 0.58;
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.35, a.shoulderY + r * 0.55);
+    ctx.lineTo(cx + r * 0.45, a.shoulderY + r * 0.55);
+    ctx.lineTo(cx + r * 0.18 + sway * 0.3, bottom - r * 0.2);
+    ctx.lineTo(cx - r * 0.18 + sway * 0.3, bottom - r * 0.2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  if (skin.id === "batman") {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.strokeStyle = "oklch(0.04 0.01 280 / 0.8)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 1.0, a.shoulderY + r * 0.2);
+    ctx.quadraticCurveTo(cx + sway * 0.3, cy + r * 2.5, cx + r * 0.55 + sway * 0.5, bottom);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  void look;
+}
+
+function drawHead(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  const hx = ox + a.head.x;
+  const hy = a.head.y;
+  const r = a.head.r * 1.05;
+
+  ctx.save();
+  ctx.fillStyle = look.head;
+  ctx.beginPath();
+  ctx.arc(hx, hy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (skin.skinTone) {
+    ctx.fillStyle = skin.skinTone;
+    ctx.beginPath();
+    if (skin.skinToneMode === "fullHead") {
+      ctx.arc(hx, hy + r * 0.05, r * 0.86, 0, Math.PI * 2);
+    } else {
+      ctx.ellipse(hx, hy + r * 0.18, r * 0.68, r * 0.74, 0, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.fillStyle = look.head;
+    ctx.beginPath();
+    ctx.arc(hx, hy - r * 0.24, r * 0.92, Math.PI, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (skin.id === "wolverine") {
+    ctx.fillStyle = look.suitDark ?? "oklch(0.12 0.04 250)";
+    ctx.beginPath();
+    ctx.moveTo(hx - r * 0.75, hy - r * 0.35);
+    ctx.lineTo(hx - r * 1.18, hy - r * 1.35);
+    ctx.lineTo(hx - r * 0.24, hy - r * 0.72);
+    ctx.closePath();
+    ctx.moveTo(hx + r * 0.75, hy - r * 0.35);
+    ctx.lineTo(hx + r * 1.18, hy - r * 1.35);
+    ctx.lineTo(hx + r * 0.24, hy - r * 0.72);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  if (skin.cowlEars) {
+    ctx.fillStyle = look.head;
+    ctx.beginPath();
+    ctx.moveTo(hx - r * 0.72, hy - r * 0.52);
+    ctx.lineTo(hx - r * 0.45, hy - r * 1.55);
+    ctx.lineTo(hx - r * 0.18, hy - r * 0.62);
+    ctx.closePath();
+    ctx.moveTo(hx + r * 0.72, hy - r * 0.52);
+    ctx.lineTo(hx + r * 0.45, hy - r * 1.55);
+    ctx.lineTo(hx + r * 0.18, hy - r * 0.62);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  const hi = ctx.createRadialGradient(hx - r * 0.32, hy - r * 0.38, 1, hx, hy, r * 1.2);
+  hi.addColorStop(0, "oklch(1 0 0 / 0.20)");
+  hi.addColorStop(0.55, "transparent");
+  hi.addColorStop(1, "oklch(0 0 0 / 0.18)");
+  ctx.fillStyle = hi;
+  ctx.beginPath();
+  ctx.arc(hx, hy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  drawEyes(ctx, skin, hx, hy, r, look);
+  drawHeadPattern(ctx, skin, hx, hy, r, look);
+
+  ctx.strokeStyle = "oklch(0.05 0.01 260 / 0.55)";
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.arc(hx, hy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawEyes(
+  ctx: CanvasRenderingContext2D,
+  skin: Skin,
+  hx: number,
+  hy: number,
+  r: number,
+  look: SkinLook,
+) {
+  const ey = hy - r * 0.08;
+  const ex = r * 0.38;
+
+  if (skin.id === "spiderman") {
+    ctx.fillStyle = "oklch(0.98 0.02 240)";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(hx + side * ex, ey, r * 0.26, r * 0.14, side * -0.22, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (skin.id === "ironman" || skin.id === "batman" || skin.id === "wolverine") {
+    ctx.fillStyle = skin.id === "ironman" ? "oklch(0.92 0.16 205)" : "oklch(0.96 0.04 100)";
+    for (const side of [-1, 1]) {
+      ctx.fillRect(hx + side * ex - 4, ey - 1.2, 7, 2.6);
+    }
+    return;
+  }
+
+  if (skin.glowingEyes) {
+    ctx.fillStyle = skin.glowingEyes;
+    ctx.shadowColor = skin.glowingEyes;
+    ctx.shadowBlur = 8;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(hx + side * ex, ey, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    return;
+  }
+
+  if (skin.skinTone) {
+    ctx.fillStyle = "oklch(0.14 0.02 260)";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(hx + side * ex, ey, 1.55, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+
+  ctx.fillStyle = look.eye;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(hx + side * ex, ey, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawHeadPattern(ctx: CanvasRenderingContext2D, skin: Skin, hx: number, hy: number, r: number, look: SkinLook) {
+  if (skin.id !== "spiderman") return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(hx, hy, r * 0.92, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.strokeStyle = "oklch(0.12 0.04 260 / 0.62)";
+  ctx.lineWidth = 0.8;
+  for (let i = -2; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(hx, hy - r * 0.95);
+    ctx.quadraticCurveTo(hx + i * r * 0.26, hy, hx + i * r * 0.46, hy + r * 0.95);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.ellipse(hx, hy + r * (i * 0.24 - 0.25), r * (0.42 + i * 0.18), r * (0.18 + i * 0.06), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+  void look;
+}
+
+function drawGlovesAndBoots(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  const glove = skin.gloves;
+  const boot = skin.boots;
+  const r = a.head.r;
+
+  if (glove) {
+    ctx.save();
+    ctx.fillStyle = glove;
+    for (const hand of [a.hands.left, a.hands.right]) {
+      ctx.beginPath();
+      ctx.ellipse(ox + hand.x, hand.y, r * 0.35, r * 0.27, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if (boot) {
+    ctx.save();
+    ctx.fillStyle = boot;
+    for (const foot of [a.feet.left, a.feet.right]) {
+      ctx.beginPath();
+      ctx.ellipse(ox + foot.x, foot.y, r * 0.46, r * 0.22, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  void look;
+}
+
+function drawEmblem(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  if (!skin.emblem) return;
+  const cx = ox + a.chest.x;
+  const cy = a.chest.y + a.head.r * 0.35;
+  const r = a.head.r * 0.92;
+
+  ctx.save();
+  ctx.fillStyle = skin.emblem.color;
+  ctx.strokeStyle = skin.emblem.color;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  switch (skin.emblem.shape) {
+    case "spider":
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 0.35);
+      ctx.lineTo(cx, cy + r * 0.35);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.42, r * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+      for (const side of [-1, 1]) {
+        for (const yy of [-0.25, -0.08, 0.1, 0.28]) {
+          ctx.beginPath();
+          ctx.moveTo(cx, cy + r * yy);
+          ctx.lineTo(cx + side * r * 0.42, cy + r * (yy - 0.15));
+          ctx.lineTo(cx + side * r * 0.62, cy + r * (yy - 0.28));
+          ctx.stroke();
+        }
+      }
+      break;
+    case "shield":
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r * 0.56);
+      ctx.lineTo(cx + r * 0.52, cy - r * 0.2);
+      ctx.lineTo(cx + r * 0.34, cy + r * 0.55);
+      ctx.lineTo(cx - r * 0.34, cy + r * 0.55);
+      ctx.lineTo(cx - r * 0.52, cy - r * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case "oval":
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, r * 0.6, r * 0.32, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = look.shadow;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.48, cy);
+      ctx.lineTo(cx, cy - r * 0.07);
+      ctx.lineTo(cx + r * 0.48, cy);
+      ctx.lineTo(cx, cy + r * 0.07);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case "circle":
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.32, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = look.trim;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    case "lightning":
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.15, cy - r * 0.52);
+      ctx.lineTo(cx + r * 0.22, cy - r * 0.06);
+      ctx.lineTo(cx - r * 0.04, cy - r * 0.05);
+      ctx.lineTo(cx + r * 0.16, cy + r * 0.55);
+      ctx.lineTo(cx - r * 0.22, cy + r * 0.05);
+      ctx.lineTo(cx + r * 0.05, cy + r * 0.05);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case "stripe":
+      ctx.fillRect(cx - r * 0.56, cy - r * 0.1, r * 1.12, r * 0.22);
+      break;
+  }
+
+  ctx.restore();
+}
+
+function drawSkinSpecificDetails(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  const cx = ox + a.chest.x;
+  const cy = a.chest.y;
+  const r = a.head.r;
+
+  if (skin.id === "wolverine") {
+    ctx.save();
+    ctx.strokeStyle = look.metal ?? "oklch(0.88 0.02 250)";
+    ctx.lineWidth = 1.7;
+    ctx.lineCap = "round";
+    for (const hand of [a.hands.left, a.hands.right]) {
+      const hx = ox + hand.x;
+      const dir = hx < cx ? -1 : 1;
+      for (const offset of [-2.6, 0, 2.6]) {
+        ctx.beginPath();
+        ctx.moveTo(hx + dir * r * 0.22, hand.y + offset);
+        ctx.lineTo(hx + dir * r * 0.95, hand.y + offset - r * 0.16);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  if (skin.id === "flash" || skin.id === "atrain") {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = skin.streaks ?? look.trim;
+    ctx.lineWidth = 1.2;
+    ctx.globalAlpha = 0.55;
+    const slant = skin.id === "atrain" ? -1 : 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 1.1 * slant, cy + r * 0.8);
+    ctx.lineTo(cx - r * 2.0 * slant, cy + r * 0.2);
+    ctx.moveTo(cx - r * 0.7 * slant, cy + r * 1.5);
+    ctx.lineTo(cx - r * 1.7 * slant, cy + r * 1.15);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  if (skin.id === "butcher") {
+    const hx = ox + a.head.x;
+    const hy = a.head.y;
+    ctx.save();
+    ctx.strokeStyle = "oklch(0.46 0.018 250 / 0.78)";
+    ctx.lineWidth = 1.1;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.62, a.shoulderY + r * 0.12);
+    ctx.lineTo(cx - r * 0.16, cy + r * 0.78);
+    ctx.lineTo(cx, a.hip.y + r * 1.55);
+    ctx.lineTo(cx + r * 0.16, cy + r * 0.78);
+    ctx.lineTo(cx + r * 0.62, a.shoulderY + r * 0.12);
+    ctx.stroke();
+
+    ctx.strokeStyle = "oklch(0.12 0.012 250 / 0.75)";
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + r * 0.85);
+    ctx.lineTo(cx, Math.min(WALK_FRAME_H - 4, a.hip.y + r * 1.9));
+    ctx.stroke();
+
+    ctx.fillStyle = "oklch(0.14 0.01 30)";
+    ctx.beginPath();
+    ctx.ellipse(hx, hy + r * 0.52, r * 0.72, r * 0.36, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "oklch(0.06 0.01 30 / 0.8)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(hx - r * 0.45, hy + r * 0.44);
+    ctx.quadraticCurveTo(hx, hy + r * 0.78, hx + r * 0.45, hy + r * 0.44);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function getLook(skin: Skin): SkinLook {
+  const base = skin.limb ?? skin.body;
+  const body = skin.body;
+  const head = skin.head ?? skin.body;
+  const trim = skin.emblem?.color ?? skin.glow;
+
+  switch (skin.id) {
+    case "spiderman":
+      return {
+        base,
+        limb: "oklch(0.30 0.13 258)",
+        body: "oklch(0.49 0.19 24)",
+        head: "oklch(0.50 0.19 24)",
+        trim: "oklch(0.12 0.04 258)",
+        shadow: "oklch(0.13 0.05 258)",
+        highlight: "oklch(0.68 0.16 28)",
+        eye: "oklch(0.97 0.02 240)",
+      };
+    case "ironman":
+      return {
+        base,
+        limb: "oklch(0.68 0.14 82)",
+        body: "oklch(0.43 0.18 25)",
+        head: "oklch(0.67 0.14 82)",
+        trim: "oklch(0.86 0.13 205)",
+        shadow: "oklch(0.20 0.08 25)",
+        highlight: "oklch(0.82 0.12 84)",
+        eye: "oklch(0.94 0.13 205)",
+        metal: "oklch(0.80 0.05 95)",
+      };
+    case "wolverine":
+      return {
+        base,
+        limb: "oklch(0.23 0.08 255)",
+        body: "oklch(0.78 0.16 86)",
+        head: "oklch(0.77 0.16 86)",
+        trim: "oklch(0.16 0.05 250)",
+        shadow: "oklch(0.12 0.04 250)",
+        highlight: "oklch(0.94 0.10 92)",
+        eye: "oklch(0.98 0.04 100)",
+        metal: "oklch(0.88 0.02 250)",
+        suitDark: "oklch(0.16 0.06 255)",
+      };
+    case "batman":
+      return {
+        base,
+        limb: "oklch(0.25 0.02 278)",
+        body: "oklch(0.28 0.016 275)",
+        head: "oklch(0.16 0.018 280)",
+        trim: "oklch(0.78 0.16 90)",
+        shadow: "oklch(0.07 0.012 280)",
+        highlight: "oklch(0.45 0.025 280)",
+        eye: "oklch(0.96 0.04 100)",
+      };
+    case "superman":
+      return {
+        base,
+        limb: "oklch(0.38 0.18 260)",
+        body: "oklch(0.38 0.18 260)",
+        head,
+        trim,
+        shadow: "oklch(0.15 0.08 260)",
+        highlight: "oklch(0.62 0.14 255)",
+        eye: "oklch(0.14 0.02 260)",
+      };
+    case "flash":
+      return {
+        base,
+        limb: "oklch(0.49 0.20 25)",
+        body: "oklch(0.49 0.20 25)",
+        head: "oklch(0.50 0.20 25)",
+        trim: "oklch(0.86 0.16 86)",
+        shadow: "oklch(0.22 0.10 25)",
+        highlight: "oklch(0.66 0.18 32)",
+        eye: "oklch(0.95 0.05 90)",
+      };
+    case "homelander":
+      return {
+        base,
+        limb: "oklch(0.80 0.05 250)",
+        body: "oklch(0.82 0.05 250)",
+        head,
+        trim: "oklch(0.72 0.16 85)",
+        shadow: "oklch(0.40 0.06 250)",
+        highlight: "oklch(0.98 0.02 250)",
+        eye: skin.glowingEyes ?? "oklch(0.82 0.18 60)",
+      };
+    case "butcher":
+      return {
+        base,
+        limb: "oklch(0.16 0.04 260)",
+        body: "oklch(0.27 0.014 250)",
+        head,
+        trim: "oklch(0.58 0.05 220)",
+        shadow: "oklch(0.10 0.02 250)",
+        highlight: "oklch(0.42 0.018 250)",
+        eye: "oklch(0.12 0.02 30)",
+      };
+    case "atrain":
+      return {
+        base,
+        limb: "oklch(0.40 0.18 25)",
+        body: "oklch(0.43 0.19 25)",
+        head: "oklch(0.42 0.18 25)",
+        trim: "oklch(0.92 0.02 250)",
+        shadow: "oklch(0.18 0.08 25)",
+        highlight: "oklch(0.64 0.16 30)",
+        eye: "oklch(0.92 0.02 250)",
+      };
+    default:
+      return {
+        base,
+        limb: base,
+        body,
+        head,
+        trim,
+        shadow: "oklch(0.10 0.03 260)",
+        highlight: "oklch(0.82 0.03 250)",
+        eye: skin.glowingEyes ?? "oklch(0.96 0.04 90)",
+      };
+  }
+}
+
+function capeSway(frame: number) {
+  if (frame < 10) return Math.sin((frame / 10) * Math.PI * 2) * 2.2;
+  if (frame === KICK_HIT_FRAME || frame === SLASH_HIT_FRAME) return -5;
+  if (frame === HURT_FRAME) return 4;
+  if (frame === DOWN_FRAME) return 1;
+  return 0;
 }
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
-}
-
-function smoothstep(t: number) {
-  const x = clamp(t, 0, 1);
-  return x * x * (3 - 2 * x);
-}
-
-
-// ---------------------------------------------------------------------------
-// Motion shaping: per-frame deltas applied inside buildSilhouetteContour.
-// Encodes impact compression, jump stretch, landing flare, recovery lag,
-// directional bias, controlled asymmetry. All clamped against minVolume.
-// ---------------------------------------------------------------------------
-
-interface MotionShape {
-  flareMul: number;
-  hemDropMul: number;
-  hemSkewX: number;
-  shoulderWidthMul: number;
-  shoulderAsym: number;
-  torsoCompressY: number;
-  torsoStretchY: number;
-  torsoCompressX: number;
-  beardLagX: number;
-  coatAsymX: number;
-}
-
-const BASE_MOTION: MotionShape = {
-  flareMul: 1, hemDropMul: 1, hemSkewX: 0,
-  shoulderWidthMul: 1, shoulderAsym: 0,
-  torsoCompressY: 1, torsoStretchY: 1, torsoCompressX: 1,
-  beardLagX: 0, coatAsymX: 0,
-};
-
-const MOTION_SHAPING: MotionShape[] = (() => {
-  const m: MotionShape[] = [];
-  for (let i = 0; i < WALK_FRAME_COUNT; i++) m.push({ ...BASE_MOTION });
-  // Walk 0..9 — gentle controlled asymmetry per footfall.
-  for (let i = 0; i < 10; i++) {
-    m[i].hemSkewX = (i % 2 === 0 ? 1 : -1) * 0.8;
-    m[i].coatAsymX = (i % 2 === 0 ? 1 : -1) * 0.5;
-  }
-  // Punch 10..13 — impact compression on hit frames.
-  m[11].torsoCompressX = 0.97; m[11].shoulderAsym = 1;
-  m[12].torsoCompressX = 0.96; m[12].shoulderAsym = 1.5; m[12].hemSkewX = -1.5;
-  m[13].torsoCompressX = 0.98; m[13].shoulderAsym = 1;
-  // Recovery 14
-  m[14].flareMul = 1.02;
-  // Jump takeoff (15) — squat compression
-  m[15].torsoCompressY = 0.93; m[15].flareMul = 1.05;
-  // Jump rise (16) — vertical stretch
-  m[16].torsoStretchY = 1.04; m[16].hemDropMul = 0.92;
-  // Jump apex (17) — coat arcs opposite spin
-  m[17].flareMul = 1.08; m[17].hemSkewX = -2;
-  // Landing (18) — fast compression + wide flare
-  m[18].torsoCompressY = 0.94; m[18].flareMul = 1.12;
-  // Down/getup (19..21) — recovery curve
-  m[19].flareMul = 1.10; m[19].hemDropMul = 1.05;
-  m[20].flareMul = 1.06;
-  m[21].flareMul = 1.02;
-  // Hurt 22 — recoil asymmetry
-  m[22].torsoCompressX = 0.95; m[22].shoulderAsym = -1.5; m[22].coatAsymX = -1.5;
-  // Kicks/knees/slash 23..29
-  m[24].hemSkewX = -1.5; m[24].coatAsymX = 1;
-  m[26].torsoCompressY = 0.95; m[26].flareMul = 1.04;
-  m[28].hemSkewX = -1.5; m[28].shoulderAsym = 1; m[28].coatAsymX = 1;
-  return m;
-})();
-
-/** Bake unified silhouette mass (limbs → torso/coat/shoulders → head/jaw/beard)
- *  into the cached frame. One continuous fill per tier so the body reads as a
- *  single authored contour, not stacked decorations. */
-function buildSilhouetteContour(
-  ctx: CanvasRenderingContext2D,
-  skin: Skin,
-  ox: number,
-  a: typeof WALK_ANCHORS[number],
-  frameIdx: number,
-) {
-  const s = skin.silhouette!;
-  const m = MOTION_SHAPING[frameIdx] ?? BASE_MOTION;
-  const hx = ox + a.hx;
-  const hy = a.hy;
-  const cx = ox + a.cx;
-  const cy = a.cy;
-  const r = a.hr;
-
-  // Clamp secondary motion when primary is deforming strongly (rule 9).
-  const primaryDeform = Math.abs(m.torsoCompressX - 1) + Math.abs(m.torsoCompressY - 1);
-  const secScale = Math.max(0, 1 - primaryDeform * 6);
-  const beardLag = m.beardLagX * secScale;
-  const coatAsym = m.coatAsymX * secScale;
-
-  // Apply minVolume floors (rule 4 — readability never collapses).
-  const flare = Math.max(s.coat.flare * m.flareMul, s.coat.flare * s.minVolume.coatWidth);
-  const shoulderWMul = Math.max(
-    s.shoulders.widthMul * m.shoulderWidthMul,
-    s.shoulders.widthMul * s.minVolume.shoulderWidth,
-  );
-
-  // --- TERTIARY: limb thickening capsules (drawn first, torso unions over) ---
-  ctx.save();
-  ctx.fillStyle = s.coat.color;
-  // thighs: from hip to footY, two columns
-  const thighW = r * 0.45 * s.limbs.thighMul;
-  const calfW = r * 0.38 * s.limbs.calfMul;
-  for (const side of [-1, 1]) {
-    ctx.beginPath();
-    ctx.ellipse(cx + side * r * 0.35, a.hipY + 4, thighW * 0.5, r * 0.8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(cx + side * r * 0.4, a.hipY + r * 1.8, calfW * 0.5, r * 1.1, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-
-  // --- PRIMARY: torso + coat + shoulders as ONE continuous tapered contour ---
-  // Sloped trapezius → shoulder peak (widest) → chest taper → waist pinch →
-  // coat re-flare → softened hem. Cubic beziers per side, mirrored.
-  const torsoTop = cy - r * 0.65 + s.shoulders.slumpPx;
-  const torsoBot = a.hipY + s.coat.hemDrop * m.hemDropMul;
-  const torsoHCompress = (torsoBot - torsoTop) * m.torsoCompressY * m.torsoStretchY;
-  const baseShoulderHalf = r * shoulderWMul;
-  const compressX = m.torsoCompressX;
-  const shoulderHalfL = (baseShoulderHalf - m.shoulderAsym) * compressX;
-  const shoulderHalfR = (baseShoulderHalf + m.shoulderAsym) * compressX;
-  const hemHalfBase = r * flare * compressX;
-  // Clamp: shoulders must remain the widest point of the figure.
-  const shoulderHalfLc = Math.max(shoulderHalfL, hemHalfBase + 1);
-  const shoulderHalfRc = Math.max(shoulderHalfR, hemHalfBase + 1);
-  const waistMul = 0.85;       // gentle pinch — avoid hourglass at mobile scale
-  const chestMul = 0.94;       // ~6% inward chest taper
-  const lowerCoatMul = 0.92;   // coat re-widens below waist
-  const neckHalf = r * s.neck.widthMul * 0.5;
-  const hemSkew = m.hemSkewX;
-  const tBot = torsoTop + torsoHCompress;
-
-  // Motion-only hem asymmetry — coatAsym is 0 on idle frames.
-  const hemDipL = Math.max(0, -coatAsym) * 1.2;
-  const hemDipR = Math.max(0,  coatAsym) * 1.2;
-
-  const shoulderY  = torsoTop + r * 0.08;
-  const chestY     = torsoTop + r * 0.45;
-  const waistY     = torsoTop + r * 0.95;
-  const lowerCoatY = torsoTop + r * 1.45;
-  const waistDriftL = -coatAsym * 0.3;
-  const waistDriftR =  coatAsym * 0.3;
-
-  ctx.save();
-  ctx.fillStyle = s.coat.color;
-  ctx.beginPath();
-
-  // Start at LEFT neck-side anchor, just above torsoTop (no flat top edge).
-  ctx.moveTo(cx - neckHalf, torsoTop - r * 0.02);
-
-  // 1) Trapezius merge: neck → left shoulder peak.
-  ctx.bezierCurveTo(
-    cx - neckHalf - r * 0.18,         torsoTop - r * 0.01,
-    cx - shoulderHalfLc * 0.85,       torsoTop + r * 0.02,
-    cx - shoulderHalfLc,              shoulderY,
-  );
-  // 2) Shoulder peak → chest.
-  ctx.bezierCurveTo(
-    cx - shoulderHalfLc,              shoulderY + r * 0.15,
-    cx - shoulderHalfLc * chestMul,   chestY - r * 0.10,
-    cx - shoulderHalfLc * chestMul,   chestY,
-  );
-  // 3) Chest → waist pinch.
-  ctx.bezierCurveTo(
-    cx - shoulderHalfLc * chestMul,             chestY + r * 0.20,
-    cx - shoulderHalfLc * waistMul + waistDriftL, waistY - r * 0.20,
-    cx - shoulderHalfLc * waistMul + waistDriftL, waistY,
-  );
-  // 4) Waist → lower coat re-flare.
-  ctx.bezierCurveTo(
-    cx - shoulderHalfLc * waistMul + waistDriftL, waistY + r * 0.20,
-    cx - hemHalfBase * lowerCoatMul,              lowerCoatY - r * 0.15,
-    cx - hemHalfBase + hemSkew - coatAsym,        tBot + hemDipL,
-  );
-  // 5) Hem across (softened — hanging fabric).
-  ctx.quadraticCurveTo(
-    cx + hemSkew,                                 tBot + s.coat.sideDrop * 1.4,
-    cx + hemHalfBase + hemSkew + coatAsym,        tBot + hemDipR,
-  );
-  // 6) Lower coat → right waist.
-  ctx.bezierCurveTo(
-    cx + hemHalfBase * lowerCoatMul,              lowerCoatY - r * 0.15,
-    cx + shoulderHalfRc * waistMul + waistDriftR, waistY + r * 0.20,
-    cx + shoulderHalfRc * waistMul + waistDriftR, waistY,
-  );
-  // 7) Waist → chest.
-  ctx.bezierCurveTo(
-    cx + shoulderHalfRc * waistMul + waistDriftR, waistY - r * 0.20,
-    cx + shoulderHalfRc * chestMul,               chestY + r * 0.20,
-    cx + shoulderHalfRc * chestMul,               chestY,
-  );
-  // 8) Chest → right shoulder peak.
-  ctx.bezierCurveTo(
-    cx + shoulderHalfRc * chestMul,   chestY - r * 0.10,
-    cx + shoulderHalfRc,              shoulderY + r * 0.15,
-    cx + shoulderHalfRc,              shoulderY,
-  );
-  // 9) Right shoulder peak → right neck anchor (mirrored trapezius merge).
-  ctx.bezierCurveTo(
-    cx + shoulderHalfRc * 0.85,       torsoTop + r * 0.02,
-    cx + neckHalf + r * 0.18,         torsoTop - r * 0.01,
-    cx + neckHalf,                    torsoTop - r * 0.02,
-  );
-  ctx.closePath();
-  ctx.fill();
-
-  // Anti-flatness: lower-interior shade.
-  ctx.save();
-  ctx.clip();
-  const grad = ctx.createLinearGradient(0, torsoTop + torsoHCompress * 0.5, 0, tBot + s.coat.sideDrop);
-  grad.addColorStop(0, "transparent");
-  grad.addColorStop(1, s.coat.interiorShade);
-  ctx.fillStyle = grad;
-  ctx.fillRect(cx - hemHalfBase - 10, torsoTop, hemHalfBase * 2 + 20, torsoHCompress + s.coat.sideDrop + 5);
-  ctx.restore();
-
-  // Shoulder-slope highlight.
-  ctx.fillStyle = s.shoulders.highlight;
-  ctx.beginPath();
-  ctx.ellipse(cx, torsoTop + r * 0.06, baseShoulderHalf * 0.7 * compressX, 1.2, 0, 0, Math.PI * 2);
-
-  ctx.fill();
-  ctx.restore();
-
-  // --- SECONDARY: head + jaw + neck + beard as ONE continuous shape ---
-  // Neck rectangle overlaps the top of the primary by ~3px → no seam.
-  const neckW = r * s.neck.widthMul;
-  const neckTop = hy + r * 1.0;
-  const neckBot = torsoTop + 3;
-  const jawW = r * s.jaw.widthMul;
-  const jawDrop = r * s.jaw.dropMul;
-  const headCx = hx;
-  const headCy = hy + r * 0.18;
-  const headR = r * 1.18;
-  const beardW = Math.max(
-    Math.min(jawW * s.beard.widthMul, baseShoulderHalf * s.taperRule.beardMaxOfShoulder),
-    jawW * s.minVolume.beardWidth,
-  );
-  const beardH = r * s.beard.heightMul;
-  const beardCy = hy + r * 0.55 + jawDrop * 0.5;
-
-  ctx.save();
-  ctx.fillStyle = skin.head ?? "oklch(0.74 0.07 55)";
-  ctx.beginPath();
-  // Skull arc (left side around to right)
-  ctx.arc(headCx, headCy, headR, Math.PI, Math.PI * 2);
-  // Down into jaw
-  ctx.lineTo(headCx + jawW, headCy + jawDrop);
-  ctx.quadraticCurveTo(headCx + jawW, neckTop, headCx + neckW * 0.5, neckTop);
-  ctx.lineTo(headCx + neckW * 0.5, neckBot);
-  ctx.lineTo(headCx - neckW * 0.5, neckBot);
-  ctx.lineTo(headCx - neckW * 0.5, neckTop);
-  ctx.quadraticCurveTo(headCx - jawW, neckTop, headCx - jawW, headCy + jawDrop);
-  ctx.closePath();
-  ctx.fill();
-
-  // Beard sub-region in the same continuous body — fill darker, then underside shade.
-  ctx.fillStyle = s.beard.color;
-  ctx.beginPath();
-  ctx.ellipse(headCx + beardLag, beardCy, beardW, beardH, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Beard underside darken strip (rule 4)
-  ctx.fillStyle = s.beard.undersideShade;
-  ctx.beginPath();
-  ctx.ellipse(headCx + beardLag, beardCy + beardH * 0.55, beardW * 0.85, beardH * 0.25, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Tiny eye dots so the face reads from a distance (engraved, not overlay).
-  ctx.fillStyle = "oklch(0.14 0.02 30)";
-  const ey = headCy - r * 0.05;
-  for (const side of [-1, 1]) {
-    ctx.beginPath();
-    ctx.arc(headCx + side * r * 0.38, ey, 1.6, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-
-function drawOverlays(
-  ctx: CanvasRenderingContext2D,
-  skin: Skin,
-  ox: number,
-  a: typeof WALK_ANCHORS[number],
-) {
-  const hx = ox + a.hx;
-  const hy = a.hy;
-  const cx = ox + a.cx;
-  const cy = a.cy;
-  const r = a.hr;
-
-  // ---- Upper-body recolor (arms + torso area) ----
-  // Silhouette was tinted with `limb` (treated as legs base). If `arms` is
-  // defined, source-atop recolor the upper region (above hipY) so arms/torso
-  // read as a different color from legs.
-  if (skin.arms && skin.arms !== (skin.limb ?? skin.body)) {
-    ctx.save();
-    ctx.globalCompositeOperation = "source-atop";
-    ctx.fillStyle = skin.arms;
-    ctx.fillRect(ox, 0, WALK_FRAME_W, a.hipY);
-    ctx.restore();
-  }
-
-  // Silhouette-authored skins own their head/body/beard contour — skip the
-  // legacy head circle, skin-tone overlay, mask, beard, emblem patch.
-  if (skin.silhouette) return;
-
-  // ---- Head region recolor (engraved into silhouette, no overlay shift) ----
-  // When noHead is set + a head color is defined, source-atop the head band
-  // so the silhouette's own head shape carries the color in every frame.
-  if (skin.noHead && skin.head) {
-    ctx.save();
-    ctx.globalCompositeOperation = "source-atop";
-    ctx.fillStyle = skin.head;
-    const headBandBot = a.hy + a.hr * 1.4;
-    ctx.fillRect(ox, 0, WALK_FRAME_W, headBandBot);
-    ctx.restore();
-  }
-
-
-
-
-  // ---- Body thickening pass (baked) ----
-  // Adds visible torso + limb mass so thickBody skins look premium, not skinny.
-  if (skin.thickBody) {
-    ctx.save();
-    ctx.fillStyle = skin.body;
-    // Torso slab: shoulders → hips
-    const torsoTop = cy - r * 0.55;
-    const torsoBot = a.hipY + 4;
-    const torsoH = torsoBot - torsoTop;
-    const torsoW = r * 1.55;
-    ctx.beginPath();
-    // Rounded torso (capsule-ish)
-    ctx.moveTo(cx - torsoW * 0.5, torsoTop + r * 0.25);
-    ctx.quadraticCurveTo(cx - torsoW * 0.5, torsoTop, cx, torsoTop);
-    ctx.quadraticCurveTo(cx + torsoW * 0.5, torsoTop, cx + torsoW * 0.5, torsoTop + r * 0.25);
-    ctx.lineTo(cx + torsoW * 0.42, torsoBot);
-    ctx.quadraticCurveTo(cx, torsoBot + r * 0.18, cx - torsoW * 0.42, torsoBot);
-    ctx.closePath();
-    ctx.fill();
-    // Neck patch so head connects cleanly to torso
-    ctx.fillStyle = skin.head ?? skin.body;
-    ctx.fillRect(hx - r * 0.45, hy + r * 0.6, r * 0.9, (torsoTop - (hy + r * 0.6)) + 2);
-    ctx.restore();
-    // unused-var guard
-    void torsoH;
-  }
-
-  // ---- Cape (drawn behind torso via destination-over) ----
-  if (skin.cape) {
-    ctx.save();
-    ctx.globalCompositeOperation = "destination-over";
-    ctx.fillStyle = skin.cape;
-    ctx.beginPath();
-    // Trailing cape: from shoulders down past hips, slight curve
-    ctx.moveTo(cx - r * 0.9, cy - r * 0.4);
-    ctx.quadraticCurveTo(cx - r * 1.6, a.hipY + 18, cx - r * 0.4, a.footY - 18);
-    ctx.lineTo(cx + r * 0.4, a.footY - 18);
-    ctx.quadraticCurveTo(cx + r * 1.6, a.hipY + 18, cx + r * 0.9, cy - r * 0.4);
-    ctx.closePath();
-    ctx.fill();
-    if (skin.capeAccent) {
-      ctx.fillStyle = skin.capeAccent;
-      ctx.beginPath();
-      ctx.moveTo(cx - r * 0.4, cy - r * 0.2);
-      ctx.lineTo(cx + r * 0.4, cy - r * 0.2);
-      ctx.lineTo(cx + r * 0.2, a.footY - 22);
-      ctx.lineTo(cx - r * 0.2, a.footY - 22);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // ---- Head fill (mask color) ----
-  // Perfect domed head. Center is shifted DOWN by ~r*0.15 so an enlarged
-  // radius still fits inside the frame top (hy≈14) — prevents flat-top clip.
-  ctx.save();
-  if (skin.noHead) { ctx.restore(); return; }
-  ctx.fillStyle = skin.head ?? skin.body;
-  const headCx = hx;
-  const headCy = hy + r * 0.18;
-  const headR = r * 1.18;
-  ctx.beginPath();
-  ctx.arc(headCx, headCy, headR, 0, Math.PI * 2);
-  ctx.fill();
-  // Subtle jaw taper so head reads as a head, not a ball
-  ctx.beginPath();
-  ctx.ellipse(headCx, headCy + headR * 0.45, headR * 0.78, headR * 0.55, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Soft top-light highlight — gives the head dimensional volume.
-  const headHi = ctx.createRadialGradient(
-    headCx - headR * 0.3, headCy - headR * 0.45, 1,
-    headCx, headCy, headR,
-  );
-  headHi.addColorStop(0, "oklch(1 0 0 / 0.18)");
-  headHi.addColorStop(1, "transparent");
-  ctx.fillStyle = headHi;
-  ctx.beginPath();
-  ctx.arc(headCx, headCy, headR, 0, Math.PI * 2);
-  ctx.fill();
-  // Lower-jaw shadow for grounded weight.
-  const headSh = ctx.createRadialGradient(
-    headCx, headCy + headR * 0.55, 1,
-    headCx, headCy + headR * 0.2, headR,
-  );
-  headSh.addColorStop(0, "oklch(0 0 0 / 0.22)");
-  headSh.addColorStop(1, "transparent");
-  ctx.fillStyle = headSh;
-  ctx.beginPath();
-  ctx.ellipse(headCx, headCy + headR * 0.35, headR * 0.95, headR * 0.7, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Crisp 1px rim outline for cleaner silhouette.
-  ctx.strokeStyle = "oklch(0.12 0.02 260 / 0.55)";
-  ctx.lineWidth = 0.9;
-  ctx.beginPath();
-  ctx.arc(headCx, headCy, headR, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Skin-tone face for open faces (Superman, Homelander, Butcher, Heatwave)
-  if (skin.skinTone) {
-    if (skin.skinToneMode === "fullHead") {
-      ctx.fillStyle = skin.skinTone;
-      ctx.beginPath();
-      ctx.arc(headCx, headCy, headR * 0.96, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(headCx, headCy + headR * 0.4, headR * 0.72, headR * 0.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = skin.head ?? "oklch(0.18 0.02 30)";
-      ctx.beginPath();
-      ctx.arc(headCx, headCy - headR * 0.1, headR * 0.92, Math.PI, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.fillStyle = skin.skinTone;
-      ctx.beginPath();
-      // Face oval lower-half
-      ctx.ellipse(hx, hy + r * 0.15, r * 0.78, r * 0.85, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Hair cap on top
-      ctx.fillStyle = skin.head ?? "oklch(0.18 0.02 30)";
-      ctx.beginPath();
-      ctx.arc(hx, hy - r * 0.2, r * 0.95, Math.PI, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  // ---- Cowl ears (Batman) ----
-  if (skin.cowlEars) {
-    ctx.fillStyle = skin.head ?? skin.body;
-    ctx.beginPath();
-    ctx.moveTo(hx - r * 0.7, hy - r * 0.5);
-    ctx.lineTo(hx - r * 0.45, hy - r * 1.7);
-    ctx.lineTo(hx - r * 0.2, hy - r * 0.6);
-    ctx.closePath();
-    ctx.moveTo(hx + r * 0.7, hy - r * 0.5);
-    ctx.lineTo(hx + r * 0.45, hy - r * 1.7);
-    ctx.lineTo(hx + r * 0.2, hy - r * 0.6);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // ---- Eyes ----
-  drawEyes(ctx, skin, hx, hy, r);
-
-  // ---- Spider-Man web pattern on mask — REMOVED. Spider-Man is fully
-  // baked in the spider-mask.png atlas and never reaches drawOverlays.
-
-  // ---- Beard (Butcher) ----
-  if (skin.beard) {
-    ctx.fillStyle = "oklch(0.16 0.01 30)";
-    ctx.beginPath();
-    ctx.ellipse(hx, hy + r * 0.6, r * 0.7, r * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-
-  // ---- Chest emblem ----
-  if (skin.emblem) drawEmblem(ctx, skin, cx, cy, r * 1.05);
-
-  // ---- Body recolor over chest ----
-  // Legacy chest ellipse for two-tone skins (Hulk, Iron Man, Butcher etc.).
-  // Spider-Man is fully baked in the spider-mask.png atlas and never reaches here.
-  if (skin.body !== (skin.limb ?? skin.body) && !skin.arms) {
-    ctx.save();
-    ctx.fillStyle = skin.body;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + r * 0.2, r * 1.0, r * 1.6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    if (skin.emblem) drawEmblem(ctx, skin, cx, cy, r * 1.05);
-    ctx.restore();
-  }
-}
-
-function drawEyes(
-  ctx: CanvasRenderingContext2D,
-  skin: Skin,
-  hx: number, hy: number, r: number,
-) {
-  const ey = hy - r * 0.05;
-  const ex = r * 0.38;
-
-  // Spider-Man eyes are baked in the spider-mask.png atlas — never reaches here.
-
-
-  // Iron Man slits
-  if (skin.id === "ironman") {
-    ctx.fillStyle = "oklch(0.92 0.18 200)";
-    [-1, 1].forEach(s => {
-      ctx.fillRect(hx + s * ex - 4, ey - 1, 6, 3);
-    });
-    return;
-  }
-
-  // Batman slits
-  if (skin.id === "batman") {
-    ctx.fillStyle = "oklch(0.95 0.04 100)";
-    [-1, 1].forEach(s => {
-      ctx.fillRect(hx + s * ex - 4, ey - 1, 6, 3);
-    });
-    return;
-  }
-
-  // Glowing eyes (Hulk, Nightcrawler, Homelander)
-  if (skin.glowingEyes) {
-    ctx.fillStyle = skin.glowingEyes;
-    [-1, 1].forEach(s => {
-      ctx.beginPath();
-      ctx.arc(hx + s * ex, ey, 2.4, 0, Math.PI * 2);
-      ctx.fill();
-    });
-    return;
-  }
-
-  // Default eyes (open faces)
-  if (skin.skinTone) {
-    ctx.fillStyle = "oklch(0.16 0.02 260)";
-    [-1, 1].forEach(s => {
-      ctx.beginPath();
-      ctx.arc(hx + s * ex, ey, 1.6, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  }
-}
-
-function drawEmblem(
-  ctx: CanvasRenderingContext2D,
-  skin: Skin,
-  cx: number, cy: number, r: number,
-) {
-  if (!skin.emblem) return;
-  ctx.save();
-  ctx.fillStyle = skin.emblem.color;
-  ctx.strokeStyle = skin.emblem.color;
-  ctx.lineWidth = 1.5;
-
-  switch (skin.emblem.shape) {
-    case "spider": {
-      // Stick-figure spider — NO oval body. Vertical body stick + 8 thin bent legs.
-      ctx.strokeStyle = skin.emblem.color;
-      ctx.fillStyle = skin.emblem.color;
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      // Body: short vertical stick
-      ctx.lineWidth = Math.max(1.4, r * 0.10);
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - r * 0.28);
-      ctx.lineTo(cx, cy + r * 0.32);
-      ctx.stroke();
-      // Tiny head dot at top
-      ctx.beginPath();
-      ctx.arc(cx, cy - r * 0.34, Math.max(1.1, r * 0.08), 0, Math.PI * 2);
-      ctx.fill();
-      // 8 legs — 4 per side, two-segment (hip → knee → foot) for spidery silhouette
-      ctx.lineWidth = Math.max(1.0, r * 0.07);
-      const legs: Array<[number, number, number, number]> = [
-        // [bodyYFactor, kneeOutFactor, kneeYFactor, footYFactor]
-        [-0.22, 0.42, -0.46, -0.58],
-        [-0.06, 0.50, -0.16, -0.22],
-        [ 0.10, 0.50,  0.20,  0.26],
-        [ 0.26, 0.42,  0.50,  0.62],
-      ];
-      ctx.beginPath();
-      legs.forEach(([byF, koF, kyF, fyF]) => {
-        const hipY = cy + r * byF;
-        [-1, 1].forEach((s) => {
-          const kneeX = cx + s * r * koF;
-          const kneeY = cy + r * kyF;
-          const footX = cx + s * r * (koF + 0.18);
-          const footY = cy + r * fyF;
-          ctx.moveTo(cx, hipY);
-          ctx.lineTo(kneeX, kneeY);
-          ctx.lineTo(footX, footY);
-        });
-      });
-      ctx.stroke();
-      break;
-    }
-    case "shield": {
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - r * 0.55);
-      ctx.lineTo(cx + r * 0.5, cy - r * 0.2);
-      ctx.lineTo(cx + r * 0.35, cy + r * 0.55);
-      ctx.lineTo(cx - r * 0.35, cy + r * 0.55);
-      ctx.lineTo(cx - r * 0.5, cy - r * 0.2);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    }
-    case "oval": {
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, r * 0.55, r * 0.32, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // bat wing notches
-      ctx.fillStyle = "oklch(0.18 0.02 280)";
-      ctx.beginPath();
-      ctx.moveTo(cx - r * 0.5, cy);
-      ctx.lineTo(cx, cy - r * 0.05);
-      ctx.lineTo(cx + r * 0.5, cy);
-      ctx.lineTo(cx, cy + r * 0.05);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    }
-    case "circle": {
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.32, 0, Math.PI * 2);
-      ctx.fill();
-      // arc reactor inner ring
-      ctx.strokeStyle = "oklch(0.50 0.18 25)";
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.5, 0, Math.PI * 2);
-      ctx.stroke();
-      break;
-    }
-    case "lightning": {
-      ctx.beginPath();
-      ctx.moveTo(cx - r * 0.15, cy - r * 0.5);
-      ctx.lineTo(cx + r * 0.2, cy - r * 0.05);
-      ctx.lineTo(cx - r * 0.05, cy - r * 0.05);
-      ctx.lineTo(cx + r * 0.15, cy + r * 0.55);
-      ctx.lineTo(cx - r * 0.2, cy + r * 0.05);
-      ctx.lineTo(cx + r * 0.05, cy + r * 0.05);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    }
-    case "stripe": {
-      ctx.fillRect(cx - r * 0.5, cy - r * 0.1, r * 1.0, r * 0.2);
-      break;
-    }
-  }
-  ctx.restore();
-}
-
 /** Draw frame `idx` of `skin`'s composited sheet, anchored at footY.
- *  Returns false if the sheet isn't ready yet. */
+ *  Returns false if the sheet is not ready yet. */
 export function drawWalkFrame(
   ctx: CanvasRenderingContext2D,
   skin: Skin,

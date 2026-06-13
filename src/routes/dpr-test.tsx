@@ -16,7 +16,7 @@ export const Route = createFileRoute("/dpr-test")({
 const DPRS = [1, 1.5, 2, 3] as const;
 const SKIN_PAIRS: Array<[SkinId, SkinId]> = [
   ["spiderman", "homelander"],
-  ["hulk", "superman"],
+  ["wolverine", "superman"],
   ["flash", "ironman"],
 ];
 
