@@ -378,6 +378,13 @@ const PUNCH_CD = 0.30;
 const PUNCH_RANGE = 64;
 const PUNCH_DMG = 1;
 const FIGHTER_W = 30;
+const CAMERA_CLOSE_ZOOM = 2.42;
+const CAMERA_FAR_ZOOM = 1.46;
+const CAMERA_CLOSE_SPREAD = 170;
+const CAMERA_FAR_SPREAD = 620;
+const CAMERA_COMBAT_ZOOM_BONUS = 0.12;
+const CAMERA_PORTRAIT_CLOSE_ZOOM = 1.9;
+const CAMERA_PORTRAIT_FAR_ZOOM = 0.82;
 
 /**
  * Procedural transform envelope wrapped around discrete attack sprite frames
@@ -5796,8 +5803,27 @@ export class GameEngine {
     const dx = Math.abs(this.p1.x - this.p2.x);
     const dy = Math.abs((this.p1.y + FIGHTER_H * 0.5) - (this.p2.y + FIGHTER_H * 0.5));
     const spread = Math.hypot(dx, dy);
-    // Map spread → desired zoom (close fight = 2.0x, far fight = 1.35x)
-    let targetZoom = Math.max(1.35, Math.min(2.0, 520 / Math.max(220, spread)));
+    const aspect = cw / Math.max(1, ch);
+    const portraitFrame = aspect < 0.9;
+    const closeZoom = portraitFrame ? CAMERA_PORTRAIT_CLOSE_ZOOM : CAMERA_CLOSE_ZOOM;
+    const farZoom = portraitFrame ? CAMERA_PORTRAIT_FAR_ZOOM : CAMERA_FAR_ZOOM;
+    const spreadU = Math.max(0, Math.min(1, (spread - CAMERA_CLOSE_SPREAD) / (CAMERA_FAR_SPREAD - CAMERA_CLOSE_SPREAD)));
+    const spreadEase = spreadU * spreadU * (3 - 2 * spreadU);
+    let targetZoom = closeZoom + (farZoom - closeZoom) * spreadEase;
+    const closeCombat = spread < 260 && (
+      this.p1.punchT > 0 || this.p2.punchT > 0 ||
+      this.p1.comboKind != null || this.p2.comboKind != null ||
+      this.p1.meleeKind != null || this.p2.meleeKind != null ||
+      this.p1.hitReactT > 0 || this.p2.hitReactT > 0 ||
+      this.p1.ragdollT > 0 || this.p2.ragdollT > 0
+    );
+    if (closeCombat) targetZoom += (portraitFrame ? CAMERA_COMBAT_ZOOM_BONUS * 0.45 : CAMERA_COMBAT_ZOOM_BONUS) * (1 - spreadEase);
+    const fitMarginX = portraitFrame ? FIGHTER_H * 1.65 : FIGHTER_H * 3.0;
+    const fitMarginY = portraitFrame ? FIGHTER_H * 2.2 : FIGHTER_H * 2.8;
+    const fitZoomX = cw / (baseScale * Math.max(FIGHTER_H * 2.0, dx + fitMarginX));
+    const fitZoomY = ch / (baseScale * Math.max(FIGHTER_H * 2.2, dy + fitMarginY));
+    const fitZoom = Math.min(fitZoomX, fitZoomY);
+    targetZoom = Math.min(targetZoom, Math.max(farZoom, fitZoom));
     // KO cinematic: two-stage punch — hard zoom-in on impact (2.95x for ~0.45s),
     // then ease back to a held framing (2.2x) so the loser, blood, and final
     // pose all read clearly without the camera feeling stuck.
@@ -5824,7 +5850,7 @@ export class GameEngine {
     const vw = cw / worldScale, vh = ch / worldScale;
     // Target focus = midpoint of fighters (slightly above feet for headroom)
     let tx = (this.p1.x + this.p2.x) / 2;
-    let ty = (this.p1.y + this.p2.y) / 2 + FIGHTER_H * 0.3 - 40;
+    let ty = (this.p1.y + this.p2.y) / 2 + FIGHTER_H * 0.42 - 24;
     if (koActive && this.koFocus) {
       tx = this.koFocus.x;
       ty = this.koFocus.y;
