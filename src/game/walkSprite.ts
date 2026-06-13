@@ -32,7 +32,7 @@ export const SLASH_HIT_FRAME = 28;
 export const SLASH_RECOVER_FRAME = 29;
 export const WALK_FOOT_Y = 189;
 
-const SKIN_CACHE_VERSION = "v1-alpha-authored-materials";
+const SKIN_CACHE_VERSION = "v2-alpha-authored-readability";
 const ALPHA_THRESHOLD = 24;
 const HEAD_SCAN_R = 13;
 
@@ -431,6 +431,7 @@ function paintFrame(ctx: CanvasRenderingContext2D, skin: Skin, a: FrameAnatomy) 
   ctx.rect(ox, 0, WALK_FRAME_W, WALK_FRAME_H);
   ctx.clip();
   paintSilhouette(ctx, ox, look);
+  paintOutline(ctx, ox);
   drawBodyMass(ctx, skin, ox, a, look);
   drawCostumePanels(ctx, skin, ox, a, look);
   drawCape(ctx, skin, ox, a, look);
@@ -438,6 +439,19 @@ function paintFrame(ctx: CanvasRenderingContext2D, skin: Skin, a: FrameAnatomy) 
   drawGlovesAndBoots(ctx, skin, ox, a, look);
   drawEmblem(ctx, skin, ox, a, look);
   drawSkinSpecificDetails(ctx, skin, ox, a, look);
+  ctx.restore();
+}
+
+function paintOutline(ctx: CanvasRenderingContext2D, ox: number) {
+  if (!sheet) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-over";
+  ctx.globalAlpha = 0.62;
+  ctx.filter = "brightness(0)";
+  for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+    ctx.drawImage(sheet, ox, 0, WALK_FRAME_W, WALK_FRAME_H, ox + dx, dy, WALK_FRAME_W, WALK_FRAME_H);
+  }
   ctx.restore();
 }
 
@@ -472,23 +486,24 @@ function drawBodyMass(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: 
   const r = a.head.r;
 
   if (skin.silhouette || skin.id === "butcher") {
-    const shoulderHalf = r * 1.45;
-    const hemHalf = r * 1.75;
+    const isButcher = skin.id === "butcher";
+    const shoulderHalf = r * (isButcher ? 1.22 : 1.45);
+    const hemHalf = r * (isButcher ? 1.36 : 1.75);
     const top = a.shoulderY - 2;
-    const bottom = Math.min(WALK_FRAME_H - 2, hipY + r * 2.2);
+    const bottom = Math.min(WALK_FRAME_H - 2, hipY + r * (isButcher ? 1.7 : 2.2));
     ctx.save();
     ctx.fillStyle = look.body;
     ctx.beginPath();
     ctx.moveTo(cx - shoulderHalf, top);
-    ctx.bezierCurveTo(cx - hemHalf * 0.75, cy + r * 0.8, cx - hemHalf, bottom - r, cx - hemHalf * 0.7, bottom);
-    ctx.quadraticCurveTo(cx, bottom + r * 0.35, cx + hemHalf * 0.7, bottom);
-    ctx.bezierCurveTo(cx + hemHalf, bottom - r, cx + hemHalf * 0.75, cy + r * 0.8, cx + shoulderHalf, top);
+    ctx.bezierCurveTo(cx - hemHalf * 0.68, cy + r * 0.75, cx - hemHalf, bottom - r, cx - hemHalf * 0.58, bottom);
+    ctx.quadraticCurveTo(cx, bottom + r * 0.22, cx + hemHalf * 0.58, bottom);
+    ctx.bezierCurveTo(cx + hemHalf, bottom - r, cx + hemHalf * 0.68, cy + r * 0.75, cx + shoulderHalf, top);
     ctx.quadraticCurveTo(cx, top - r * 0.4, cx - shoulderHalf, top);
     ctx.fill();
 
     const shade = ctx.createLinearGradient(0, top, 0, bottom);
     shade.addColorStop(0, "transparent");
-    shade.addColorStop(1, "oklch(0 0 0 / 0.30)");
+    shade.addColorStop(1, `oklch(0 0 0 / ${isButcher ? 0.22 : 0.30})`);
     ctx.fillStyle = shade;
     ctx.fill();
     ctx.restore();
@@ -800,10 +815,11 @@ function drawGlovesAndBoots(ctx: CanvasRenderingContext2D, skin: Skin, ox: numbe
 
   if (glove) {
     ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
     ctx.fillStyle = glove;
     for (const hand of [a.hands.left, a.hands.right]) {
       ctx.beginPath();
-      ctx.ellipse(ox + hand.x, hand.y, r * 0.35, r * 0.27, 0, 0, Math.PI * 2);
+      ctx.ellipse(ox + hand.x, hand.y, r * 0.48, r * 0.34, 0, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -811,10 +827,11 @@ function drawGlovesAndBoots(ctx: CanvasRenderingContext2D, skin: Skin, ox: numbe
 
   if (boot) {
     ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
     ctx.fillStyle = boot;
     for (const foot of [a.feet.left, a.feet.right]) {
       ctx.beginPath();
-      ctx.ellipse(ox + foot.x, foot.y, r * 0.46, r * 0.22, 0, 0, Math.PI * 2);
+      ctx.ellipse(ox + foot.x, foot.y, r * 0.58, r * 0.30, 0, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();

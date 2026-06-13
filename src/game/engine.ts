@@ -111,6 +111,7 @@ interface Fighter {
   ragdollT: number;        // active tumble timer (airborne)
   ragdollPhase: number;    // pose driver
   ragdollAng: number;      // current body angle (rad)
+  ragdollVisAng: number;   // smoothed draw angle; prevents readability-killing spin blur
   ragdollAV: number;       // angular velocity (rad/s)
   ragdollEnergy: number;   // 0..1, drives tumble intensity, decays
   downedT: number;         // laydown duration on ground (locked)
@@ -414,68 +415,68 @@ function attackEnvelope(
     // the foot translates to a meaningful hip arc, which sells weight.
     if (u < 0.30) {
       phase = smooth(u / 0.30);
-      tx = -facing * 3 * phase;            // weight shifts back onto stance leg
-      ty = -2 * phase;                     // body drops slightly to chamber
-      rot = -facing * 0.10 * phase;        // lean BACK over planted foot
+      tx = -facing * 5 * phase;            // weight shifts back onto stance leg
+      ty = -3 * phase;                     // body drops slightly to chamber
+      rot = -facing * 0.16 * phase;        // lean BACK over planted foot
     } else if (u < 0.45) {
       phase = smooth((u - 0.30) / 0.15);
-      tx = -facing * 3 * (1 - phase) + facing * 4 * phase;
-      ty = -2 * (1 - phase) + 1 * phase;
-      rot = -facing * 0.10 * (1 - phase) + facing * 0.14 * phase;  // lean FORWARD into hit
-      sx = 1 + 0.04 * phase;               // forward stretch on snap
+      tx = -facing * 5 * (1 - phase) + facing * 7 * phase;
+      ty = -3 * (1 - phase) + 1 * phase;
+      rot = -facing * 0.16 * (1 - phase) + facing * 0.22 * phase;  // lean FORWARD into hit
+      sx = 1 + 0.06 * phase;               // forward stretch on snap
     } else if (u < 0.65) {
-      tx = facing * 4;
+      tx = facing * 7;
       ty = 1;
-      rot = facing * 0.14;
-      sx = 1.04;
+      rot = facing * 0.22;
+      sx = 1.06;
     } else {
       phase = smooth((u - 0.65) / 0.35);
-      tx = facing * 4 * (1 - phase);
+      tx = facing * 7 * (1 - phase);
       ty = 1 * (1 - phase);
-      rot = facing * 0.14 * (1 - phase);
-      sx = 1 + 0.04 * (1 - phase);
+      rot = facing * 0.22 * (1 - phase);
+      sx = 1 + 0.06 * (1 - phase);
     }
   } else if (kind === "knee") {
     if (u < 0.25) {
       phase = smooth(u / 0.25);
-      tx = -facing * 2.5 * phase;
-      ty = -2 * phase;                     // gather
-      sy = 1 - 0.04 * phase;               // crouch squash
+      tx = -facing * 3.5 * phase;
+      ty = -3 * phase;                     // gather
+      sy = 1 - 0.06 * phase;               // crouch squash
     } else if (u < 0.42) {
       phase = smooth((u - 0.25) / 0.17);
-      tx = -facing * 2.5 * (1 - phase) + facing * 5 * phase;
-      ty = -2 * (1 - phase) - 4 * phase;   // pop UP on knee strike
-      sy = (1 - 0.04) * (1 - phase) + (1 + 0.06) * phase;
+      tx = -facing * 3.5 * (1 - phase) + facing * 6.5 * phase;
+      ty = -3 * (1 - phase) - 6 * phase;   // pop UP on knee strike
+      sy = (1 - 0.06) * (1 - phase) + (1 + 0.08) * phase;
     } else if (u < 0.60) {
-      tx = facing * 5;
-      ty = -4;
-      sy = 1.06;
+      tx = facing * 6.5;
+      ty = -6;
+      sy = 1.08;
     } else {
       phase = smooth((u - 0.60) / 0.40);
-      tx = facing * 5 * (1 - phase);
-      ty = -4 * (1 - phase);
-      sy = 1 + 0.06 * (1 - phase);
+      tx = facing * 6.5 * (1 - phase);
+      ty = -6 * (1 - phase);
+      sy = 1 + 0.08 * (1 - phase);
     }
   } else {
     // punch
     if (u < 0.25) {
       phase = smooth(u / 0.25);
-      tx = -facing * 2 * phase;            // tight pull-back
-      rot = -facing * 0.025 * phase;
+      tx = -facing * 4 * phase;            // tight pull-back
+      rot = -facing * 0.06 * phase;
     } else if (u < 0.45) {
       phase = smooth((u - 0.25) / 0.20);
-      tx = -facing * 2 * (1 - phase) + facing * 5 * phase;
-      rot = -facing * 0.025 * (1 - phase) + facing * 0.03 * phase;
-      sx = 1 + 0.03 * phase;
+      tx = -facing * 4 * (1 - phase) + facing * 7 * phase;
+      rot = -facing * 0.06 * (1 - phase) + facing * 0.075 * phase;
+      sx = 1 + 0.05 * phase;
     } else if (u < 0.62) {
-      tx = facing * 5;
-      rot = facing * 0.03;
-      sx = 1.03;
+      tx = facing * 7;
+      rot = facing * 0.075;
+      sx = 1.05;
     } else {
       phase = smooth((u - 0.62) / 0.38);
-      tx = facing * 5 * (1 - phase);
-      rot = facing * 0.03 * (1 - phase);
-      sx = 1 + 0.03 * (1 - phase);
+      tx = facing * 7 * (1 - phase);
+      rot = facing * 0.075 * (1 - phase);
+      sx = 1 + 0.05 * (1 - phase);
     }
   }
   return { tx, ty, rot, sx, sy };
@@ -1159,7 +1160,7 @@ export class GameEngine {
       walkPhase: 0, walkSpeedSmooth: 0, attackAnim: 0, skin,
       move, meleeCd: 0, meleeT: 0, meleeDur: 0, meleeKind: null,
       meleeHitMask: new Set(),
-      ragdollT: 0, ragdollPhase: 0, ragdollAng: 0, ragdollAV: 0, ragdollEnergy: 0,
+      ragdollT: 0, ragdollPhase: 0, ragdollAng: 0, ragdollVisAng: 0, ragdollAV: 0, ragdollEnergy: 0,
       downedT: 0, getUpT: 0, getUpDur: 0, iframeT: 0, ragdollImmuneT: 0, groundedT: 0, lastLean: 0,
       slowedT: 0,
       trail: [],
@@ -2913,6 +2914,16 @@ export class GameEngine {
       f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 1.4);
       f.ragdollAV *= Math.pow(0.965, dt * 60);
       f.ragdollAng += f.ragdollAV * dt;
+      {
+        const desired = Math.atan2(Math.sin(f.ragdollAng), Math.cos(f.ragdollAng));
+        if (f.ragdollPhase <= dt * 1.5 || !Number.isFinite(f.ragdollVisAng)) {
+          f.ragdollVisAng = desired;
+        } else {
+          const delta = Math.atan2(Math.sin(desired - f.ragdollVisAng), Math.cos(desired - f.ragdollVisAng));
+          const maxStep = (3.8 + Math.min(1, f.ragdollEnergy) * 1.8) * dt;
+          f.ragdollVisAng += Math.max(-maxStep, Math.min(maxStep, delta));
+        }
+      }
       // Per-limb rotational lag — each limb chases ragdollAV with its own time
       // constant so head/arms/legs flop with offset phase, never lockstep.
       const lagChase = (cur: number, target: number, k: number) =>
@@ -2987,6 +2998,7 @@ export class GameEngine {
               ? (Math.PI / 2) * Math.sign(Math.sin(f.ragdollAng))
               : 0;
             f.ragdollAng = tgt;
+            f.ragdollVisAng = tgt;
             f.ragdollAV = 0;
             f.groundedT = 0;
           }
@@ -6090,10 +6102,11 @@ export class GameEngine {
       sampleTrail(f.weaponTrail, wx, wy);
       drawTrail(ctx, f.weaponTrail);
     }
+    // Sprite-based attack FX sit under fighter silhouettes so impacts frame the
+    // body instead of hiding the readable pose on mobile.
+    drawFxPool(ctx, this.attackFx);
     if (frenzyAttacker !== this.p1) { this.drawFlightAura(this.p1); this.drawFighter(this.p1); }
     if (frenzyAttacker !== this.p2) { this.drawFlightAura(this.p2); this.drawFighter(this.p2); }
-    // Sprite-based attack FX overlays (charge ring, slash arc, impact star, shockwave).
-    drawFxPool(ctx, this.attackFx);
 
     // ---- Debug rig overlay (?rig=1) ----
     // Visual-truth tool for tuning skin/skeleton cohesion. Draws hip pivot,
@@ -6609,7 +6622,7 @@ export class GameEngine {
 
     // Impact flash vignette
     if (this.impactFlash > 0) {
-      ctx.fillStyle = `oklch(0.99 0.05 80 / ${this.impactFlash * 0.35})`;
+      ctx.fillStyle = `oklch(0.99 0.05 80 / ${Math.min(0.18, this.impactFlash * 0.18)})`;
       ctx.fillRect(0, 0, cw, ch);
     }
 
@@ -7140,18 +7153,19 @@ export class GameEngine {
       if (f.ragdollT > 0) {
         const speed = Math.hypot(f.vx, f.vy);
         // Stretch along velocity vector — fast tumbles elongate, slow ones settle.
-        const stretch = Math.min(0.28, speed / 1400);
+        const stretch = Math.min(0.18, speed / 1800);
         const sy = 1 + stretch;
         const sx = 1 - stretch * 0.55;
         // Secondary floppy wobble — high-freq overlay on top of ragdollAng,
         // amplitude scales with angular velocity so violent spins flop harder.
-        const wob = Math.sin(f.ragdollPhase * 14) * Math.min(0.18, Math.abs(f.ragdollAV) * 0.025)
-                  + Math.sin(f.ragdollPhase * 23 + 1.3) * 0.04;
+        const wob = Math.sin(f.ragdollPhase * 11) * Math.min(0.08, Math.abs(f.ragdollAV) * 0.012)
+                  + Math.sin(f.ragdollPhase * 17 + 1.3) * 0.025;
         // Tilt toward motion vector so silhouette "points" where it's flying.
-        const motionTilt = Math.atan2(f.vy, f.vx) * 0.08;
+        const motionTilt = Math.atan2(f.vy, f.vx) * 0.045;
+        const visualAng = Number.isFinite(f.ragdollVisAng) ? f.ragdollVisAng : f.ragdollAng;
         ctx.save();
         ctx.translate(0, FIGHTER_H * 0.62);
-        ctx.rotate(f.ragdollAng + wob + motionTilt);
+        ctx.rotate(visualAng + wob + motionTilt);
         ctx.scale(sx, sy);
         ctx.translate(0, FIGHTER_H * 0.38);
         drawWalkFrame(ctx, skin, DOWN_FRAME, 0, 0, renderFacing, FIGHTER_H);
@@ -7521,16 +7535,20 @@ export class GameEngine {
       const speedNorm = Math.min(1, f.walkSpeedSmooth / 240);
       const stance = getStance(f.skin.id);
       const bobAmp = (0.8 + speedNorm * 1.2) * stance.bobMul;
+      const idlePulse = this.elapsed * 1.55 + (f.id === "p1" ? 0 : 1.3);
       const bobRaw = moving
         ? -Math.cos(cycleF * Math.PI * 4) * bobAmp           // up at footfall
-        : Math.sin(this.elapsed * 1.6 + (f.id === "p1" ? 0 : 1.3)) * 0.4 * stance.idleMul;
+        : Math.sin(idlePulse) * 0.75 * stance.idleMul;
       // Per-character side-to-side shoulder sway (heavy fighters lumber).
-      const swayRaw = moving ? Math.sin(cycleF * Math.PI * 2) * stance.sway : 0;
+      const swayRaw = moving
+        ? Math.sin(cycleF * Math.PI * 2) * stance.sway
+        : Math.sin(idlePulse * 0.72) * 0.35 * stance.idleMul;
       // Quantize to half-pixels — keeps motion visible but stable.
       const bob = Math.round(bobRaw * 2) / 2;
       const sway = Math.round(swayRaw * 2) / 2;
       // Forward lean scales with speed and faces direction of travel.
-      const lean = stance.lean * speedNorm * renderFacing;
+      const idleLean = moving ? 0 : Math.sin(idlePulse * 0.86) * 0.35 * stance.idleMul;
+      const lean = stance.lean * speedNorm * renderFacing + idleLean;
 
       // Single opaque frame (no crossfade) — selected from continuous phase.
       const fIdxRaw = moving ? cycleF * WALK_LOOP_FRAMES : 0;
