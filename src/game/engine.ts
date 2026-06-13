@@ -420,70 +420,92 @@ function attackEnvelope(
     // Rotation values are larger here than for hip-pivoted attacks because
     // the renderer pivots kicks around the planted foot — a small angle at
     // the foot translates to a meaningful hip arc, which sells weight.
-    if (u < 0.30) {
-      phase = smooth(u / 0.30);
-      tx = -facing * 5 * phase;            // weight shifts back onto stance leg
-      ty = -3 * phase;                     // body drops slightly to chamber
-      rot = -facing * 0.16 * phase;        // lean BACK over planted foot
-    } else if (u < 0.45) {
-      phase = smooth((u - 0.30) / 0.15);
-      tx = -facing * 5 * (1 - phase) + facing * 7 * phase;
-      ty = -3 * (1 - phase) + 1 * phase;
-      rot = -facing * 0.16 * (1 - phase) + facing * 0.22 * phase;  // lean FORWARD into hit
-      sx = 1 + 0.06 * phase;               // forward stretch on snap
-    } else if (u < 0.65) {
-      tx = facing * 7;
-      ty = 1;
-      rot = facing * 0.22;
-      sx = 1.06;
+    if (u < 0.32) {
+      phase = smooth(u / 0.32);
+      tx = -facing * 7 * phase;            // weight shifts back onto stance leg
+      ty = -4 * phase;                     // body drops slightly to chamber
+      rot = -facing * 0.22 * phase;        // lean BACK over planted foot
+      sx = 1 - 0.025 * phase;
+      sy = 1 - 0.035 * phase;
+    } else if (u < 0.46) {
+      phase = smooth((u - 0.32) / 0.14);
+      tx = -facing * 7 * (1 - phase) + facing * 10 * phase;
+      ty = -4 * (1 - phase) + 1.5 * phase;
+      rot = -facing * 0.22 * (1 - phase) + facing * 0.31 * phase;  // lean FORWARD into hit
+      sx = 0.975 * (1 - phase) + 1.09 * phase;               // forward stretch on snap
+      sy = 0.965 * (1 - phase) + 0.985 * phase;
+    } else if (u < 0.66) {
+      tx = facing * 10;
+      ty = 1.5;
+      rot = facing * 0.31;
+      sx = 1.09;
+      sy = 0.985;
     } else {
-      phase = smooth((u - 0.65) / 0.35);
-      tx = facing * 7 * (1 - phase);
-      ty = 1 * (1 - phase);
-      rot = facing * 0.22 * (1 - phase);
-      sx = 1 + 0.06 * (1 - phase);
+      phase = smooth((u - 0.66) / 0.34);
+      tx = facing * 10 * (1 - phase);
+      ty = 1.5 * (1 - phase);
+      rot = facing * 0.31 * (1 - phase);
+      sx = 1 + 0.09 * (1 - phase);
+      sy = 1 - 0.015 * (1 - phase);
     }
   } else if (kind === "knee") {
     if (u < 0.25) {
       phase = smooth(u / 0.25);
-      tx = -facing * 3.5 * phase;
-      ty = -3 * phase;                     // gather
-      sy = 1 - 0.06 * phase;               // crouch squash
+      tx = -facing * 4.5 * phase;
+      ty = -4 * phase;                     // gather
+      rot = -facing * 0.08 * phase;
+      sx = 1 + 0.03 * phase;
+      sy = 1 - 0.09 * phase;               // crouch squash
     } else if (u < 0.42) {
       phase = smooth((u - 0.25) / 0.17);
-      tx = -facing * 3.5 * (1 - phase) + facing * 6.5 * phase;
-      ty = -3 * (1 - phase) - 6 * phase;   // pop UP on knee strike
-      sy = (1 - 0.06) * (1 - phase) + (1 + 0.08) * phase;
-    } else if (u < 0.60) {
-      tx = facing * 6.5;
-      ty = -6;
-      sy = 1.08;
+      tx = -facing * 4.5 * (1 - phase) + facing * 8 * phase;
+      ty = -4 * (1 - phase) - 8 * phase;   // pop UP on knee strike
+      rot = -facing * 0.08 * (1 - phase) + facing * 0.12 * phase;
+      sx = (1 + 0.03) * (1 - phase) + (1 - 0.03) * phase;
+      sy = (1 - 0.09) * (1 - phase) + (1 + 0.12) * phase;
+    } else if (u < 0.62) {
+      tx = facing * 8;
+      ty = -8;
+      rot = facing * 0.12;
+      sx = 0.97;
+      sy = 1.12;
     } else {
-      phase = smooth((u - 0.60) / 0.40);
-      tx = facing * 6.5 * (1 - phase);
-      ty = -6 * (1 - phase);
-      sy = 1 + 0.08 * (1 - phase);
+      phase = smooth((u - 0.62) / 0.38);
+      tx = facing * 8 * (1 - phase);
+      ty = -8 * (1 - phase);
+      rot = facing * 0.12 * (1 - phase);
+      sx = 1 - 0.03 * (1 - phase);
+      sy = 1 + 0.12 * (1 - phase);
     }
   } else {
     // punch
-    if (u < 0.25) {
-      phase = smooth(u / 0.25);
-      tx = -facing * 4 * phase;            // tight pull-back
-      rot = -facing * 0.06 * phase;
-    } else if (u < 0.45) {
-      phase = smooth((u - 0.25) / 0.20);
-      tx = -facing * 4 * (1 - phase) + facing * 7 * phase;
-      rot = -facing * 0.06 * (1 - phase) + facing * 0.075 * phase;
-      sx = 1 + 0.05 * phase;
-    } else if (u < 0.62) {
-      tx = facing * 7;
-      rot = facing * 0.075;
-      sx = 1.05;
+    if (u < 0.22) {
+      phase = smooth(u / 0.22);
+      tx = -facing * 5.5 * phase;          // tight pull-back
+      ty = 0.5 * phase;
+      rot = -facing * 0.095 * phase;
+      sx = 1 - 0.025 * phase;
+      sy = 1 + 0.02 * phase;
+    } else if (u < 0.40) {
+      phase = smooth((u - 0.22) / 0.18);
+      tx = -facing * 5.5 * (1 - phase) + facing * 9 * phase;
+      ty = 0.5 * (1 - phase) - 1.5 * phase;
+      rot = -facing * 0.095 * (1 - phase) + facing * 0.13 * phase;
+      sx = 0.975 * (1 - phase) + 1.085 * phase;
+      sy = 1.02 * (1 - phase) + 0.985 * phase;
+    } else if (u < 0.60) {
+      tx = facing * 9;
+      ty = -1.5;
+      rot = facing * 0.13;
+      sx = 1.085;
+      sy = 0.985;
     } else {
-      phase = smooth((u - 0.62) / 0.38);
-      tx = facing * 7 * (1 - phase);
-      rot = facing * 0.075 * (1 - phase);
-      sx = 1 + 0.05 * (1 - phase);
+      phase = smooth((u - 0.60) / 0.40);
+      tx = facing * 9 * (1 - phase);
+      ty = -1.5 * (1 - phase);
+      rot = facing * 0.13 * (1 - phase);
+      sx = 1 + 0.085 * (1 - phase);
+      sy = 1 - 0.015 * (1 - phase);
     }
   }
   return { tx, ty, rot, sx, sy };
@@ -7475,8 +7497,8 @@ export class GameEngine {
         const u = f.comboT / Math.max(0.001, f.comboDur);
         const env = attackEnvelope(f.comboKind, u, renderFacing);
         const swingIdx = f.comboKind === "kick"
-          ? (u < 0.4 ? KICK_CHAMBER_FRAME : KICK_HIT_FRAME)
-          : (u < 0.4 ? KNEE_CHAMBER_FRAME : KNEE_HIT_FRAME);
+          ? (u < 0.34 ? KICK_CHAMBER_FRAME : KICK_HIT_FRAME)
+          : (u < 0.32 ? KNEE_CHAMBER_FRAME : KNEE_HIT_FRAME);
         // ---- Foot-pivot weight transfer (poor-man's IK) ----
         // True per-bone IK isn't possible on bitmap sprites — but pivoting
         // the rotation/scale around the *planted foot* (instead of the hip)
@@ -7523,7 +7545,7 @@ export class GameEngine {
         else if (pt < PUNCH_F11 + PUNCH_F12) pIdx = 1;
         else if (pt < PUNCH_F11 + PUNCH_F12 + PUNCH_F13) pIdx = 2;
         else pIdx = 3;
-        const punchU = 1 - (pt / PUNCH_DUR); // 0 → 1 across the punch
+        const punchU = Math.max(0, Math.min(1, pt / PUNCH_DUR)); // 0 → 1 across the punch
         const env = attackEnvelope("punch", punchU, renderFacing);
         const hipPx = 0;
         const hipPy = FIGHTER_H * 0.62;
@@ -7538,7 +7560,20 @@ export class GameEngine {
       }
 
       // ---- Punch recovery ----
-      if (f.recoverT > 0) { drawFrame(RECOVERY_FRAME); return; }
+      if (f.recoverT > 0) {
+        const r = Math.min(1, f.recoverT / 0.08);
+        const settle = r * r * (3 - 2 * r);
+        const hipPx = 0;
+        const hipPy = FIGHTER_H * 0.62;
+        ctx.save();
+        ctx.translate(hipPx + renderFacing * 2.5 * settle, hipPy - 0.5 * settle);
+        ctx.rotate(renderFacing * 0.04 * settle);
+        ctx.scale(1 + 0.025 * settle, 1 - 0.01 * settle);
+        ctx.translate(-hipPx, -hipPy);
+        drawFrame(RECOVERY_FRAME);
+        ctx.restore();
+        return;
+      }
 
       // ---- Hurt flinch (briefly during heavy hit flash) ----
       if (f.hitFlash > 0.25 && f.meleeKind == null && f.attackAnim <= 0) {
