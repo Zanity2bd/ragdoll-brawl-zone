@@ -6955,9 +6955,21 @@ export class GameEngine {
    * plus ragdoll spring body offset. This is the canonical conversion for
    * any cosmetic anchor that needs to track the visible body.
    */
+  private attackOwnsRoot(f: Fighter): boolean {
+    return f.ragdollT <= 0 && (
+      (f.comboKind != null && f.comboT > 0) ||
+      f.punchT > 0 ||
+      (f.meleeKind != null && f.meleeT > 0)
+    );
+  }
+
   private bodyToWorld(f: Fighter, lx: number, ly: number): [number, number] {
     const t = this.getRootTransform(f);
     const pose = this.poseFor(f);
+    const attacking = this.attackOwnsRoot(f);
+    const useT = !attacking;
+    const bodyLagX = attacking ? 0 : f.bodyLagX;
+    const bodyRoll = attacking ? 0 : f.bodyRoll;
     let x = lx;
     let y = ly - FIGHTER_H * 0.62;
     const mag = Math.abs(f.facingT);
@@ -6972,7 +6984,8 @@ export class GameEngine {
       y = ny;
     }
     {
-      const a = t.torsoAng + (f.ragdollT > 0 ? 0 : pose.lean + f.bodyRoll);
+      const rootLean = attacking || f.ragdollT > 0 ? 0 : pose.lean + bodyRoll;
+      const a = (useT ? t.torsoAng : 0) + rootLean;
       if (a) {
         const c = Math.cos(a), s = Math.sin(a);
         const nx = x * c - y * s;
@@ -6981,7 +6994,7 @@ export class GameEngine {
         y = ny;
       }
     }
-    if (f.ragdollT <= 0) {
+    if (f.ragdollT <= 0 && !attacking) {
       const wobTime = this.elapsed + (f.id === "p1" ? 0 : 1.7);
       const moving = Math.min(1, Math.abs(f.vx) / 280);
       const hit = Math.min(1, f.hitFlash * 4);
@@ -7003,18 +7016,20 @@ export class GameEngine {
         y = ny;
       }
     }
-    x += f.bodyLagX;
-    x *= t.sx;
-    y *= t.sy;
-    if (t.rot) {
+    x += bodyLagX;
+    if (useT) {
+      x *= t.sx;
+      y *= t.sy;
+    }
+    if (useT && t.rot) {
       const c = Math.cos(t.rot), s = Math.sin(t.rot);
       const nx = x * c - y * s;
       const ny = x * s + y * c;
       x = nx;
       y = ny;
     }
-    x += f.x + t.bodyOffX + t.dx;
-    y += f.y + t.bodyOffY + FIGHTER_H * 0.62 + t.dy;
+    x += f.x + (useT ? t.bodyOffX + t.dx : 0);
+    y += f.y + (useT ? t.bodyOffY + t.dy : 0) + FIGHTER_H * 0.62;
     return [x, y];
   }
 
@@ -7029,11 +7044,7 @@ export class GameEngine {
     // (hit-reaction springs, body lag, wobble, lean, body-roll, torsoAng).
     // The envelope draws around a planted-foot pivot, so any extra translate
     // or rotate at the root is what reads as the skin "drifting" off the rig.
-    const attacking = !ghost && f.ragdollT <= 0 && (
-      (f.comboKind != null && f.comboT > 0) ||
-      f.punchT > 0 ||
-      (f.meleeKind != null && f.meleeT > 0)
-    );
+    const attacking = !ghost && this.attackOwnsRoot(f);
     const bodyLagX = (ghost || attacking) ? 0 : f.bodyLagX;
     const bodyRoll = (ghost || attacking) ? 0 : f.bodyRoll;
     const useT = !ghost && !attacking;
@@ -7182,19 +7193,8 @@ export class GameEngine {
   private drawFighterAt(f: Fighter, x: number, y: number, pose: Pose, ghost: boolean) {
     const ctx = this.ctx;
     const skin = f.skin;
-    // ---- Pelvis-rooted transform integration ----
-    // Bake ragdoll spring body offset into the root coordinates so EVERY
-    // downstream visual layer (sprite body, procedural rig, cape, emblem,
-    // shadow, FX anchors) inherits it as a single root translation. Without
-    // this, the sprite path renders at raw (x,y) while the procedural rig
-    // applies springs only to limb offsets — causing visible skin/skeleton
-    // drift on recoil, kicks, and ragdoll spring-back.
-    if (!ghost && f.rs) {
-      x += f.rs.bodyOffX;
-      y += f.rs.bodyOffY;
-    }
-
     // ---- Sprite-sheet walk override ----
+    // The sprite path gets body spring offsets only through pushFighterRoot.
     // Replace the procedural body render with the imported walk sheet
     // animation when the fighter is in a normal grounded walk state. Falls
     // back to the procedural renderer for attacks, ragdoll, flight, KO, etc.
@@ -7747,6 +7747,11 @@ export class GameEngine {
       } finally {
         ctx.restore();
       }
+    }
+
+    if (!ghost && f.rs) {
+      x += f.rs.bodyOffX;
+      y += f.rs.bodyOffY;
     }
 
     // ---- Bamf strike depth FX (perspective scale + z-shadow) ----
