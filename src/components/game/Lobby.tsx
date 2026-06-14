@@ -25,12 +25,12 @@ export function Lobby({ onPickMap }: { onPickMap: (id: MapId) => void }) {
 
         {/* Tabs */}
         <div className="flex justify-center mb-6 sm:mb-10">
-          <div className="inline-flex p-1 rounded-full border border-foreground/15 bg-foreground/5">
+          <div className="inline-flex p-1 rounded-lg border border-foreground/15 bg-foreground/5">
             {(["maps", "skins"] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className={`min-h-11 px-6 sm:px-8 rounded-full font-mono text-[11px] sm:text-xs tracking-[0.3em] uppercase transition-colors ${
+                className={`min-h-11 px-6 sm:px-8 rounded-md font-mono text-[11px] sm:text-xs tracking-[0.3em] uppercase transition-colors ${
                   tab === t
                     ? "bg-foreground text-background"
                     : "text-foreground/60 sm:hover:text-foreground"
@@ -72,7 +72,7 @@ function MapCard({ map, onPick }: { map: BattleMap; onPick: () => void }) {
   return (
     <button
       onClick={onPick}
-      className="group relative aspect-[4/3] rounded-xl overflow-hidden border border-foreground/10 sm:hover:border-foreground/40 active:scale-[0.98] transition-all touch-manipulation text-left"
+      className="group relative aspect-[4/3] rounded-lg overflow-hidden border border-foreground/10 sm:hover:border-foreground/40 active:scale-[0.98] transition-all touch-manipulation text-left"
       style={{ boxShadow: `0 0 24px -14px ${map.accent}` }}
     >
       <MapThumb map={map} />
@@ -88,7 +88,7 @@ function MapCard({ map, onPick }: { map: BattleMap; onPick: () => void }) {
         </div>
       </div>
       <div
-        className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full text-[8px] font-mono uppercase tracking-widest border border-foreground/15 bg-background/60 text-foreground/70"
+        className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[5px] text-[8px] font-mono uppercase tracking-widest border border-foreground/15 bg-background/60 text-foreground/70"
       >
         {map.tone}
       </div>
@@ -179,10 +179,10 @@ function SkinsPanel() {
 function SkinCard({ skin }: { skin: Skin }) {
   return (
     <div
-      className="relative rounded-xl overflow-hidden border border-foreground/10 bg-foreground/[0.03] p-3 flex flex-col items-center"
+      className="relative rounded-lg overflow-hidden border border-foreground/10 bg-foreground/[0.03] p-3 flex flex-col items-center"
       style={{ boxShadow: `0 0 24px -16px ${skin.glow}` }}
     >
-      <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full text-[8px] font-mono uppercase tracking-widest border border-foreground/15 bg-background/60 text-foreground/70">
+      <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-[5px] text-[8px] font-mono uppercase tracking-widest border border-foreground/15 bg-background/60 text-foreground/70">
         Owned
       </div>
       <SkinThumb skin={skin} />
