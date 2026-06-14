@@ -14,7 +14,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  RotateCw,
   Settings as SettingsIcon,
+  Smartphone,
   Swords,
   Zap,
 } from "lucide-react";
@@ -315,10 +317,48 @@ export function GameCanvas() {
 
 function RotatePrompt() {
   return (
-    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background text-foreground p-6 text-center gap-4">
-      <div className="text-5xl animate-pulse" style={{ transform: "rotate(90deg)" }}>📱</div>
-      <div className="font-mono text-sm uppercase tracking-widest text-foreground/80">Rotate your device</div>
-      <div className="font-mono text-xs text-foreground/50 max-w-xs">OgunArena is best played in landscape. Turn your phone sideways to enter the arena.</div>
+    <div className="absolute inset-0 z-50 flex items-center justify-center overflow-hidden bg-background text-foreground p-6 text-center">
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(circle at 50% 38%, oklch(0.26 0.14 38 / 0.34), transparent 32%), linear-gradient(180deg, oklch(0.04 0.02 260), oklch(0.02 0.012 270))",
+        }}
+      />
+      <div
+        className="relative flex w-full max-w-[320px] flex-col items-center gap-5 rounded-lg border px-6 py-7"
+        style={{
+          background: "linear-gradient(180deg, oklch(0.10 0.035 260 / 0.82), oklch(0.05 0.02 270 / 0.92))",
+          borderColor: "oklch(0.82 0.16 48 / 0.28)",
+          boxShadow: "0 20px 60px oklch(0 0 0 / 0.45), inset 0 1px 0 oklch(0.95 0.08 48 / 0.12)",
+        }}
+      >
+        <div className="relative h-24 w-24">
+          <div
+            className="absolute left-1/2 top-1/2 flex h-16 w-10 -translate-x-1/2 -translate-y-1/2 rotate-90 items-center justify-center rounded-[10px] border"
+            style={{
+              borderColor: "oklch(0.92 0.08 60 / 0.78)",
+              background: "linear-gradient(180deg, oklch(0.18 0.05 250 / 0.72), oklch(0.08 0.03 265 / 0.9))",
+              boxShadow: "0 0 26px oklch(0.78 0.22 45 / 0.36)",
+            }}
+          >
+            <Smartphone size={28} strokeWidth={1.8} />
+          </div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <RotateCw
+              size={86}
+              strokeWidth={1.35}
+              style={{ color: "oklch(0.85 0.18 55)", filter: "drop-shadow(0 0 14px oklch(0.78 0.20 45 / 0.45))" }}
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="font-mono text-sm uppercase tracking-[0.28em] text-foreground/85">Rotate device</div>
+          <div className="mx-auto max-w-[250px] font-mono text-[11px] leading-relaxed text-foreground/55">
+            Landscape keeps both fighters readable and gives your thumbs room to move.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
