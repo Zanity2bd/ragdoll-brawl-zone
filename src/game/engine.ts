@@ -15,6 +15,7 @@ import {
   JUMP_TAKEOFF_FRAME, JUMP_RISE_FRAME, JUMP_APEX_FRAME, JUMP_LAND_FRAME,
   DOWN_FRAME, GETUP_FRAME_A, GETUP_FRAME_B, HURT_FRAME,
   KICK_CHAMBER_FRAME, KICK_HIT_FRAME, KNEE_CHAMBER_FRAME, KNEE_HIT_FRAME,
+  SLASH_WINDUP_FRAME, SLASH_HIT_FRAME, SLASH_RECOVER_FRAME,
 } from "./walkSprite";
 // (taijutsu sprite removed)
 import { getStance } from "./stances";
@@ -509,6 +510,79 @@ function attackEnvelope(
     }
   }
   return { tx, ty, rot, sx, sy };
+}
+
+function specialMeleeVisual(
+  kind: string,
+  t: number,
+  windup: number,
+  active: number,
+  duration: number,
+  facing: 1 | -1,
+): { frame: number; tx: number; ty: number; rot: number; sx: number; sy: number; rim: number; pivot: "hip" | "foot" } {
+  const total = Math.max(0.001, duration);
+  const wind = Math.max(0.001, windup);
+  const hitEnd = windup + Math.max(0.001, active);
+  const recover = Math.max(0.001, total - hitEnd);
+  const smooth = (v: number) => {
+    const c = Math.max(0, Math.min(1, v));
+    return c * c * (3 - 2 * c);
+  };
+
+  const isPunchLike = kind === "heatPunch" || kind === "repulsor" || kind === "phaseStrike" || kind === "speedFlurry" || kind === "laserSweep";
+  const isSmash = kind === "groundSmash";
+  const isKickLike = kind === "webYank" || kind === "batCombo";
+
+  let frame = isPunchLike ? PUNCH_FRAME_START : SLASH_WINDUP_FRAME;
+  let tx = 0, ty = 0, rot = 0, sx = 1, sy = 1;
+  let rim = 0.9;
+  let pivot: "hip" | "foot" = isSmash ? "foot" : "hip";
+
+  if (t < windup) {
+    const c = smooth(t / wind);
+    frame = isSmash ? KNEE_CHAMBER_FRAME : isPunchLike ? PUNCH_FRAME_START : SLASH_WINDUP_FRAME;
+    tx = -facing * (isSmash ? 5 : isPunchLike ? 6 : 7) * c;
+    ty = (isSmash ? 5 : 1.5) * c;
+    rot = -facing * (isSmash ? 0.12 : isPunchLike ? 0.12 : 0.18) * c;
+    sx = 1 + (isSmash ? 0.06 : 0.02) * c;
+    sy = 1 - (isSmash ? 0.14 : 0.045) * c;
+    rim = 0.74 + c * 0.34;
+  } else if (t < hitEnd) {
+    const c = smooth((t - windup) / Math.max(0.001, active));
+    frame = isSmash ? KICK_HIT_FRAME : isPunchLike ? PUNCH_FRAME_START + 2 : SLASH_HIT_FRAME;
+    tx = facing * ((isSmash ? 7 : isPunchLike ? 10 : 11) + c * (isKickLike ? 2 : 0));
+    ty = isSmash ? -2 : -1.5;
+    rot = facing * (isSmash ? 0.18 : isPunchLike ? 0.15 : 0.24);
+    sx = isSmash ? 1.08 : isPunchLike ? 1.095 : 1.10;
+    sy = isSmash ? 0.92 : 0.985;
+    rim = 1.18;
+  } else {
+    const c = smooth((t - hitEnd) / recover);
+    frame = isPunchLike ? RECOVERY_FRAME : SLASH_RECOVER_FRAME;
+    tx = facing * (isSmash ? 6 : isPunchLike ? 8 : 9) * (1 - c);
+    ty = (isSmash ? -2 : -1.2) * (1 - c);
+    rot = facing * (isSmash ? 0.15 : isPunchLike ? 0.10 : 0.18) * (1 - c);
+    sx = 1 + (isPunchLike ? 0.06 : 0.08) * (1 - c);
+    sy = 1 - 0.015 * (1 - c);
+    rim = 0.88 * (1 - c) + 0.45 * c;
+  }
+
+  if (kind === "speedFlurry") {
+    const flicker = Math.floor(t * 32) % 4;
+    frame = PUNCH_FRAME_START + flicker;
+    tx += facing * (2 + flicker * 1.2);
+    rim = 1.05;
+  } else if (kind === "laserSweep") {
+    frame = t < windup ? PUNCH_FRAME_START : PUNCH_FRAME_START + 1;
+    tx *= 0.55;
+    ty -= 1;
+    rot *= 0.45;
+    sx = 1.04;
+    sy = 0.995;
+    rim = t < windup ? 0.82 : 0.62;
+  }
+
+  return { frame, tx, ty, rot, sx, sy, rim, pivot };
 }
 
 
@@ -7610,6 +7684,35 @@ export class GameEngine {
         ctx.scale(sx, sy);
         ctx.translate(0, -FIGHTER_H);
         drawFrame(JUMP_LAND_FRAME);
+        ctx.restore();
+        return;
+      }
+
+      if (f.meleeKind && f.meleeT > 0 && f.meleeDur > 0) {
+        const v = specialMeleeVisual(
+          f.meleeKind,
+          f.meleeT,
+          f.move.windup,
+          f.move.active,
+          f.meleeDur,
+          renderFacing,
+        );
+        const pivotX = v.pivot === "foot" ? -renderFacing * 8 : 0;
+        const pivotY = v.pivot === "foot" ? FIGHTER_H - 1 : FIGHTER_H * 0.62;
+        ctx.save();
+        ctx.translate(pivotX + v.tx, pivotY + v.ty);
+        ctx.rotate(v.rot);
+        ctx.scale(v.sx, v.sy);
+        ctx.translate(-pivotX, -pivotY);
+        drawCombatRim(v.frame, v.rim);
+        if (f.meleeKind === "speedFlurry" && !this.lowPower) {
+          ctx.save();
+          ctx.globalAlpha = 0.22;
+          ctx.globalCompositeOperation = "lighter";
+          drawWalkFrame(ctx, skin, v.frame, -renderFacing * 4, FIGHTER_H, renderFacing, FIGHTER_H);
+          ctx.restore();
+        }
+        drawFrame(v.frame);
         ctx.restore();
         return;
       }
