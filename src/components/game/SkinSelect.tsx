@@ -1,7 +1,8 @@
 import { SKINS, type SkinId, type Universe, getSkin, type Skin } from "@/game/skins";
-import { drawWalkFrame } from "@/game/walkSprite";
+import { drawWalkFrame, drawWalkFrameSilhouette } from "@/game/walkSprite";
 import type { Difficulty } from "@/game/ai";
 import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, Swords } from "lucide-react";
 
 const UNIVERSES: Universe[] = ["Marvel", "DC", "The Boys"];
 const DIFFS: { id: Difficulty; label: string }[] = [
@@ -26,9 +27,10 @@ export function SkinSelect({
     <div className="absolute inset-0 z-20 bg-background/95 backdrop-blur-md flex flex-col items-center justify-start sm:justify-center p-3 sm:p-4 overflow-auto">
       <button
         onClick={onBack}
-        className="absolute top-3 left-3 sm:top-4 sm:left-4 font-mono text-[10px] tracking-widest uppercase text-foreground/60 sm:hover:text-foreground/90 min-h-11 px-2 flex items-center"
+        className="absolute top-3 left-3 sm:top-4 sm:left-4 font-mono text-[10px] tracking-widest uppercase text-foreground/60 sm:hover:text-foreground/90 min-h-11 px-2 flex items-center gap-1.5"
       >
-        ← Maps
+        <ArrowLeft size={14} strokeWidth={2.4} />
+        Maps
       </button>
       <div className="font-mono text-[10px] sm:text-xs tracking-[0.4em] text-foreground/60 uppercase mb-2 mt-10 sm:mt-0">Select Fighters</div>
       <h2 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-widest text-foreground mb-6 sm:mb-8 text-center">PICK YOUR HEROES</h2>
@@ -80,9 +82,11 @@ export function SkinSelect({
 
       <button
         onClick={() => onConfirm(p1, p2, { cpu, difficulty })}
-        className="mt-6 sm:mt-10 mb-4 px-10 py-4 rounded-md font-mono uppercase tracking-[0.3em] text-sm border border-foreground/30 sm:hover:bg-foreground/10 active:bg-foreground/15 transition-colors text-foreground min-h-12"
+        className="mt-6 sm:mt-10 mb-4 px-8 sm:px-10 py-4 rounded-md font-mono uppercase tracking-[0.24em] text-sm border border-foreground/30 sm:hover:bg-foreground/10 active:bg-foreground/15 transition-colors text-foreground min-h-12 inline-flex items-center justify-center gap-3"
       >
-        FIGHT →
+        <Swords size={17} strokeWidth={2.5} />
+        Fight
+        <ArrowRight size={16} strokeWidth={2.4} />
       </button>
     </div>
   );
@@ -169,11 +173,12 @@ function SkinPreview({ skin }: { skin: Skin }) {
         ctx.setTransform(c.width / W, 0, 0, c.height / H, 0, 0);
         ctx.clearRect(0, 0, W, H);
 
-        // Subtle backdrop plate
-        const grad = ctx.createRadialGradient(W / 2, H / 2, 10, W / 2, H / 2, 150);
-        grad.addColorStop(0, "oklch(0.22 0.02 280 / 0.5)");
-        grad.addColorStop(1, "oklch(0.10 0.02 280 / 0)");
-        ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+        const plate = ctx.createLinearGradient(0, 0, W, H);
+        plate.addColorStop(0, "oklch(0.18 0.035 252 / 0.54)");
+        plate.addColorStop(0.62, "oklch(0.08 0.025 260 / 0.22)");
+        plate.addColorStop(1, "oklch(0.04 0.018 270 / 0)");
+        ctx.fillStyle = plate;
+        ctx.fillRect(0, 0, W, H);
 
         const cx = W / 2;
         const feetY = H - 18;
@@ -184,6 +189,12 @@ function SkinPreview({ skin }: { skin: Skin }) {
         ctx.beginPath(); ctx.ellipse(cx, feetY + 4, 26, 4.5, 0, 0, Math.PI * 2); ctx.fill();
 
         const frame = Math.floor(t * FPS) % FRAMES;
+        drawWalkFrameSilhouette(ctx, skin, frame, cx, feetY, 1, fighterH, {
+          alpha: 0.28,
+          blur: 8,
+          shadowColor: skin.glow,
+          offset: 1.5,
+        });
         const ok = drawWalkFrame(ctx, skin, frame, cx, feetY, 1, fighterH);
         if (!ok) {
           ctx.fillStyle = "oklch(0.6 0.02 280 / 0.25)";
