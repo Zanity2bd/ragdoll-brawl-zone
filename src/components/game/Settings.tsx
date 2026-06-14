@@ -96,13 +96,13 @@ export function SettingsPanel({
 
           {tab === "keyboard" && (
             <ControlGrid rows={[
-              ["Move", "A / D", "← / →"],
-              ["Jump / Fly Up", "W", "↑"],
+              ["Move", "A / D", "Left / Right"],
+              ["Jump / Fly Up", "W", "Up"],
               ["Punch / Melee", "J", ";"],
               ["Fire / Beam", "F", "K"],
               ["Teleport", "G", "L"],
-              ["Power 1 (HOLD)", "V", "—"],
-              ["Power 2 (TAP)", "C", "—"],
+              ["Power 1 (HOLD)", "V", "None"],
+              ["Power 2 (TAP)", "C", "None"],
               ["Rage Frenzy (Hulk)", "B", "N"],
             ]} headers={["Action", "Player 1", "Player 2"]} />
           )}
@@ -118,7 +118,7 @@ export function SettingsPanel({
               ["Power 1 (HOLD)", "LB"],
               ["Power 2 (TAP)", "Y"],
               ["Rage Frenzy", "LT"],
-              ["Settings", "Menu (☰)"],
+              ["Settings", "Menu"],
             ]} headers={["Action", "Xbox Controller"]} />
           )}
 
@@ -126,12 +126,12 @@ export function SettingsPanel({
             <ControlGrid rows={[
               ["Move", "Left Stick"],
               ["Aim / Fly", "Left Stick"],
-              ["Jump", "✕ (Cross)"],
-              ["Punch / Melee", "□ (Square)"],
+              ["Jump", "Cross"],
+              ["Punch / Melee", "Square"],
               ["Fire / Beam", "R2"],
               ["Teleport", "R1"],
               ["Power 1 (HOLD)", "L1"],
-              ["Power 2 (TAP)", "△ (Triangle)"],
+              ["Power 2 (TAP)", "Triangle"],
               ["Rage Frenzy", "L2"],
               ["Settings", "Options"],
             ]} headers={["Action", "PS4 / PS5 Controller"]} />
@@ -205,7 +205,7 @@ function ControlGrid({ rows, headers }: { rows: string[][]; headers: string[] })
 }
 
 function KeyChip({ children }: { children: React.ReactNode }) {
-  if (children === "—") return <span className="text-foreground/30">—</span>;
+  if (children === "None") return <span className="text-foreground/35">None</span>;
   return (
     <span
       className="inline-flex items-center px-2 py-1 rounded-md font-mono text-[10px] uppercase tracking-widest"

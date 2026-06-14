@@ -409,7 +409,7 @@ function HUD({ snap, onRematch, onChange, onOpenSettings, onFrenzyP1 }: { snap: 
       {snap.teleTargeting && (
         <div className="pointer-events-none absolute inset-0 flex items-end justify-center pb-32">
           <div className="font-mono text-xs sm:text-sm tracking-widest text-foreground/70 animate-pulse">
-            ◇ SELECT TELEPORT TARGET ◇
+            SELECT TELEPORT TARGET
           </div>
         </div>
       )}
@@ -511,7 +511,7 @@ function FrenzyBar({ cd, max, active, side, onActivate }: { cd: number; max: num
           className="font-mono text-[10px] tracking-[0.2em] uppercase"
           style={{ color: ready ? glow : "oklch(0.65 0.04 145)" }}
         >
-          {active ? "RAGE FRENZY!" : ready ? "Rage Frenzy ▸ READY" : "Rage Frenzy"}
+          {active ? "RAGE FRENZY!" : ready ? "Rage Frenzy READY" : "Rage Frenzy"}
         </span>
         {!ready && !active && (
           <span className="font-mono text-[10px] text-foreground/50">{cd.toFixed(1)}s</span>
@@ -655,7 +655,7 @@ function PlayerControls({
         onSpecial={onSpecial}
         specialCd={cd}
         specialMax={max}
-        specialLabel={canFly ? `${label} · Fly` : label}
+        specialLabel={canFly ? `${label} / Fly` : label}
         verticalSteer={!!canFly}
       />
     </div>

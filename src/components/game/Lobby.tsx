@@ -60,7 +60,7 @@ function MapsPanel({ onPick }: { onPick: (id: MapId) => void }) {
         {neon.map((m) => <MapCard key={m.id} map={m} onPick={() => onPick(m.id)} />)}
       </div>
 
-      <SectionHeader label="Dark · Realistic" caption="Gritty, grounded battlegrounds" />
+      <SectionHeader label="Dark / Realistic" caption="Gritty, grounded battlegrounds" />
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
         {dark.map((m) => <MapCard key={m.id} map={m} onPick={() => onPick(m.id)} />)}
       </div>
@@ -159,7 +159,7 @@ function SkinsPanel() {
   return (
     <div className="space-y-8">
       <div className="text-center text-foreground/60 font-mono text-[11px] tracking-widest uppercase">
-        All skins included · more coming soon
+        All skins included / more coming soon
       </div>
       {UNIVERSES.map((u) => {
         const skins = SKINS.filter((s) => s.universe === u);

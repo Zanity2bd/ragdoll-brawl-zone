@@ -17,7 +17,7 @@ export function MapSelect({ onPick }: { onPick: (id: MapId) => void }) {
           </div>
         </section>
         <section>
-          <div className="font-mono text-[10px] sm:text-xs tracking-[0.4em] text-foreground/50 uppercase mb-3">Dark · Realistic</div>
+          <div className="font-mono text-[10px] sm:text-xs tracking-[0.4em] text-foreground/50 uppercase mb-3">Dark / Realistic</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {MAPS.filter(m => m.tone === "dark").map((m) => (
               <MapCard key={m.id} mapId={m.id} onPick={() => onPick(m.id)} />
