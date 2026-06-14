@@ -2189,7 +2189,7 @@ export class GameEngine {
           target.onGround = false;
           target.ragdollT = Math.max(target.ragdollT, 0.9);
           target.ragdollEnergy = 1;
-          target.ragdollAV = dir * 7;
+          target.ragdollAV = dir * 5.2;
           target.ragdollImmuneT = 1.0;
           applyHitReaction(target.rs, dir, -0.6, 0.95, 0, HR_TELEGRAPHED | HR_LAUNCHER);
           this.hitstopT = Math.max(this.hitstopT, 0.22);
@@ -2362,7 +2362,7 @@ export class GameEngine {
           if (tgt.ragdollImmuneT <= 0) {
             tgt.ragdollT = 0.5;
             tgt.ragdollEnergy = 1;
-            tgt.ragdollAV = Math.sign(lo.vx || 1) * 5;
+            tgt.ragdollAV = Math.sign(lo.vx || 1) * 4;
             applyHitReaction(tgt.rs, Math.sign(lo.vx || 1), -0.5, 0.7, 0, HR_LAUNCHER);
           }
           this.shake = Math.max(this.shake, 32);
@@ -2889,7 +2889,7 @@ export class GameEngine {
         target.downedT = 0;
         target.ragdollT = 1.2;
         target.ragdollEnergy = 1;
-        target.ragdollAV = dir * 6;
+        target.ragdollAV = dir * 4.6;
         target.ragdollImmuneT = 1.5;
         applyHitReaction(target.rs, dir, -0.55, 1.0, 0, HR_TELEGRAPHED | HR_FINISHER);
         this.shake = Math.max(this.shake, 36);
@@ -3053,11 +3053,10 @@ export class GameEngine {
       f.vy *= Math.pow(0.99, dt * 60);
       f.x += f.vx * ldt;
       f.y += f.vy * ldt;
-      // Angular: torque from horizontal speed; damp gradually
-      // Bigger torque target + slower decay → body keeps spinning, momentum sells weight.
-      const targetAV = Math.sign(f.vx) * Math.min(18, Math.abs(f.vx) * 0.035);
-      f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 1.4);
-      f.ragdollAV *= Math.pow(0.965, dt * 60);
+      // Angular: torque from horizontal speed, capped for readable heavy tumbles.
+      const targetAV = Math.sign(f.vx) * Math.min(12, Math.abs(f.vx) * 0.026);
+      f.ragdollAV += (targetAV - f.ragdollAV) * Math.min(1, dt * 1.65);
+      f.ragdollAV *= Math.pow(0.94, dt * 60);
       f.ragdollAng += f.ragdollAV * dt;
       {
         const desired = Math.atan2(Math.sin(f.ragdollAng), Math.cos(f.ragdollAng));
@@ -3073,7 +3072,7 @@ export class GameEngine {
           f.ragdollVisAng = visualTarget;
         } else {
           const delta = Math.atan2(Math.sin(visualTarget - f.ragdollVisAng), Math.cos(visualTarget - f.ragdollVisAng));
-          const maxStep = (3.2 + Math.min(1, f.ragdollEnergy) * 1.4 + floorEase * 2.2) * dt;
+          const maxStep = (2.6 + Math.min(1, f.ragdollEnergy) * 0.9 + floorEase * 1.8) * dt;
           f.ragdollVisAng += Math.max(-maxStep, Math.min(maxStep, delta));
         }
       }
@@ -3081,17 +3080,15 @@ export class GameEngine {
       // constant so head/arms/legs flop with offset phase, never lockstep.
       const lagChase = (cur: number, target: number, k: number) =>
         cur + (target - cur) * Math.min(1, dt * k);
-      // Much stronger trailing-limb drag — limbs visibly chase the body with
-      // staggered offsets (head last). Asymmetric L/R so the silhouette never
-      // mirrors itself. Slower decay so momentum carries longer.
-      f.headLag  = lagChase(f.headLag,  f.ragdollAV * 0.95, 3.4) * Math.pow(0.955, dt * 60);
-      f.armLagL  = lagChase(f.armLagL,  f.ragdollAV * 1.55, 5.2) * Math.pow(0.945, dt * 60);
-      f.armLagR  = lagChase(f.armLagR,  f.ragdollAV * 1.25, 4.6) * Math.pow(0.948, dt * 60);
-      f.legLag   = lagChase(f.legLag,   f.ragdollAV * 1.10, 4.0) * Math.pow(0.950, dt * 60);
+      // Trailing-limb drag keeps the body alive without letting limbs smear the silhouette.
+      f.headLag  = lagChase(f.headLag,  f.ragdollAV * 0.72, 3.8) * Math.pow(0.935, dt * 60);
+      f.armLagL  = lagChase(f.armLagL,  f.ragdollAV * 1.12, 5.6) * Math.pow(0.930, dt * 60);
+      f.armLagR  = lagChase(f.armLagR,  f.ragdollAV * 0.96, 5.0) * Math.pow(0.932, dt * 60);
+      f.legLag   = lagChase(f.legLag,   f.ragdollAV * 0.82, 4.5) * Math.pow(0.934, dt * 60);
       // Walls — bounce with energy loss
-      if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6);
+      if (f.x < 30) { f.x = 30; f.vx = Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.42; this.shake = Math.max(this.shake, 6);
         f.hitReactKind = "wallBounce"; f.hitReactT = 0.22; f.hitReactDur = 0.22; f.hitReactDir = 1; f.hitReactMag = Math.min(1, Math.abs(f.vx) / 360 + 0.3); }
-      if (f.x > W - 30) { f.x = W - 30; f.vx = -Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.6; this.shake = Math.max(this.shake, 6);
+      if (f.x > W - 30) { f.x = W - 30; f.vx = -Math.abs(f.vx) * 0.45; f.ragdollAV *= -0.42; this.shake = Math.max(this.shake, 6);
         f.hitReactKind = "wallBounce"; f.hitReactT = 0.22; f.hitReactDur = 0.22; f.hitReactDir = -1; f.hitReactMag = Math.min(1, Math.abs(f.vx) / 360 + 0.3); }
       // Ground impact
       if (f.y + FIGHTER_H >= GROUND_Y) {
@@ -3104,12 +3101,12 @@ export class GameEngine {
           f.ragdollAV *= 0.4;
           // Impact pulse: body rolls in travel direction, scaled by impact.
           const pulseDir = Math.sign(f.vx) || (f.facing as number);
-          f.ragdollAV += pulseDir * impact * 0.012;
+          f.ragdollAV += pulseDir * impact * 0.008;
           // Limbs jolt on impact too — flesh-on-floor flop.
-          f.armLagL += pulseDir * impact * 0.006;
-          f.armLagR += pulseDir * impact * 0.005;
-          f.legLag  += pulseDir * impact * 0.004;
-          f.headLag += pulseDir * impact * 0.003;
+          f.armLagL += pulseDir * impact * 0.004;
+          f.armLagR += pulseDir * impact * 0.0035;
+          f.legLag  += pulseDir * impact * 0.0028;
+          f.headLag += pulseDir * impact * 0.002;
           f.ragdollEnergy = Math.max(0, f.ragdollEnergy - 0.25);
           this.shake = Math.max(this.shake, Math.min(14, impact * 0.05));
           Sfx.play("thud", Math.min(0.6, impact / 600));
@@ -4397,7 +4394,7 @@ export class GameEngine {
                 target.onGround = false;
                 target.ragdollT = Math.max(target.ragdollT, 1.1);
                 target.ragdollEnergy = 1;
-                target.ragdollAV = dir * 5;
+                target.ragdollAV = dir * 4;
                 target.ragdollImmuneT = 1.0;
                 applyHitReaction(target.rs, dir, 0.5, 0.85, -1, HR_AIRBORNE | HR_LAUNCHER);
                 if (target.iframeT <= 0) {
@@ -4749,7 +4746,7 @@ export class GameEngine {
     if (isFinisher) {
       t.vx = dir * 520; t.vy = -360; t.onGround = false;
       t.ragdollT = 1.0; t.ragdollPhase = 0; t.ragdollAng = 0;
-      t.ragdollAV = dir * 7 + (Math.random() - 0.5) * 3;
+      t.ragdollAV = dir * 5.2 + (Math.random() - 0.5) * 1.6;
       t.ragdollEnergy = 1;
     } else {
       t.vx = dir * (beat.kind === "kick" ? 30 : 22);
@@ -4863,7 +4860,7 @@ export class GameEngine {
       target.ragdollT = m.ragdollT;
       target.ragdollPhase = 0;
       target.ragdollAng = 0;
-      target.ragdollAV = (Math.random() - 0.5) * 4 + f.facing * 3;
+      target.ragdollAV = (Math.random() - 0.5) * 2 + f.facing * 2.4;
       target.ragdollEnergy = 1;
       // Snap initial impulse so transition into tumble looks continuous
       applyImpulse(target.wobble, f.facing, -0.4, 1.0);
@@ -4935,7 +4932,7 @@ export class GameEngine {
     t.ragdollT = t.ragdollImmuneT > 0 ? SUPER_RAGDOLL * 0.6 : SUPER_RAGDOLL;
     t.ragdollPhase = 0;
     t.ragdollAng = 0;
-    t.ragdollAV = dir * 6 + (Math.random() - 0.5) * 3;
+    t.ragdollAV = dir * 4.8 + (Math.random() - 0.5) * 1.8;
     t.ragdollEnergy = 1;
     applyHitReaction(t.rs, dir as 1 | -1, -0.5, 0.95, 0, HR_TELEGRAPHED | HR_LAUNCHER);
     this.shake = Math.max(this.shake, SUPER_SHAKE);
@@ -7381,8 +7378,8 @@ export class GameEngine {
         // Secondary floppy wobble — high-freq overlay on top of ragdollAng,
         // amplitude scales with angular velocity so violent spins flop harder.
         const wob = (
-          Math.sin(f.ragdollPhase * 11) * Math.min(0.08, Math.abs(f.ragdollAV) * 0.012)
-          + Math.sin(f.ragdollPhase * 17 + 1.3) * 0.025
+          Math.sin(f.ragdollPhase * 11) * Math.min(0.055, Math.abs(f.ragdollAV) * 0.008)
+          + Math.sin(f.ragdollPhase * 17 + 1.3) * 0.015
         ) * (0.35 + airEase * 0.65);
         // Tilt toward motion vector so silhouette "points" where it's flying.
         const motionTilt = Math.atan2(f.vy, f.vx) * 0.045 * (0.25 + airEase * 0.75);
