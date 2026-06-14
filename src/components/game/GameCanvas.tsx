@@ -310,7 +310,7 @@ export function GameCanvas() {
         />
       )}
 
-      {needsLandscape && <RotatePrompt />}
+      {needsLandscape && screen === "fight" && <RotatePrompt />}
     </div>
   );
 }
