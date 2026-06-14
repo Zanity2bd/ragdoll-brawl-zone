@@ -1,5 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { BlkdomBadge } from "@/components/BlkdomBadge";
+import { getSkin } from "@/game/skins";
+import { drawWalkFrame, drawWalkFrameSilhouette } from "@/game/walkSprite";
+import { useEffect, useRef } from "react";
 
 export const Route = createFileRoute("/")({
   component: Landing,
@@ -106,7 +109,7 @@ function Landing() {
             className="relative mb-4 font-display text-[11px] tracking-[0.55em]"
             style={{ color: "color-mix(in oklab, var(--gold) 80%, transparent)" }}
           >
-            ⟢ &nbsp; OGUN · WAR &nbsp; ⟣
+            OGUN / WAR
           </div>
 
           {/* OGUN slab */}
@@ -114,7 +117,7 @@ function Landing() {
             className="relative font-display leading-[0.82] text-center"
             style={{
               fontSize: "clamp(72px, 22vw, 108px)",
-              letterSpacing: "-0.045em",
+              letterSpacing: "0",
               color: "var(--paper)",
               textShadow:
                 "0 2px 0 oklch(0.02 0 0), 0 14px 30px oklch(0.02 0 0 / 0.9)",
@@ -152,7 +155,7 @@ function Landing() {
 
           {/* Tagline */}
           <p className="mt-5 text-center font-display text-[10px] tracking-[0.42em] text-foreground/55 max-w-[280px]">
-            TWO FIGHTERS · ONE SCREEN · NO MERCY
+            TWO FIGHTERS / ONE SCREEN / NO MERCY
           </p>
         </section>
 
@@ -179,14 +182,14 @@ function Landing() {
           <nav className="mx-auto mt-5 grid max-w-[340px] grid-cols-3 gap-2">
             <TabChip to="/play" label="Fighters" hint="9 unlocked" />
             <TabChip to="/play" label="Arenas" hint="13 maps" />
-            <TabChip to="/play" label="Settings" hint="Audio · Pads" />
+            <TabChip to="/play" label="Settings" hint="Audio / Pads" />
           </nav>
 
           {/* Footer credits */}
           <div className="mt-6 flex flex-col items-center gap-2">
             <BlkdomBadge />
             <span className="font-display text-[9px] tracking-[0.45em] text-foreground/25">
-              v1 · OFFLINE · NO ACCOUNT
+              v1 / OFFLINE / NO ACCOUNT
             </span>
           </div>
         </section>
@@ -222,43 +225,72 @@ function TabChip({ to, label, hint }: { to: string; label: string; hint: string 
 }
 
 function SilhouetteFaceoff() {
-  // Two opposing fighter silhouettes behind the title, low opacity
+  const ref = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const ctx = c.getContext("2d")!;
+    const dpr = Math.min(devicePixelRatio || 1, 1.5);
+    const p1 = getSkin("spiderman");
+    const p2 = getSkin("homelander");
+    const W = 720;
+    const H = 360;
+
+    const resize = () => {
+      const r = c.getBoundingClientRect();
+      c.width = Math.floor(r.width * dpr);
+      c.height = Math.floor(r.height * dpr);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    let raf = 0;
+    const t0 = performance.now();
+    let last = t0;
+    const loop = (now: number) => {
+      if (now - last >= 1000 / 24) {
+        last = now;
+        const t = (now - t0) / 1000;
+        const frame = Math.floor(t * 8) % 10;
+        ctx.save();
+        ctx.setTransform(c.width / W, 0, 0, c.height / H, 0, 0);
+        ctx.clearRect(0, 0, W, H);
+
+        const feetY = H - 18;
+        const fighterH = 330;
+        const drawFighter = (skin: typeof p1, x: number, facing: 1 | -1) => {
+          drawWalkFrameSilhouette(ctx, skin, frame, x, feetY, facing, fighterH, {
+            alpha: 0.32,
+            blur: 14,
+            shadowColor: skin.glow,
+            offset: 2.5,
+          });
+          ctx.globalAlpha = 0.48;
+          drawWalkFrame(ctx, skin, frame, x, feetY, facing, fighterH);
+          ctx.globalAlpha = 1;
+        };
+
+        drawFighter(p1, W * 0.27, 1);
+        drawFighter(p2, W * 0.73, -1);
+        ctx.restore();
+      }
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, []);
+
   return (
     <div
       aria-hidden
       className="absolute inset-x-0 top-[10%] bottom-[15%] pointer-events-none"
-      style={{ opacity: 0.32 }}
+      style={{ opacity: 0.52 }}
     >
-      <svg
-        viewBox="0 0 400 360"
-        className="h-full w-full"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>
-          <linearGradient id="heroSil" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="oklch(0.25 0.08 245)" />
-            <stop offset="100%" stopColor="oklch(0.05 0.01 245 / 0)" />
-          </linearGradient>
-          <linearGradient id="villSil" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="oklch(0.28 0.12 25)" />
-            <stop offset="100%" stopColor="oklch(0.05 0.01 25 / 0)" />
-          </linearGradient>
-        </defs>
-        {/* Left fighter — stance, fist forward */}
-        <g fill="url(#heroSil)">
-          <ellipse cx="78" cy="60" rx="14" ry="16" />
-          <path d="M78 76 L70 100 L60 150 L52 200 L46 260 L62 300 L70 300 L78 240 L86 240 L92 300 L102 300 L96 230 L90 170 L98 130 L120 120 L138 116 L138 108 L120 104 L100 96 Z" />
-        </g>
-        {/* Right fighter — mirrored */}
-        <g fill="url(#villSil)" transform="translate(400,0) scale(-1,1)">
-          <ellipse cx="78" cy="60" rx="14" ry="16" />
-          <path d="M78 76 L70 100 L60 150 L52 200 L46 260 L62 300 L70 300 L78 240 L86 240 L92 300 L102 300 L96 230 L90 170 L98 130 L120 120 L138 116 L138 108 L120 104 L100 96 Z" />
-        </g>
-      </svg>
+      <canvas ref={ref} className="h-full w-full" />
     </div>
   );
 }
-
 /* Static ember positions (deterministic for SSR) */
 const EMBERS = [
   { x: 12, y: 18, s: 2, c: "oklch(0.85 0.18 80)", d: 0, dur: 6 },
