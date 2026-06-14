@@ -9,6 +9,15 @@ import { SkinSelect } from "./SkinSelect";
 import { Splash } from "./Splash";
 import { SettingsPanel } from "./Settings";
 import { useGamepad } from "@/hooks/useGamepad";
+import {
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Settings as SettingsIcon,
+  Swords,
+  Zap,
+} from "lucide-react";
 
 const KEY_MAP: Record<string, { p: PlayerId; action: "left" | "right" | "jump" | "fire" | "teleport" | "melee" }> = {
   KeyA: { p: "p1", action: "left" },
@@ -318,10 +327,10 @@ function HUD({ snap, onRematch, onChange, onOpenSettings, onFrenzyP1 }: { snap: 
   return (
     <>
       <div
-        className="pointer-events-none absolute left-0 right-0 flex justify-center"
+        className="pointer-events-none absolute left-0 right-0 z-20 flex justify-center"
         style={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       >
-        <div className="flex gap-3 sm:gap-6 items-start w-full px-3 sm:px-6" style={{ maxWidth: "min(1200px, 96vw)" }}>
+        <div className="flex gap-2 sm:gap-5 items-start w-full px-2 sm:px-6" style={{ maxWidth: "min(1160px, 97vw)" }}>
           <HpBar p={snap.p1} side="left" onFrenzy={onFrenzyP1} />
           <HpBar p={snap.p2} side="right" />
         </div>
@@ -335,15 +344,14 @@ function HUD({ snap, onRematch, onChange, onOpenSettings, onFrenzyP1 }: { snap: 
           right: "calc(env(safe-area-inset-right, 0px) + 8px)",
           width: "min(11vw, 44px)",
           height: "min(11vw, 44px)",
-          fontSize: "min(4.5vw, 18px)",
-          background: "linear-gradient(135deg, oklch(0.30 0.10 285 / 0.7), oklch(0.16 0.05 275 / 0.85))",
-          border: "1px solid oklch(0.55 0.18 285 / 0.5)",
+          background: "linear-gradient(135deg, oklch(0.20 0.05 255 / 0.76), oklch(0.08 0.03 275 / 0.88))",
+          border: "1px solid oklch(0.72 0.16 210 / 0.38)",
           color: "oklch(0.92 0.06 290)",
-          boxShadow: "0 4px 14px oklch(0.55 0.22 290 / 0.35), inset 0 1px 0 oklch(0.95 0.10 290 / 0.15)",
+          boxShadow: "0 8px 20px oklch(0 0 0 / 0.35), inset 0 1px 0 oklch(0.98 0.04 220 / 0.18)",
           backdropFilter: "blur(8px)",
         }}
       >
-        ⚙
+        <SettingsIcon size={20} strokeWidth={2.25} />
       </button>
 
       {snap.phase === "intro" && (
@@ -419,9 +427,17 @@ function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "r
   const glow = isP1 ? "oklch(0.65 0.22 215)" : "oklch(0.65 0.28 340)";
   const pct = (p.hp / p.maxHp) * 100;
   return (
-    <div className={`flex-1 max-w-md ${side === "right" ? "items-end pr-12 sm:pr-14" : ""} flex flex-col gap-1.5`}>
+    <div
+      className={`flex-1 min-w-0 max-w-md ${side === "right" ? "items-end pr-11 sm:pr-14" : ""} flex flex-col gap-1.5 rounded-lg px-2 py-1.5 sm:px-2.5 sm:py-2`}
+      style={{
+        background: "linear-gradient(180deg, oklch(0.07 0.025 260 / 0.58), oklch(0.03 0.015 260 / 0.46))",
+        border: "1px solid oklch(0.86 0.05 240 / 0.13)",
+        boxShadow: "0 12px 28px oklch(0 0 0 / 0.24), inset 0 1px 0 oklch(0.98 0.04 230 / 0.09)",
+        backdropFilter: "blur(8px)",
+      }}
+    >
       <div className={`flex items-center gap-3 ${side === "right" ? "flex-row-reverse" : ""}`}>
-        <div className="font-mono text-[11px] sm:text-xs tracking-[0.2em] uppercase font-bold whitespace-nowrap"
+        <div className="min-w-0 truncate font-mono text-[10px] sm:text-xs tracking-[0.18em] uppercase font-bold"
              style={{ color: accent, textShadow: `0 0 12px ${glow}` }}>
           {p.name}
         </div>
@@ -429,7 +445,7 @@ function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "r
           {Math.ceil(p.hp)} / {p.maxHp}
         </div>
       </div>
-      <div className="relative h-3 sm:h-3.5 rounded-full overflow-hidden"
+      <div className="relative h-2.5 sm:h-3 rounded-full overflow-hidden"
            style={{
              background: "linear-gradient(180deg, oklch(0.10 0.03 275 / 0.85), oklch(0.06 0.02 275 / 0.95))",
              border: "1px solid oklch(0.40 0.10 280 / 0.4)",
@@ -448,7 +464,7 @@ function HpBar({ p, side, onFrenzy }: { p: GameSnapshot["p1"]; side: "left" | "r
         <div className="absolute inset-x-0 top-0 h-1/2 pointer-events-none"
              style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.18), transparent)" }} />
       </div>
-      <div className={`flex flex-wrap gap-1.5 ${side === "right" ? "flex-row-reverse" : ""}`}>
+      <div className={`flex max-w-full flex-wrap gap-1 ${side === "right" ? "flex-row-reverse" : ""}`}>
         {p.hasPower1 && (
           <CdPill label={p.power1Name} cd={p.power1Cd} max={p.power1CdMax} color={accent} />
         )}
@@ -504,7 +520,7 @@ function FrenzyBar({ cd, max, active, side, onActivate }: { cd: number; max: num
       <div
         className="h-2 rounded-sm overflow-hidden border"
         style={{
-          width: "min(280px, 60vw)",
+          width: "min(260px, 42vw)",
           borderColor: "oklch(0.3 0.05 145 / 0.6)",
           background: "oklch(0.12 0.02 145 / 0.6)",
         }}
@@ -528,19 +544,23 @@ function CdPill({ label, cd, max, color }: { label: string; cd: number; max: num
   const pct = ready ? 100 : (1 - cd / max) * 100;
   return (
     <div
-      className="relative px-2.5 py-1 rounded-md font-mono text-[10px] tracking-widest uppercase overflow-hidden"
+      className="relative inline-flex h-[19px] max-w-[8rem] items-center gap-1 overflow-hidden rounded-[5px] px-2 font-mono text-[8px] sm:text-[9px] tracking-[0.14em] uppercase"
+      title={label}
       style={{
-        background: "linear-gradient(180deg, oklch(0.16 0.04 275 / 0.85), oklch(0.10 0.03 275 / 0.95))",
+        background: ready
+          ? "linear-gradient(180deg, oklch(0.16 0.04 255 / 0.82), oklch(0.08 0.025 260 / 0.92))"
+          : "linear-gradient(180deg, oklch(0.10 0.025 260 / 0.72), oklch(0.06 0.018 260 / 0.88))",
         border: `1px solid ${ready ? color : "oklch(0.35 0.06 280 / 0.5)"}`,
         color: ready ? color : "oklch(0.55 0.04 280)",
-        boxShadow: ready ? `0 0 10px ${color}, inset 0 1px 0 oklch(0.95 0.05 290 / 0.15)` : "inset 0 1px 0 oklch(0.95 0.05 290 / 0.06)",
+        boxShadow: ready ? `0 0 8px ${color}, inset 0 1px 0 oklch(0.95 0.05 290 / 0.14)` : "inset 0 1px 0 oklch(0.95 0.05 290 / 0.06)",
       }}
     >
       <div
-        className="absolute inset-y-0 left-0 transition-[width] duration-150"
-        style={{ width: `${pct}%`, background: `linear-gradient(90deg, color-mix(in oklab, ${color} 35%, transparent), transparent)` }}
+        className="absolute inset-x-0 bottom-0 h-[2px] transition-[width] duration-150"
+        style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color}, color-mix(in oklab, ${color} 30%, transparent))` }}
       />
-      <span className="relative">{label}</span>
+      <span className="relative min-w-0 truncate">{label}</span>
+      {!ready && <span className="relative tabular-nums text-foreground/55">{Math.ceil(cd)}</span>}
     </div>
   );
 }
@@ -550,7 +570,7 @@ function TouchControls({ engine, snap, cpu }: { engine: GameEngine; snap: GameSn
     <div
       className="absolute inset-x-0 bottom-0 pointer-events-none"
       style={{
-        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+        paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + clamp(8px, 2vh, 14px))",
         paddingLeft: "env(safe-area-inset-left, 0px)",
         paddingRight: "env(safe-area-inset-right, 0px)",
       }}
@@ -720,11 +740,12 @@ function Joystick({
       className="relative rounded-full pointer-events-auto touch-none"
       // size scales with viewport so it never feels too small or too big
       style={{
-        width: "clamp(78px, 19vw, 116px)",
-        height: "clamp(78px, 19vw, 116px)",
-        background: `radial-gradient(circle at 50% 45%, color-mix(in oklab, ${color} 55%, transparent) 0%, color-mix(in oklab, ${color} 28%, transparent) 60%, color-mix(in oklab, ${color} 12%, transparent) 100%)`,
-        border: `3px solid color-mix(in oklab, ${color} 75%, transparent)`,
-        boxShadow: `0 6px 20px color-mix(in oklab, ${color} 35%, transparent), inset 0 -4px 12px rgba(0,0,0,0.25), inset 0 2px 6px rgba(255,255,255,0.15)`,
+        width: "clamp(72px, 17vw, 104px)",
+        height: "clamp(72px, 17vw, 104px)",
+        background: `radial-gradient(circle at 50% 45%, color-mix(in oklab, ${color} 42%, transparent) 0%, color-mix(in oklab, ${color} 18%, transparent) 58%, rgba(6, 8, 14, 0.54) 100%)`,
+        border: `2px solid color-mix(in oklab, ${color} 62%, transparent)`,
+        boxShadow: `0 10px 24px rgba(0,0,0,0.28), 0 0 20px color-mix(in oklab, ${color} 22%, transparent), inset 0 -4px 12px rgba(0,0,0,0.28), inset 0 2px 6px rgba(255,255,255,0.12)`,
+        backdropFilter: "blur(4px)",
       }}
       onPointerDown={(e) => {
         (e.target as Element).setPointerCapture(e.pointerId);
@@ -744,10 +765,10 @@ function Joystick({
       }}
       onPointerCancel={() => { idRef.current = null; cancelHold(); movedFar.current = false; setKnob({ x: 0, y: 0 }); onMove(0, 0); }}
     >
-      <span className={arrow} style={{ top: 6, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▲</span>
-      <span className={arrow} style={{ bottom: 6, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▼</span>
-      <span className={arrow} style={{ left: 6, top: "50%", transform: "translateY(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>◀</span>
-      <span className={arrow} style={{ right: 6, top: "50%", transform: "translateY(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }}>▶</span>
+      <ChevronUp className={arrow} size={14} style={{ top: 5, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }} />
+      <ChevronDown className={arrow} size={14} style={{ bottom: 5, left: "50%", transform: "translateX(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }} />
+      <ChevronLeft className={arrow} size={14} style={{ left: 5, top: "50%", transform: "translateY(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }} />
+      <ChevronRight className={arrow} size={14} style={{ right: 5, top: "50%", transform: "translateY(-50%)", color: `color-mix(in oklab, ${color} 90%, white)` }} />
 
       {/* Cooldown ring (subtle) */}
       <svg className="absolute inset-0 pointer-events-none" viewBox="0 0 120 120">
@@ -772,7 +793,7 @@ function Joystick({
       </svg>
 
       <div
-        className="absolute top-1/2 left-1/2 w-14 h-14 -mt-7 -ml-7 rounded-full flex items-center justify-center"
+        className="absolute top-1/2 left-1/2 w-12 h-12 -mt-6 -ml-6 rounded-full flex items-center justify-center"
         style={{
           background: `radial-gradient(circle at 35% 30%, color-mix(in oklab, ${color} 95%, white) 0%, ${color} 60%, color-mix(in oklab, ${color} 60%, black) 100%)`,
           boxShadow: `0 4px 10px rgba(0,0,0,0.4), inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.4)`,
@@ -781,14 +802,15 @@ function Joystick({
           opacity: ready ? 1 : 0.8,
         }}
       >
-        <span className="font-mono text-[8px] tracking-widest uppercase" style={{ color: "rgba(0,0,0,0.6)" }}>
-          {ready ? "HOLD" : "···"}
-        </span>
+        {ready
+          ? <Zap size={17} strokeWidth={2.8} style={{ color: "rgba(0,0,0,0.62)" }} />
+          : <span className="font-mono text-[10px] tracking-widest uppercase tabular-nums" style={{ color: "rgba(0,0,0,0.58)" }}>{Math.ceil(specialCd)}</span>}
       </div>
 
       <div
-        className="absolute -top-5 left-1/2 -translate-x-1/2 font-mono text-[9px] tracking-widest uppercase whitespace-nowrap pointer-events-none"
+        className="absolute -top-5 left-1/2 max-w-[8rem] -translate-x-1/2 truncate text-center font-mono text-[8px] sm:text-[9px] tracking-[0.18em] uppercase whitespace-nowrap pointer-events-none"
         style={{ color: ready ? color : "oklch(0.55 0.02 250)" }}
+        title={specialLabel}
       >
         {specialLabel}
       </div>
@@ -812,18 +834,16 @@ function KickButton({ engine, snap, cpu }: { engine: GameEngine; snap: GameSnaps
         ...(side === "right"
           ? { right: "calc(env(safe-area-inset-right, 0px) + 12px)" }
           : { left: "calc(env(safe-area-inset-left, 0px) + 12px)" }),
-        bottom: "calc(env(safe-area-inset-bottom, 0px) + 150px)",
-        width: "clamp(46px, 11vw, 64px)",
-        height: "clamp(46px, 11vw, 64px)",
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + clamp(86px, 20vw, 122px))",
+        width: "clamp(44px, 10vw, 58px)",
+        height: "clamp(44px, 10vw, 58px)",
         background: `radial-gradient(circle at 35% 30%, color-mix(in oklab, ${color} 95%, white) 0%, ${color} 60%, color-mix(in oklab, ${color} 50%, black) 100%)`,
         border: `2px solid color-mix(in oklab, ${color} 80%, white)`,
-        boxShadow: `0 4px 14px color-mix(in oklab, ${color} 40%, transparent), inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.35)`,
+        boxShadow: `0 8px 18px rgba(0,0,0,0.28), 0 0 14px color-mix(in oklab, ${color} 32%, transparent), inset 0 -3px 6px rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.35)`,
         color: "rgba(0,0,0,0.78)",
-        fontSize: "clamp(18px, 4.5vw, 26px)",
-        letterSpacing: "0.05em",
       }}
     >
-      T
+      <Swords size={24} strokeWidth={2.7} />
     </button>
   );
   void snap;

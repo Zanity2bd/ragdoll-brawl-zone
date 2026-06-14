@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Volume2, VolumeX, X } from "lucide-react";
 
 type Tab = "audio" | "keyboard" | "xbox" | "playstation";
 
@@ -38,7 +39,9 @@ export function SettingsPanel({
           <button onClick={onClose} aria-label="Close"
             className="w-8 h-8 rounded-full flex items-center justify-center text-foreground/70 hover:text-foreground"
             style={{ background: "oklch(0.20 0.05 280 / 0.6)", border: "1px solid oklch(0.45 0.10 280 / 0.4)" }}
-          >✕</button>
+          >
+            <X size={16} strokeWidth={2.5} />
+          </button>
         </div>
 
         {/* Tabs */}
@@ -79,7 +82,12 @@ export function SettingsPanel({
                   border: "1px solid oklch(0.55 0.18 280 / 0.4)",
                   boxShadow: "inset 0 1px 0 oklch(0.95 0.05 280 / 0.2)",
                 }}
-              >{muted ? "🔇  Audio Muted" : "🔊  Audio Enabled"}</button>
+              >
+                <span className="inline-flex items-center justify-center gap-2">
+                  {muted ? <VolumeX size={16} strokeWidth={2.4} /> : <Volume2 size={16} strokeWidth={2.4} />}
+                  {muted ? "Audio Muted" : "Audio Enabled"}
+                </span>
+              </button>
 
               <Slider label="Sound Effects" value={sfxVol} onChange={onSfx} hue={310} />
               <Slider label="Music" value={musicVol} onChange={onMusic} hue={270} />
