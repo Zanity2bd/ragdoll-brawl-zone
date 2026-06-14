@@ -1171,6 +1171,40 @@ export class GameEngine {
     this.finisherActive = true;
   }
 
+  private ellipseFalloff(x: number, y: number, cx: number, cy: number, rx: number, ry: number): number {
+    const nx = (x - cx) / Math.max(1, rx);
+    const ny = (y - cy) / Math.max(1, ry);
+    const d = nx * nx + ny * ny;
+    if (d >= 1) return 0;
+    const u = 1 - d;
+    return u * u * (3 - 2 * u);
+  }
+
+  private fxShieldAt(x: number, y: number, radius = 0): number {
+    const r = Math.max(0, radius);
+    let shield = 0;
+    for (const f of [this.p1, this.p2]) {
+      const head = this.ellipseFalloff(x, y, f.x, f.y + FIGHTER_H * 0.18, 19 + r * 0.28, 20 + r * 0.28);
+      const torso = this.ellipseFalloff(x, y, f.x, f.y + FIGHTER_H * 0.48, 28 + r * 0.34, 46 + r * 0.24);
+      const legs = this.ellipseFalloff(x, y, f.x, f.y + FIGHTER_H * 0.78, 24 + r * 0.24, 28 + r * 0.20);
+      shield = Math.max(shield, head, torso * 0.92, legs * 0.62);
+    }
+    return Math.min(1, shield);
+  }
+
+  private shockwaveFighterShield(sw: Shockwave): number {
+    let shield = this.fxShieldAt(sw.x, sw.y, Math.min(42, sw.r * 0.18)) * 0.5;
+    for (const f of [this.p1, this.p2]) {
+      const cx = f.x;
+      const cy = f.y + FIGHTER_H * 0.48;
+      const d = Math.hypot((cx - sw.x) * 0.9, (cy - sw.y) * 1.05);
+      const band = 30 + Math.min(42, sw.r * 0.16);
+      const u = 1 - Math.min(1, Math.abs(d - sw.r) / band);
+      shield = Math.max(shield, u * u * (3 - 2 * u));
+    }
+    return Math.min(1, shield);
+  }
+
   private makeFighter(id: PlayerId, x: number, skin: Skin): Fighter {
     const move = MOVES[skin.id];
     const canFly = skin.id === "homelander" || skin.id === "superman";
@@ -5966,16 +6000,17 @@ export class GameEngine {
     ctx.globalCompositeOperation = "lighter";
     for (const p of this.particles) {
       const a = Math.max(0, p.life / p.maxLife);
+      const shield = this.fxShieldAt(p.x, p.y, p.size * 2.2);
       // Soft halo
       if (!this.lowPower) {
-        ctx.globalAlpha = a * 0.55;
+        ctx.globalAlpha = a * 0.55 * (1 - shield * 0.68);
         ctx.fillStyle = p.color;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (2.2 - shield * 0.45), 0, Math.PI * 2); ctx.fill();
       }
       // Bright core
-      ctx.globalAlpha = a;
+      ctx.globalAlpha = a * (1 - shield * 0.48);
       ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (1 - shield * 0.18), 0, Math.PI * 2); ctx.fill();
     }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
@@ -6058,12 +6093,14 @@ export class GameEngine {
     ctx.globalCompositeOperation = "lighter";
     for (const sw of this.shockwaves) {
       const a = Math.max(0, sw.life / sw.maxLife);
-      ctx.globalAlpha = a * 0.8;
+      const shield = this.shockwaveFighterShield(sw);
+      const alphaMul = 1 - shield * 0.58;
+      ctx.globalAlpha = a * 0.66 * alphaMul;
       ctx.strokeStyle = sw.color;
-      ctx.lineWidth = 4;
+      ctx.lineWidth = 3.2;
       ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2); ctx.stroke();
       ctx.lineWidth = 1.5;
-      ctx.globalAlpha = a * 0.3;
+      ctx.globalAlpha = a * 0.24 * alphaMul;
       ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.r * 1.2, 0, Math.PI * 2); ctx.stroke();
     }
     ctx.globalAlpha = 1;
@@ -6689,7 +6726,8 @@ export class GameEngine {
 
     // Impact flash vignette
     if (this.impactFlash > 0) {
-      ctx.fillStyle = `oklch(0.99 0.05 80 / ${Math.min(0.18, this.impactFlash * 0.18)})`;
+      const flashAlpha = Math.min(this.lowPower ? 0.08 : 0.12, this.impactFlash * (this.lowPower ? 0.10 : 0.12));
+      ctx.fillStyle = `oklch(0.99 0.05 80 / ${flashAlpha})`;
       ctx.fillRect(0, 0, cw, ch);
     }
 
