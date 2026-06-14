@@ -1163,3 +1163,50 @@ export function drawWalkFrame(
   ctx.restore();
   return true;
 }
+
+export function drawWalkFrameSilhouette(
+  ctx: CanvasRenderingContext2D,
+  skin: Skin,
+  idx: number,
+  cx: number,
+  footY: number,
+  facing: 1 | -1,
+  height: number,
+  opts: {
+    alpha?: number;
+    blur?: number;
+    shadowColor?: string;
+    composite?: GlobalCompositeOperation;
+    offset?: number;
+  } = {},
+) {
+  const composed = getSkinSheet(skin);
+  if (!composed) return false;
+  const i = ((idx % WALK_FRAME_COUNT) + WALK_FRAME_COUNT) % WALK_FRAME_COUNT;
+  const sx = i * WALK_FRAME_W;
+  const scale = height / WALK_FRAME_H;
+  const dw = WALK_FRAME_W * scale;
+  const dh = height;
+  ctx.save();
+  ctx.translate(cx, footY);
+  if (facing === -1) ctx.scale(-1, 1);
+  ctx.globalAlpha = opts.alpha ?? 0.4;
+  ctx.globalCompositeOperation = opts.composite ?? "source-over";
+  ctx.shadowColor = opts.shadowColor ?? "rgba(0,0,0,0.85)";
+  ctx.shadowBlur = opts.blur ?? 3;
+  const offset = Math.max(0, opts.offset ?? 0);
+  const offsets = offset > 0
+    ? [[offset, 0], [-offset, 0], [0, offset], [0, -offset]]
+    : [[0, 0]];
+  for (const [ox, oy] of offsets) {
+    ctx.shadowOffsetX = ox;
+    ctx.shadowOffsetY = oy;
+    ctx.drawImage(
+      composed,
+      sx, 0, WALK_FRAME_W, WALK_FRAME_H,
+      -dw / 2, -dh, dw, dh,
+    );
+  }
+  ctx.restore();
+  return true;
+}

@@ -10,7 +10,7 @@ import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, type 
 import { createRagdoll, stepRagdoll, applyHitReaction, applyAnticipation, applyRagdollPose, resetRagdoll, HR_TELEGRAPHED, HR_LAUNCHER, HR_FINISHER, HR_AIRBORNE, type RagdollState } from "./ragdoll";
 import { CpuController, type Difficulty } from "./ai";
 import {
-  loadWalkSheet, isWalkSheetReady, drawWalkFrame,
+  loadWalkSheet, isWalkSheetReady, drawWalkFrame, drawWalkFrameSilhouette,
   WALK_LOOP_FRAMES, PUNCH_FRAME_START, RECOVERY_FRAME,
   JUMP_TAKEOFF_FRAME, JUMP_RISE_FRAME, JUMP_APEX_FRAME, JUMP_LAND_FRAME,
   DOWN_FRAME, GETUP_FRAME_A, GETUP_FRAME_B, HURT_FRAME,
@@ -7254,6 +7254,29 @@ export class GameEngine {
       // Root-local draw helper: feet at (0, FIGHTER_H), bodyLag/wobble baked in by pushFighterRoot.
       const drawFrame = (idx: number) =>
         drawWalkFrame(ctx, skin, idx, 0, FIGHTER_H, renderFacing, FIGHTER_H);
+      const drawCombatRim = (idx: number, strength = 1, cx = 0, footY = FIGHTER_H) => {
+        if (ghost) return;
+        const darkAlpha = (this.lowPower ? 0.28 : 0.34) * strength;
+        const glowAlpha = (this.lowPower ? 0.11 : 0.16) * strength;
+        const edgeAlpha = (this.lowPower ? 0.12 : 0.16) * strength;
+        drawWalkFrameSilhouette(ctx, skin, idx, cx, footY, renderFacing, FIGHTER_H, {
+          alpha: darkAlpha,
+          blur: this.lowPower ? 2.4 : 3.2,
+          shadowColor: "rgba(0,0,0,0.9)",
+        });
+        drawWalkFrameSilhouette(ctx, skin, idx, cx, footY, renderFacing, FIGHTER_H, {
+          alpha: glowAlpha,
+          blur: this.lowPower ? 4.2 : 6,
+          shadowColor: skin.glow,
+          composite: "lighter",
+        });
+        drawWalkFrameSilhouette(ctx, skin, idx, cx, footY, renderFacing, FIGHTER_H, {
+          alpha: edgeAlpha,
+          blur: 0,
+          offset: this.lowPower ? 0.85 : 1.05,
+          shadowColor: "rgba(245,250,255,0.58)",
+        });
+      };
 
       // ---- Ragdoll tumble (rotate down silhouette around HIP, root-local) ----
       // Motion-aligned stretch + floppy secondary wobble so the body reads as
@@ -7301,6 +7324,7 @@ export class GameEngine {
         ctx.rotate(drawAng);
         ctx.scale(sx, sy);
         ctx.translate(0, FIGHTER_H * 0.38);
+        drawCombatRim(DOWN_FRAME, 1.12, 0, 0);
         drawWalkFrame(ctx, skin, DOWN_FRAME, 0, 0, renderFacing, FIGHTER_H);
         ctx.restore();
         return;
@@ -7383,6 +7407,7 @@ export class GameEngine {
           drawWalkFrame(ctx, skin, idx, -2 * renderFacing, 8, renderFacing, FIGHTER_H);
           ctx.restore();
         }
+        if (info.phase === "drive" || info.phase === "settle") drawCombatRim(idx, 0.74, 0, 0);
         drawWalkFrame(ctx, skin, idx, 0, 0, renderFacing, FIGHTER_H);
         ctx.restore();
 
@@ -7618,6 +7643,7 @@ export class GameEngine {
         ctx.rotate(env.rot);
         ctx.scale(env.sx, env.sy);
         ctx.translate(-footPx, -footPy);
+        drawCombatRim(swingIdx, 1.16);
         drawFrame(swingIdx);
         ctx.restore();
         // ---- Foot-plant dust puff on first active frame (world coords for particle pool) ----
@@ -7656,6 +7682,7 @@ export class GameEngine {
         ctx.rotate(env.rot);
         ctx.scale(env.sx, env.sy);
         ctx.translate(-hipPx, -hipPy);
+        drawCombatRim(PUNCH_FRAME_START + pIdx, 1.08);
         drawFrame(PUNCH_FRAME_START + pIdx);
         ctx.restore();
         return;
@@ -7672,6 +7699,7 @@ export class GameEngine {
         ctx.rotate(renderFacing * 0.04 * settle);
         ctx.scale(1 + 0.025 * settle, 1 - 0.01 * settle);
         ctx.translate(-hipPx, -hipPy);
+        drawCombatRim(RECOVERY_FRAME, 0.62);
         drawFrame(RECOVERY_FRAME);
         ctx.restore();
         return;
@@ -7692,6 +7720,7 @@ export class GameEngine {
         ctx.rotate(-dir * 0.12 * mag * snap);
         ctx.scale(1 + 0.035 * mag * snap, 1 - 0.045 * mag * snap);
         ctx.translate(-hipPx, -hipPy);
+        drawCombatRim(HURT_FRAME, 1.02);
         drawFrame(HURT_FRAME);
         ctx.restore();
         return;
@@ -7737,6 +7766,7 @@ export class GameEngine {
       const prevQuality = ctx.imageSmoothingQuality;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
+      if (f.meleeKind || f.attackAnim > 0) drawCombatRim(f0, 0.82, drawX, drawY);
       drawWalkFrame(ctx, skin, f0, drawX, drawY, renderFacing, FIGHTER_H);
       ctx.imageSmoothingEnabled = prevSmoothing;
       ctx.imageSmoothingQuality = prevQuality;
