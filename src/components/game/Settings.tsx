@@ -103,7 +103,6 @@ export function SettingsPanel({
               ["Teleport", "G", "L"],
               ["Power 1 (HOLD)", "V", "None"],
               ["Power 2 (TAP)", "C", "None"],
-              ["Rage Frenzy (Hulk)", "B", "N"],
             ]} headers={["Action", "Player 1", "Player 2"]} />
           )}
 
@@ -117,7 +116,6 @@ export function SettingsPanel({
               ["Teleport", "RB"],
               ["Power 1 (HOLD)", "LB"],
               ["Power 2 (TAP)", "Y"],
-              ["Rage Frenzy", "LT"],
               ["Settings", "Menu"],
             ]} headers={["Action", "Xbox Controller"]} />
           )}
@@ -132,7 +130,6 @@ export function SettingsPanel({
               ["Teleport", "R1"],
               ["Power 1 (HOLD)", "L1"],
               ["Power 2 (TAP)", "Triangle"],
-              ["Rage Frenzy", "L2"],
               ["Settings", "Options"],
             ]} headers={["Action", "PS4 / PS5 Controller"]} />
           )}
