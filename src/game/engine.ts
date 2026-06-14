@@ -2953,11 +2953,19 @@ export class GameEngine {
       f.ragdollAng += f.ragdollAV * dt;
       {
         const desired = Math.atan2(Math.sin(f.ragdollAng), Math.cos(f.ragdollAng));
+        const groundGap = GROUND_Y - (f.y + FIGHTER_H);
+        const floorU = Math.max(0, Math.min(1, 1 - groundGap / 72));
+        const floorEase = floorU * floorU * (3 - 2 * floorU);
+        const restAng = Math.abs(Math.sin(desired)) > 0.5
+          ? (Math.PI / 2) * Math.sign(Math.sin(desired))
+          : 0;
+        const floorDelta = Math.atan2(Math.sin(restAng - desired), Math.cos(restAng - desired));
+        const visualTarget = desired + floorDelta * floorEase * 0.72;
         if (f.ragdollPhase <= dt * 1.5 || !Number.isFinite(f.ragdollVisAng)) {
-          f.ragdollVisAng = desired;
+          f.ragdollVisAng = visualTarget;
         } else {
-          const delta = Math.atan2(Math.sin(desired - f.ragdollVisAng), Math.cos(desired - f.ragdollVisAng));
-          const maxStep = (3.8 + Math.min(1, f.ragdollEnergy) * 1.8) * dt;
+          const delta = Math.atan2(Math.sin(visualTarget - f.ragdollVisAng), Math.cos(visualTarget - f.ragdollVisAng));
+          const maxStep = (3.2 + Math.min(1, f.ragdollEnergy) * 1.4 + floorEase * 2.2) * dt;
           f.ragdollVisAng += Math.max(-maxStep, Math.min(maxStep, delta));
         }
       }
@@ -5574,11 +5582,14 @@ export class GameEngine {
         const a = Math.max(-1.6, Math.min(1.6, lag));
         return [Math.sin(a) * r, (1 - Math.cos(a)) * r * 0.55];
       };
-      const [hx, hy] = sw(f.headLag, 9);
-      const [aLx, aLy] = sw(f.armLagL, 16);
-      const [aRx, aRy] = sw(f.armLagR, 13);
-      const [lLx, lLy] = sw(f.legLag, 11);
-      const [lRx, lRy] = sw(f.legLag * 0.78, 9); // L/R asymmetry
+      const groundGap = GROUND_Y - (f.y + FIGHTER_H);
+      const floorU = Math.max(0, Math.min(1, 1 - groundGap / 76));
+      const limbDamp = 1 - floorU * 0.48;
+      const [hx, hy] = sw(f.headLag, 9 * limbDamp);
+      const [aLx, aLy] = sw(f.armLagL, 16 * limbDamp);
+      const [aRx, aRy] = sw(f.armLagR, 13 * limbDamp);
+      const [lLx, lLy] = sw(f.legLag, 11 * limbDamp);
+      const [lRx, lRy] = sw(f.legLag * 0.78, 9 * limbDamp); // L/R asymmetry
       const legacyPose: Pose = {
         ...p,
         headOffsetY: p.headOffsetY + hy,
@@ -7211,20 +7222,45 @@ export class GameEngine {
       // "thrown" rather than just "rotating a frame". Sells weight + impact.
       if (f.ragdollT > 0) {
         const speed = Math.hypot(f.vx, f.vy);
+        const groundLocalY = GROUND_Y - y;
+        const groundGap = GROUND_Y - (f.y + FIGHTER_H);
+        const floorU = Math.max(0, Math.min(1, 1 - groundGap / 74));
+        const floorEase = floorU * floorU * (3 - 2 * floorU);
+        const airEase = 1 - floorEase;
+        if (!this.lowPower || floorEase > 0.35) {
+          const altU = Math.max(0, Math.min(1, (groundLocalY - FIGHTER_H) / 190));
+          const shW = 24 + floorEase * 30 + Math.min(18, speed / 65);
+          const shH = 4 + floorEase * 5;
+          const shA = (0.16 + floorEase * 0.18) * (1 - altU * 0.45);
+          ctx.save();
+          ctx.fillStyle = `rgba(0,0,0,${Math.max(0, Math.min(0.34, shA)).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.ellipse(f.vx * 0.025, groundLocalY - 1, shW, shH, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
         // Stretch along velocity vector — fast tumbles elongate, slow ones settle.
-        const stretch = Math.min(0.18, speed / 1800);
-        const sy = 1 + stretch;
-        const sx = 1 - stretch * 0.55;
+        const stretch = Math.min(0.16, speed / 2100) * (0.55 + airEase * 0.45);
+        const sy = 1 + stretch - floorEase * 0.07;
+        const sx = 1 - stretch * 0.55 + floorEase * 0.09;
         // Secondary floppy wobble — high-freq overlay on top of ragdollAng,
         // amplitude scales with angular velocity so violent spins flop harder.
-        const wob = Math.sin(f.ragdollPhase * 11) * Math.min(0.08, Math.abs(f.ragdollAV) * 0.012)
-                  + Math.sin(f.ragdollPhase * 17 + 1.3) * 0.025;
+        const wob = (
+          Math.sin(f.ragdollPhase * 11) * Math.min(0.08, Math.abs(f.ragdollAV) * 0.012)
+          + Math.sin(f.ragdollPhase * 17 + 1.3) * 0.025
+        ) * (0.35 + airEase * 0.65);
         // Tilt toward motion vector so silhouette "points" where it's flying.
-        const motionTilt = Math.atan2(f.vy, f.vx) * 0.045;
+        const motionTilt = Math.atan2(f.vy, f.vx) * 0.045 * (0.25 + airEase * 0.75);
         const visualAng = Number.isFinite(f.ragdollVisAng) ? f.ragdollVisAng : f.ragdollAng;
+        const restAng = Math.abs(Math.sin(visualAng)) > 0.5
+          ? (Math.PI / 2) * Math.sign(Math.sin(visualAng))
+          : 0;
+        const rawAng = visualAng + wob + motionTilt;
+        const settleDelta = Math.atan2(Math.sin(restAng - rawAng), Math.cos(restAng - rawAng));
+        const drawAng = rawAng + settleDelta * floorEase * 0.56;
         ctx.save();
         ctx.translate(0, FIGHTER_H * 0.62);
-        ctx.rotate(visualAng + wob + motionTilt);
+        ctx.rotate(drawAng);
         ctx.scale(sx, sy);
         ctx.translate(0, FIGHTER_H * 0.38);
         drawWalkFrame(ctx, skin, DOWN_FRAME, 0, 0, renderFacing, FIGHTER_H);
@@ -7233,7 +7269,24 @@ export class GameEngine {
       }
 
       // ---- Downed (KO laydown) ----
-      if (f.downedT > 0) { drawFrame(DOWN_FRAME); return; }
+      if (f.downedT > 0) {
+        if (!this.lowPower) {
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.28)";
+          ctx.beginPath();
+          ctx.ellipse(0, FIGHTER_H - 1, 42, 7, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+        const squash = Math.min(1, f.downedT / 0.28);
+        ctx.save();
+        ctx.translate(0, FIGHTER_H);
+        ctx.scale(1 + 0.08 * squash, 1 - 0.04 * squash);
+        ctx.translate(0, -FIGHTER_H);
+        drawFrame(DOWN_FRAME);
+        ctx.restore();
+        return;
+      }
 
       // ---- Get-up (phased rise: gather/press/kneel/coil/drive/settle) ----
       // Pose, sprite, lift, lean, and FX share one risePhase() clock.
