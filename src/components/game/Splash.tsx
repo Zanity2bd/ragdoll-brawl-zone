@@ -1,5 +1,8 @@
 import { useEffect, useRef } from "react";
 import { BlkdomBadge } from "@/components/BlkdomBadge";
+import { getSkin } from "@/game/skins";
+import { drawWalkFrame, drawWalkFrameSilhouette } from "@/game/walkSprite";
+import { Play } from "lucide-react";
 
 export function Splash({ onPlay }: { onPlay: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -17,6 +20,8 @@ export function Splash({ onPlay }: { onPlay: () => void }) {
 
     const W = 1280;
     const H = 720;
+    const p1 = getSkin("spiderman");
+    const p2 = getSkin("homelander");
 
     const resize = () => {
       const r = c.getBoundingClientRect();
@@ -77,6 +82,25 @@ export function Splash({ onPlay }: { onPlay: () => void }) {
       ctx.fillStyle = "oklch(0.18 0.02 260 / 0.05)";
       for (let y = 0; y < H; y += 4) ctx.fillRect(0, y, W, 1);
 
+      const frame = Math.floor(t * 8) % 10;
+      const feetY = H * 0.82;
+      const fighterH = 275;
+      const drawPosterFighter = (skin: typeof p1, x: number, facing: 1 | -1) => {
+        ctx.fillStyle = "oklch(0 0 0 / 0.36)";
+        ctx.beginPath();
+        ctx.ellipse(x, feetY + 8, 46, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        drawWalkFrameSilhouette(ctx, skin, frame, x, feetY, facing, fighterH, {
+          alpha: 0.42,
+          blur: 10,
+          shadowColor: skin.glow,
+          offset: 2,
+        });
+        drawWalkFrame(ctx, skin, frame, x, feetY, facing, fighterH);
+      };
+      drawPosterFighter(p1, W * 0.34, 1);
+      drawPosterFighter(p2, W * 0.66, -1);
+
       // ---------- Vignette ----------
       const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.8);
       vg.addColorStop(0, "oklch(0 0 0 / 0)");
@@ -124,7 +148,7 @@ export function Splash({ onPlay }: { onPlay: () => void }) {
       {/* HUD overlay */}
       <div className="relative z-10 flex flex-col items-center justify-between h-full p-6 sm:p-10 text-center">
         <div className="font-mono text-[10px] sm:text-xs tracking-[0.5em] uppercase text-foreground/60 mt-2">
-          ◇ Offline 1v1 ◇
+          Offline 1v1
         </div>
 
         <div className="flex flex-col items-center">
@@ -154,16 +178,17 @@ export function Splash({ onPlay }: { onPlay: () => void }) {
         <div className="flex flex-col items-center gap-5 sm:gap-7">
           <button
             onClick={onPlay}
-            className="relative px-12 sm:px-16 py-5 min-h-16 rounded-full font-mono uppercase tracking-[0.4em] text-sm sm:text-base text-foreground border-2 transition-transform active:scale-95 sm:hover:scale-[1.03] touch-manipulation"
+            className="relative inline-flex items-center justify-center gap-3 px-10 sm:px-14 py-5 min-h-16 rounded-md font-mono uppercase tracking-[0.32em] text-sm sm:text-base text-foreground border-2 transition-transform active:scale-95 sm:hover:scale-[1.03] touch-manipulation"
             style={{
               borderColor: "oklch(0.85 0.18 60)",
               boxShadow: "0 0 40px oklch(0.75 0.22 40 / 0.55), inset 0 0 24px oklch(0.85 0.18 60 / 0.18)",
               background: "oklch(0.10 0.04 40 / 0.5)",
             }}
           >
-            ▶ Play
+            <Play size={18} fill="currentColor" strokeWidth={2.2} />
+            Play
             <span
-              className="pointer-events-none absolute inset-0 rounded-full"
+              className="pointer-events-none absolute inset-0 rounded-md"
               style={{
                 animation: "pulse 2s ease-in-out infinite",
                 boxShadow: "0 0 0 0 oklch(0.85 0.18 60 / 0.5)",
@@ -176,117 +201,4 @@ export function Splash({ onPlay }: { onPlay: () => void }) {
       </div>
     </div>
   );
-}
-
-/* ---------------- Scene primitives ---------------- */
-
-function drawTrain(ctx: CanvasRenderingContext2D, x: number, groundY: number, t: number) {
-  const w = 360, h = 180;
-  // body
-  ctx.fillStyle = "oklch(0.16 0.02 260)";
-  ctx.fillRect(x, groundY - h, w, h);
-  // top trim
-  ctx.fillStyle = "oklch(0.22 0.03 260)";
-  ctx.fillRect(x, groundY - h, w, 12);
-  // windows
-  ctx.fillStyle = "oklch(0.55 0.08 240 / 0.7)";
-  for (let i = 0; i < 5; i++) ctx.fillRect(x + 30 + i * 60, groundY - h + 28, 40, 36);
-  // door panel
-  ctx.fillStyle = "oklch(0.10 0.02 260)";
-  ctx.fillRect(x + 14, groundY - h + 80, 24, h - 90);
-  // wheels
-  ctx.fillStyle = "oklch(0.06 0 0)";
-  ctx.beginPath(); ctx.arc(x + 60, groundY - 6, 16, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(x + w - 60, groundY - 6, 16, 0, Math.PI * 2); ctx.fill();
-  // rail
-  ctx.strokeStyle = "oklch(0.30 0.01 260)";
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(x - 40, groundY); ctx.lineTo(x + w + 40, groundY); ctx.stroke();
-  // headlight
-  const flick = 0.85 + 0.15 * Math.sin(t * 18);
-  ctx.shadowBlur = 26 * flick;
-  ctx.shadowColor = "oklch(0.95 0.06 80)";
-  ctx.fillStyle = `oklch(0.95 0.05 80 / ${0.7 * flick})`;
-  ctx.beginPath(); ctx.arc(x + 6, groundY - h + 44, 12, 0, Math.PI * 2); ctx.fill();
-  ctx.shadowBlur = 0;
-  // nose marker
-  ctx.fillStyle = "oklch(0.75 0.18 25 / 0.7)";
-  ctx.fillRect(x - 4, groundY - h + 24, 6, h - 30);
-}
-
-function drawHomelander(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  feetY: number,
-  t: number,
-  firing: boolean
-) {
-  // Walk cycle
-  const cadence = t * 6;
-  const swing = Math.sin(cadence);
-  const breath = Math.sin(t * 2) * 0.6;
-
-  const headY = feetY - 110 + breath;
-  const shoulderY = feetY - 90;
-  const hipY = feetY - 50;
-
-  // CAPE
-  const flutter = Math.sin(t * 4) * 6;
-  ctx.fillStyle = "oklch(0.45 0.20 25)";
-  ctx.shadowBlur = 12; ctx.shadowColor = "oklch(0.45 0.20 25)";
-  ctx.beginPath();
-  ctx.moveTo(cx - 10, shoulderY);
-  ctx.lineTo(cx + 10, shoulderY);
-  ctx.quadraticCurveTo(cx + 22 + flutter, hipY + 18, cx + 14 + flutter, feetY - 8);
-  ctx.lineTo(cx - 14 - flutter, feetY - 8);
-  ctx.quadraticCurveTo(cx - 22 - flutter, hipY + 18, cx - 10, shoulderY);
-  ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // Body
-  ctx.strokeStyle = "oklch(0.42 0.18 260)";
-  ctx.lineWidth = 5;
-  ctx.lineCap = "round";
-
-  // Head
-  ctx.beginPath(); ctx.arc(cx, headY, 13, 0, Math.PI * 2); ctx.stroke();
-
-  // Torso
-  ctx.beginPath(); ctx.moveTo(cx, shoulderY); ctx.lineTo(cx, hipY); ctx.stroke();
-
-  // Emblem
-  ctx.fillStyle = "oklch(0.95 0.02 250)";
-  ctx.fillRect(cx - 3, shoulderY + 6, 6, hipY - shoulderY - 12);
-
-  // Arms
-  const armA = swing * 22;
-  ctx.beginPath();
-  ctx.moveTo(cx, shoulderY); ctx.lineTo(cx - 10, shoulderY + 18 + armA * 0.2);
-  ctx.lineTo(cx - 14 - armA * 0.4, shoulderY + 36 + armA * 0.1);
-  ctx.moveTo(cx, shoulderY); ctx.lineTo(cx + 10, shoulderY + 18 - armA * 0.2);
-  ctx.lineTo(cx + 14 + armA * 0.4, shoulderY + 36 - armA * 0.1);
-  ctx.stroke();
-
-  // Legs
-  const legA = swing;
-  const kneeY = (hipY + feetY) / 2;
-  ctx.beginPath();
-  ctx.moveTo(cx, hipY);
-  ctx.lineTo(cx - 8 - legA * 8, kneeY - Math.abs(legA) * 4);
-  ctx.lineTo(cx - 12 - legA * 14, feetY);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cx, hipY);
-  ctx.lineTo(cx + 8 + legA * 8, kneeY - Math.abs(legA) * 4);
-  ctx.lineTo(cx + 12 + legA * 14, feetY);
-  ctx.stroke();
-
-  // Glowing eyes
-  const eyeBlur = firing ? 18 : 8;
-  const eyeColor = firing ? "oklch(0.92 0.28 25)" : "oklch(0.78 0.18 60)";
-  ctx.fillStyle = eyeColor;
-  ctx.shadowBlur = eyeBlur; ctx.shadowColor = eyeColor;
-  ctx.beginPath(); ctx.arc(cx - 4, headY, 2.4, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(cx + 4, headY, 2.4, 0, Math.PI * 2); ctx.fill();
-  ctx.shadowBlur = 0;
 }
