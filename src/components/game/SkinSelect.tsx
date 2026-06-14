@@ -35,6 +35,8 @@ export function SkinSelect({
       <div className="font-mono text-[10px] sm:text-xs tracking-[0.4em] text-foreground/60 uppercase mb-2 mt-10 sm:mt-0">Select Fighters</div>
       <h2 className="text-2xl sm:text-4xl md:text-5xl font-black tracking-widest text-foreground mb-6 sm:mb-8 text-center">PICK YOUR HEROES</h2>
 
+      <VersusPreview left={getSkin(p1)} right={getSkin(p2)} />
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 w-full max-w-5xl">
         <SkinPicker label="Player 1" accent="oklch(0.85 0.18 210)" value={p1} onChange={setP1} />
         <SkinPicker label={cpu ? "CPU Opponent" : "Player 2"} accent="oklch(0.72 0.28 340)" value={p2} onChange={setP2} />
@@ -90,6 +92,109 @@ export function SkinSelect({
       </button>
     </div>
   );
+}
+
+function VersusPreview({ left, right }: { left: Skin; right: Skin }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const c = ref.current;
+    if (!c) return;
+    const ctx = c.getContext("2d")!;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const resize = () => {
+      const r = c.getBoundingClientRect();
+      c.width = Math.max(1, Math.floor(r.width * dpr));
+      c.height = Math.max(1, Math.floor(r.height * dpr));
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    let raf = 0;
+    const t0 = performance.now();
+    const W = 560, H = 170;
+    const loop = (now: number) => {
+      const t = (now - t0) / 1000;
+      ctx.save();
+      ctx.setTransform(c.width / W, 0, 0, c.height / H, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+
+      const bg = ctx.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, "oklch(0.10 0.04 250)");
+      bg.addColorStop(0.48, "oklch(0.05 0.025 265)");
+      bg.addColorStop(1, "oklch(0.12 0.04 310)");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      const beamL = ctx.createRadialGradient(W * 0.30, H * 0.32, 8, W * 0.30, H * 0.35, 190);
+      beamL.addColorStop(0, withAlpha(left.glow, 0.32));
+      beamL.addColorStop(1, "oklch(0 0 0 / 0)");
+      ctx.fillStyle = beamL;
+      ctx.fillRect(0, 0, W, H);
+
+      const beamR = ctx.createRadialGradient(W * 0.70, H * 0.32, 8, W * 0.70, H * 0.35, 190);
+      beamR.addColorStop(0, withAlpha(right.glow, 0.32));
+      beamR.addColorStop(1, "oklch(0 0 0 / 0)");
+      ctx.fillStyle = beamR;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.fillStyle = "oklch(0 0 0 / 0.34)";
+      ctx.fillRect(0, H - 34, W, 34);
+      ctx.fillStyle = "oklch(0.94 0.05 70 / 0.14)";
+      ctx.fillRect(0, H - 35, W, 1);
+
+      const frame = Math.floor(t * 7) % 10;
+      const feetY = H - 24;
+      const fighterH = 148;
+      const leftX = W * 0.34 + Math.sin(t * 2.2) * 1.2;
+      const rightX = W * 0.66 - Math.sin(t * 2.1) * 1.2;
+
+      drawWalkFrameSilhouette(ctx, left, frame, leftX, feetY, 1, fighterH, {
+        alpha: 0.34,
+        blur: 10,
+        shadowColor: left.glow,
+        offset: 1.5,
+      });
+      drawWalkFrameSilhouette(ctx, right, (frame + 5) % 10, rightX, feetY, -1, fighterH, {
+        alpha: 0.34,
+        blur: 10,
+        shadowColor: right.glow,
+        offset: 1.5,
+      });
+      drawWalkFrame(ctx, left, frame, leftX, feetY, 1, fighterH);
+      drawWalkFrame(ctx, right, (frame + 5) % 10, rightX, feetY, -1, fighterH);
+
+      ctx.save();
+      ctx.translate(W / 2, H * 0.48);
+      ctx.rotate(-0.08);
+      ctx.font = "900 42px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = "oklch(0.02 0.015 260 / 0.78)";
+      ctx.strokeText("VS", 0, 0);
+      ctx.fillStyle = "oklch(0.93 0.16 62)";
+      ctx.shadowColor = "oklch(0.78 0.20 45)";
+      ctx.shadowBlur = 18;
+      ctx.fillText("VS", 0, 0);
+      ctx.restore();
+
+      ctx.restore();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
+  }, [left, right]);
+
+  return (
+    <div className="w-full max-w-5xl mb-5 sm:mb-6 overflow-hidden rounded-lg border border-foreground/10 bg-foreground/[0.03]">
+      <canvas ref={ref} className="block h-[126px] sm:h-[160px] w-full" />
+    </div>
+  );
+}
+
+function withAlpha(color: string, alpha: number) {
+  return color.replace(/\)\s*$/, ` / ${alpha})`);
 }
 
 function SkinPicker({
