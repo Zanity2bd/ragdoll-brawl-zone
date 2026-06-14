@@ -23,7 +23,7 @@ export function SettingsPanel({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg rounded-2xl overflow-hidden border"
+        className="relative w-full max-w-lg rounded-lg overflow-hidden border"
         style={{
           borderColor: "oklch(0.55 0.22 280 / 0.45)",
           background: "linear-gradient(160deg, oklch(0.14 0.04 275 / 0.96), oklch(0.08 0.03 270 / 0.98))",
@@ -37,7 +37,7 @@ export function SettingsPanel({
             <h2 className="font-mono text-sm uppercase tracking-[0.25em]" style={{ color: "oklch(0.92 0.06 280)" }}>Settings</h2>
           </div>
           <button onClick={onClose} aria-label="Close"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-foreground/70 hover:text-foreground"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-foreground/70 hover:text-foreground"
             style={{ background: "oklch(0.20 0.05 280 / 0.6)", border: "1px solid oklch(0.45 0.10 280 / 0.4)" }}
           >
             <X size={16} strokeWidth={2.5} />
@@ -54,7 +54,7 @@ export function SettingsPanel({
           ] as const).map(([id, label]) => (
             <button key={id}
               onClick={() => setTab(id)}
-              className="px-3 py-2 rounded-lg font-mono text-[10px] uppercase tracking-widest whitespace-nowrap transition-colors"
+              className="px-3 py-2 rounded-md font-mono text-[10px] uppercase tracking-widest whitespace-nowrap transition-colors"
               style={tab === id ? {
                 background: "linear-gradient(135deg, oklch(0.55 0.22 320 / 0.6), oklch(0.45 0.22 270 / 0.6))",
                 color: "oklch(0.98 0.04 280)",
@@ -73,7 +73,7 @@ export function SettingsPanel({
             <div className="space-y-4">
               <button
                 onClick={onToggleMute}
-                className="w-full px-3 py-3 rounded-xl font-mono text-xs uppercase tracking-widest"
+                className="w-full px-3 py-3 rounded-md font-mono text-xs uppercase tracking-widest"
                 style={{
                   background: muted
                     ? "linear-gradient(135deg, oklch(0.30 0.08 30 / 0.6), oklch(0.20 0.04 30 / 0.6))"
@@ -170,7 +170,7 @@ function Slider({ label, value, onChange, hue }: { label: string; value: number;
 
 function ControlGrid({ rows, headers }: { rows: string[][]; headers: string[] }) {
   return (
-    <div className="rounded-xl overflow-hidden border" style={{ borderColor: "oklch(0.4 0.08 280 / 0.3)" }}>
+    <div className="rounded-lg overflow-hidden border" style={{ borderColor: "oklch(0.4 0.08 280 / 0.3)" }}>
       <div className="grid font-mono text-[10px] uppercase tracking-widest px-3 py-2"
         style={{
           gridTemplateColumns: `1.4fr ${headers.slice(1).map(() => "1fr").join(" ")}`,
