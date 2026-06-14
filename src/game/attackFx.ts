@@ -83,10 +83,10 @@ export function drawFxPool(ctx: CanvasRenderingContext2D, pool: ActiveFx[]) {
     // Alpha curve: pop in fast, fade out
     const a = u > 0.85 ? (1 - u) / 0.15 : u / 0.85;
     const maxAlpha =
-      f.kind === "impactStar" ? 0.58
-      : f.kind === "shockRing" ? 0.42
-      : f.kind === "chargeRing" ? 0.52
-      : 0.66;
+      f.kind === "impactStar" ? 0.44
+      : f.kind === "shockRing" ? 0.30
+      : f.kind === "chargeRing" ? 0.42
+      : 0.55;
     ctx.save();
     ctx.globalCompositeOperation =
       f.kind === "impactStar" || f.kind === "shockRing" ? "screen" : f.blend;

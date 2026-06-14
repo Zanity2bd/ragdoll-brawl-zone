@@ -4944,14 +4944,14 @@ export class GameEngine {
     this.impact({ intensity: 1.0, dirX: dir, dirY: -0.4, zoom: 0.07, flash: 0, hitstop: 0 });
     // Cinematic glow burst — multi-ring shockwaves + dense particle explosion
     const cx = t.x, cy = t.y + FIGHTER_H * 0.5;
-    this.burst(cx, cy, attacker.skin.glow, 64);
-    this.burst(cx, cy, "oklch(0.98 0.10 80)", 48);
-    this.burst(cx, cy, "oklch(0.92 0.18 30)", 36);
+    this.burst(cx, cy, attacker.skin.glow, 42);
+    this.burst(cx, cy, "oklch(0.98 0.10 80)", 30);
+    this.burst(cx, cy, "oklch(0.92 0.18 30)", 24);
     // Heavy arterial spray for super impact
     this.spawnBlood(cx, cy, dir as 1 | -1, 1);
     // Radial spark streaks
-    for (let i = 0; i < 28; i++) {
-      const a = (i / 28) * Math.PI * 2 + Math.random() * 0.2;
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2 + Math.random() * 0.2;
       const sp = 380 + Math.random() * 320;
       this.particles.push({
         x: cx, y: cy,
@@ -4970,8 +4970,8 @@ export class GameEngine {
       life: 0.5, maxLife: 0.5, color: "oklch(0.98 0.05 80)",
     });
     this.shockwaves.push({
-      x: cx, y: cy, r: 20, rMax: 360,
-      life: 0.85, maxLife: 0.85, color: "oklch(0.85 0.18 30)",
+      x: cx, y: cy, r: 20, rMax: 285,
+      life: 0.76, maxLife: 0.76, color: "oklch(0.85 0.18 30)",
     });
     Sfx.play("boom", 1);
     Sfx.play("heavy", 0.95);
@@ -6074,12 +6074,12 @@ export class GameEngine {
       const shield = this.fxShieldAt(p.x, p.y, p.size * 2.2);
       // Soft halo
       if (!this.lowPower) {
-        ctx.globalAlpha = a * 0.55 * (1 - shield * 0.68);
+        ctx.globalAlpha = a * 0.42 * (1 - shield * 0.72);
         ctx.fillStyle = p.color;
         ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (2.2 - shield * 0.45), 0, Math.PI * 2); ctx.fill();
       }
       // Bright core
-      ctx.globalAlpha = a * (1 - shield * 0.48);
+      ctx.globalAlpha = a * 0.78 * (1 - shield * 0.55);
       ctx.fillStyle = p.color;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (1 - shield * 0.18), 0, Math.PI * 2); ctx.fill();
     }
@@ -6165,13 +6165,13 @@ export class GameEngine {
     for (const sw of this.shockwaves) {
       const a = Math.max(0, sw.life / sw.maxLife);
       const shield = this.shockwaveFighterShield(sw);
-      const alphaMul = 1 - shield * 0.58;
-      ctx.globalAlpha = a * 0.66 * alphaMul;
+      const alphaMul = 1 - shield * 0.72;
+      ctx.globalAlpha = a * 0.48 * alphaMul;
       ctx.strokeStyle = sw.color;
       ctx.lineWidth = 3.2;
       ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2); ctx.stroke();
       ctx.lineWidth = 1.5;
-      ctx.globalAlpha = a * 0.24 * alphaMul;
+      ctx.globalAlpha = a * 0.16 * alphaMul;
       ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.r * 1.2, 0, Math.PI * 2); ctx.stroke();
     }
     ctx.globalAlpha = 1;
@@ -6797,7 +6797,7 @@ export class GameEngine {
 
     // Impact flash vignette
     if (this.impactFlash > 0) {
-      const flashAlpha = Math.min(this.lowPower ? 0.08 : 0.12, this.impactFlash * (this.lowPower ? 0.10 : 0.12));
+      const flashAlpha = Math.min(this.lowPower ? 0.055 : 0.085, this.impactFlash * (this.lowPower ? 0.07 : 0.09));
       ctx.fillStyle = `oklch(0.99 0.05 80 / ${flashAlpha})`;
       ctx.fillRect(0, 0, cw, ch);
     }
