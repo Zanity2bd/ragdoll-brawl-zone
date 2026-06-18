@@ -6,7 +6,7 @@ import { getMap, type MapId } from "./maps";
 import { getSkin, type Skin, type SkinId } from "./skins";
 import { MOVES, type MoveSpec } from "./combat";
 import { Sfx } from "./sfx";
-import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, type WobbleState } from "./wobble";
+import { createWobble, stepWobble, applyWobble, applyImpulse, resetWobble, getBodyPhysicsProfile, type WobbleState } from "./wobble";
 import { createRagdoll, stepRagdoll, applyHitReaction, applyAnticipation, applyRagdollPose, resetRagdoll, HR_TELEGRAPHED, HR_LAUNCHER, HR_FINISHER, HR_AIRBORNE, type RagdollState } from "./ragdoll";
 import { CpuController, type Difficulty } from "./ai";
 import {
@@ -4047,7 +4047,7 @@ export class GameEngine {
 
     // Soft-body wobble (secondary motion). Skipped during full ragdoll/downed/getup
     // because those branches return early above and own the body completely.
-    stepWobble(f.wobble, dt, f.vx, f.vy, f.onGround, f.flying, this.lowPower, f.skin.id === "spiderman");
+    stepWobble(f.wobble, dt, f.vx, f.vy, f.onGround, f.flying, this.lowPower, getBodyPhysicsProfile(f.skin.id));
     // AAA hit-reaction state machine — additive cinematic layer.
     stepRagdoll(f.rs, dt, { airborne: !f.onGround, lowPower: this.lowPower });
 
@@ -5888,7 +5888,7 @@ export class GameEngine {
       // Shoulder roll absorbs the hit on the lead side.
       base.shoulderRoll += -f.guardDir * 0.10 * g;
     }
-    const wob = applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying);
+    const wob = applyWobble(base, f.wobble, this.lowPower, f.onGround && !f.flying, getBodyPhysicsProfile(f.skin.id));
     return applyRagdollPose(wob, f.rs, this.lowPower, this.slowmoT > 0 ? 0.18 : 1);
   }
 

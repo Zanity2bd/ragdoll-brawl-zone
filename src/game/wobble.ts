@@ -3,6 +3,112 @@
 // Stable at 60 FPS, allocation-free per frame.
 
 import type { Pose } from "./animation";
+import type { SkinId } from "./skins";
+
+export interface BodyPhysicsProfile {
+  bodySpring: number;
+  bodyDamping: number;
+  limbSpring: number;
+  limbDamping: number;
+  accel: number;
+  noise: number;
+  squash: number;
+  footAnchor: number;
+  bodyCap: number;
+  limbCap: number;
+  tiltCap: number;
+  upperFollow: number;
+  lowerFollow: number;
+  armFollow: number;
+  legFollow: number;
+  groundedFootFollow: number;
+}
+
+const DEFAULT_BODY_PROFILE: BodyPhysicsProfile = {
+  bodySpring: 1,
+  bodyDamping: 1,
+  limbSpring: 1,
+  limbDamping: 1,
+  accel: 1,
+  noise: 1,
+  squash: 1,
+  footAnchor: 1,
+  bodyCap: 6.5,
+  limbCap: 6.5,
+  tiltCap: 0.2,
+  upperFollow: 1,
+  lowerFollow: 1,
+  armFollow: 1,
+  legFollow: 1,
+  groundedFootFollow: 1,
+};
+
+const BODY_PHYSICS_PROFILES: Partial<Record<SkinId, Partial<BodyPhysicsProfile>>> = {
+  spiderman: {
+    bodySpring: 0.78, bodyDamping: 0.74, limbSpring: 0.72, limbDamping: 0.72,
+    accel: 1.12, noise: 1.45, squash: 1.12, footAnchor: 1.08,
+    bodyCap: 7.6, limbCap: 7.8, tiltCap: 0.24,
+    upperFollow: 1.08, lowerFollow: 0.95, armFollow: 1.15, legFollow: 0.98, groundedFootFollow: 0.9,
+  },
+  ironman: {
+    bodySpring: 1.24, bodyDamping: 1.25, limbSpring: 1.16, limbDamping: 1.2,
+    accel: 0.72, noise: 0.45, squash: 0.76, footAnchor: 1.42,
+    bodyCap: 4.8, limbCap: 5.0, tiltCap: 0.14,
+    upperFollow: 0.82, lowerFollow: 0.88, armFollow: 0.75, legFollow: 0.8, groundedFootFollow: 0.7,
+  },
+  wolverine: {
+    bodySpring: 0.92, bodyDamping: 0.9, limbSpring: 0.86, limbDamping: 0.88,
+    accel: 1.05, noise: 0.9, squash: 1.05, footAnchor: 1.18,
+    bodyCap: 6.6, limbCap: 6.2, tiltCap: 0.2,
+    upperFollow: 1.02, lowerFollow: 1, armFollow: 0.95, legFollow: 0.95, groundedFootFollow: 0.85,
+  },
+  batman: {
+    bodySpring: 1.18, bodyDamping: 1.26, limbSpring: 1.05, limbDamping: 1.22,
+    accel: 0.78, noise: 0.42, squash: 0.82, footAnchor: 1.48,
+    bodyCap: 4.8, limbCap: 4.8, tiltCap: 0.13,
+    upperFollow: 0.82, lowerFollow: 0.86, armFollow: 0.78, legFollow: 0.8, groundedFootFollow: 0.65,
+  },
+  superman: {
+    bodySpring: 1.22, bodyDamping: 1.22, limbSpring: 1.1, limbDamping: 1.15,
+    accel: 0.68, noise: 0.35, squash: 0.75, footAnchor: 1.55,
+    bodyCap: 4.2, limbCap: 4.4, tiltCap: 0.12,
+    upperFollow: 0.78, lowerFollow: 0.82, armFollow: 0.72, legFollow: 0.76, groundedFootFollow: 0.6,
+  },
+  flash: {
+    bodySpring: 1.32, bodyDamping: 1.1, limbSpring: 1.22, limbDamping: 1.04,
+    accel: 0.8, noise: 0.65, squash: 0.78, footAnchor: 1.7,
+    bodyCap: 4.5, limbCap: 4.8, tiltCap: 0.15,
+    upperFollow: 0.86, lowerFollow: 0.88, armFollow: 0.86, legFollow: 0.82, groundedFootFollow: 0.55,
+  },
+  homelander: {
+    bodySpring: 1.2, bodyDamping: 1.28, limbSpring: 1.08, limbDamping: 1.22,
+    accel: 0.62, noise: 0.32, squash: 0.72, footAnchor: 1.5,
+    bodyCap: 4.4, limbCap: 4.6, tiltCap: 0.12,
+    upperFollow: 0.76, lowerFollow: 0.82, armFollow: 0.7, legFollow: 0.74, groundedFootFollow: 0.6,
+  },
+  butcher: {
+    bodySpring: 0.98, bodyDamping: 1.12, limbSpring: 0.9, limbDamping: 1.03,
+    accel: 0.85, noise: 0.55, squash: 0.9, footAnchor: 1.28,
+    bodyCap: 5.6, limbCap: 5.4, tiltCap: 0.16,
+    upperFollow: 0.9, lowerFollow: 0.92, armFollow: 0.82, legFollow: 0.86, groundedFootFollow: 0.75,
+  },
+  atrain: {
+    bodySpring: 1.28, bodyDamping: 1.08, limbSpring: 1.2, limbDamping: 1.02,
+    accel: 0.82, noise: 0.7, squash: 0.78, footAnchor: 1.68,
+    bodyCap: 4.8, limbCap: 5.0, tiltCap: 0.16,
+    upperFollow: 0.9, lowerFollow: 0.9, armFollow: 0.9, legFollow: 0.84, groundedFootFollow: 0.58,
+  },
+};
+
+const bodyProfileCache = new Map<SkinId, BodyPhysicsProfile>();
+
+export function getBodyPhysicsProfile(id: SkinId): BodyPhysicsProfile {
+  const cached = bodyProfileCache.get(id);
+  if (cached) return cached;
+  const profile = { ...DEFAULT_BODY_PROFILE, ...BODY_PHYSICS_PROFILES[id] };
+  bodyProfileCache.set(id, profile);
+  return profile;
+}
 
 export interface WobbleState {
   // torso secondary motion
@@ -76,7 +182,7 @@ export function stepWobble(
   vx: number, vy: number,
   onGround: boolean, flying: boolean,
   lowPower: boolean,
-  agile: boolean = false,
+  profile: BodyPhysicsProfile = DEFAULT_BODY_PROFILE,
 ) {
   if (dt <= 0) return;
   const h = Math.min(dt, 1 / 30);
@@ -85,8 +191,8 @@ export function stepWobble(
   const ax = (vx - s.lastVx);
   const ay = (vy - s.lastVy);
   s.lastVx = vx; s.lastVy = vy;
-  s.bvx -= ax * 0.18;
-  s.bvy -= ay * 0.14;
+  s.bvx -= ax * 0.18 * profile.accel;
+  s.bvy -= ay * 0.14 * profile.accel;
 
   if (s.staggerT > 0) {
     s.staggerT -= h;
@@ -116,33 +222,31 @@ export function stepWobble(
 
   if (flying) { kBody *= 1.15; dBody *= 1.05; }
 
-  // Agile fighters (Spider-Man) — looser springs for constant subtle sway
-  if (agile) {
-    kBody *= 0.78; dBody *= 0.72;
-    kLimb *= 0.7;  dLimb *= 0.7;
-  }
+  // Per-skin body profiles shape visual weight without touching combat movement.
+  kBody *= profile.bodySpring; dBody *= profile.bodyDamping;
+  kLimb *= profile.limbSpring; dLimb *= profile.limbDamping;
 
   // Body spring (toward 0,0)
   s.bvx += (-kBody * s.bx - dBody * s.bvx) * h;
   s.bvy += (-kBody * s.by - dBody * s.bvy) * h;
 
   // Subtle organic noise (only when not idle-near-rigid; perlin-ish via sin sums)
-  if (agile || speed > 8 || s.staggerT > 0 || (!onGround && !flying)) {
+  if (profile.noise > 1.05 || speed > 8 || s.staggerT > 0 || (!onGround && !flying)) {
     const n1 = Math.sin(s.noisePhase * 6.3) * Math.cos(s.noisePhase * 3.1);
     const n2 = Math.sin(s.noisePhase * 4.7 + 1.3) * Math.cos(s.noisePhase * 5.9 + 0.7);
     const baseAmp = s.staggerT > 0 ? 14 : 4;
-    const noiseAmp = (agile ? baseAmp + 6 : baseAmp) * (lowPower ? 0.5 : 1);
+    const noiseAmp = baseAmp * profile.noise * (lowPower ? 0.5 : 1);
     s.bvx += n1 * noiseAmp * h * 8;
     s.bvy += n2 * noiseAmp * h * 8;
-    s.tiltV += n1 * (agile ? 1.1 : 0.6) * h * 8;
-    // Constant micro-sway in the limbs for agile characters
-    if (agile) {
+    s.tiltV += n1 * (0.55 + Math.max(0, profile.noise - 1) * 0.45) * h * 8;
+    // Constant micro-sway in the limbs for loose, agile profiles.
+    if (profile.noise > 1.05) {
       const L = s.limb;
       for (let i = 0; i < 4; i++) {
         const o = i * 4;
         const ph = s.noisePhase * (i % 2 === 0 ? 5.1 : 4.3) + i * 1.7;
-        L[o + 2] += Math.sin(ph) * 18 * h * 8;
-        L[o + 3] += Math.cos(ph * 0.9) * 14 * h * 8;
+        L[o + 2] += Math.sin(ph) * 18 * profile.noise * h * 8;
+        L[o + 3] += Math.cos(ph * 0.9) * 14 * profile.noise * h * 8;
       }
     }
   }
@@ -160,8 +264,9 @@ export function stepWobble(
   s.tilt += s.tiltV * h;
 
   // Squash spring (toward 1)
-  const kS = s.staggerT > 0 ? 90 : 160;
-  const dS = s.staggerT > 0 ? 7 : 14;
+  const squashFlex = clamp(profile.squash, 0.65, 1.35);
+  const kS = (s.staggerT > 0 ? 90 : 160) / squashFlex;
+  const dS = (s.staggerT > 0 ? 7 : 14) / Math.sqrt(squashFlex);
   s.squashV += (-kS * (s.squash - 1) - dS * s.squashV) * h;
   s.squash += s.squashV * h;
 
@@ -185,23 +290,26 @@ export function stepWobble(
   // Foot anchoring: when grounded & idle/walking (not staggered, not airborne),
   // damp the leg spring offsets aggressively so feet don't slide.
   if (onGround && !flying && s.staggerT <= 0) {
-    const anchor = Math.exp(-12 * h); // strong pull toward 0
+    const anchor = Math.exp(-12 * profile.footAnchor * h); // strong pull toward 0
+    const footVelKeep = clamp(0.6 / Math.max(0.6, profile.footAnchor), 0.35, 0.78);
     for (let i = 2; i < 4; i++) {
       const o = i * 4;
       L[o] *= anchor;
       L[o + 1] *= anchor;
-      L[o + 2] *= 0.6;
-      L[o + 3] *= 0.6;
+      L[o + 2] *= footVelKeep;
+      L[o + 3] *= footVelKeep;
     }
   }
 
   // Hard clamps so silhouettes never break
-  const bodyCap = lowPower ? 3 : 7;
-  const limbCap = lowPower ? 3 : 7;
+  const bodyCap = lowPower ? Math.min(3, profile.bodyCap * 0.55) : profile.bodyCap;
+  const limbCap = lowPower ? Math.min(3, profile.limbCap * 0.55) : profile.limbCap;
+  const tiltCap = lowPower ? Math.min(0.12, profile.tiltCap) : profile.tiltCap;
+  const squashRange = (lowPower ? 0.1 : 0.2) * squashFlex;
   if (s.bx > bodyCap) s.bx = bodyCap; else if (s.bx < -bodyCap) s.bx = -bodyCap;
   if (s.by > bodyCap) s.by = bodyCap; else if (s.by < -bodyCap) s.by = -bodyCap;
-  if (s.tilt > 0.22) s.tilt = 0.22; else if (s.tilt < -0.22) s.tilt = -0.22;
-  if (s.squash < 0.8) s.squash = 0.8; else if (s.squash > 1.2) s.squash = 1.2;
+  if (s.tilt > tiltCap) s.tilt = tiltCap; else if (s.tilt < -tiltCap) s.tilt = -tiltCap;
+  if (s.squash < 1 - squashRange) s.squash = 1 - squashRange; else if (s.squash > 1 + squashRange) s.squash = 1 + squashRange;
   for (let i = 0; i < 4; i++) {
     const o = i * 4;
     if (L[o] > limbCap) L[o] = limbCap; else if (L[o] < -limbCap) L[o] = -limbCap;
@@ -211,14 +319,22 @@ export function stepWobble(
 
 // Apply spring offsets to the rigid pose. Feet keep almost none of the body
 // offset when grounded so they don't visibly slide.
-export function applyWobble(p: Pose, s: WobbleState, lowPower: boolean, grounded: boolean): Pose {
+export function applyWobble(
+  p: Pose,
+  s: WobbleState,
+  lowPower: boolean,
+  grounded: boolean,
+  profile: BodyPhysicsProfile = DEFAULT_BODY_PROFILE,
+): Pose {
   const bx = s.bx, by = s.by;
-  const upper = 1.0;
-  const lower = grounded ? 0.32 : 0.55;
+  const upper = profile.upperFollow;
+  const lower = (grounded ? 0.32 : 0.55) * profile.lowerFollow;
   // Feet take a hair of body offset on the ground for live secondary motion (still anti-slide)
-  const footMul = grounded ? 0.08 : 0.5;
-  const armScale = lowPower ? 0.6 : 1.0;
-  const legScale = lowPower ? 0.3 : (grounded ? 0.35 : 0.6);
+  const footMul = grounded
+    ? 0.08 * profile.groundedFootFollow / Math.max(0.75, profile.footAnchor)
+    : 0.5 * profile.groundedFootFollow;
+  const armScale = (lowPower ? 0.6 : 1.0) * profile.armFollow;
+  const legScale = (lowPower ? 0.3 : (grounded ? 0.35 : 0.6)) * profile.legFollow;
   const L = s.limb;
   const aLx = L[0] * armScale, aLy = L[1] * armScale;
   const aRx = L[4] * armScale, aRy = L[5] * armScale;
@@ -263,6 +379,10 @@ export function applyWobble(p: Pose, s: WobbleState, lowPower: boolean, grounded
     footR: [p.footR[0] + bx * lower * footMul + lRx * 0.3 * (grounded ? 0.2 : 1),
             p.footR[1] + by * lower * footMul + lRy * 0.3 * (grounded ? 0.2 : 1)],
     lean: p.lean + s.tilt,
-    shoulderRoll: p.shoulderRoll + s.tilt * 0.3,
+    shoulderRoll: p.shoulderRoll + s.tilt * 0.3 * profile.upperFollow,
   };
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
 }

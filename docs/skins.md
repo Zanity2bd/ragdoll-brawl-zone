@@ -20,6 +20,19 @@ get-up timing stays unchanged.
 This keeps the 60fps path mobile-friendly while removing the old hand-authored
 combat-frame anchor drift.
 
+## UI Previews
+
+The player-facing previews use the same cached skin renderer as live combat:
+
+- `src/components/game/SkinSelect.tsx` renders each picker preview and the
+  faceoff banner through `drawWalkFrame()` and `drawWalkFrameSilhouette()`.
+- `src/components/game/Lobby.tsx`, `src/components/game/Splash.tsx`, and
+  `src/routes/index.tsx` use the same draw path for roster art.
+
+Preview screens should never recreate masks, capes, emblems, or body details
+with separate UI-only artwork. If a skin looks wrong in a menu, fix the atlas
+renderer first so gameplay and menus improve together.
+
 ## Art Rules
 
 Skin details should be painted during atlas bake, not during live combat draw.
@@ -36,6 +49,18 @@ When adding a skin:
 
 `src/game/walkAnchors.ts` remains for older tools and references, but the
 current skin renderer no longer trusts those static overlay anchors.
+
+## Body Motion Profiles
+
+Character body feel is handled in `src/game/wobble.ts` through cached
+per-skin visual profiles. These profiles change only the post-process body
+presentation: spring stiffness, damping, squash range, limb follow-through,
+micro-sway, silhouette caps, and grounded foot locking.
+
+Do not use these profiles to alter damage, hitboxes, AI, balance, or movement
+speed. Heavy armored/flying characters should read planted and controlled;
+agile characters can have more follow-through; speed characters should keep
+tight foot locks so fast actions stay readable on mobile.
 
 ## QA
 

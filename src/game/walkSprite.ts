@@ -32,7 +32,7 @@ export const SLASH_HIT_FRAME = 28;
 export const SLASH_RECOVER_FRAME = 29;
 export const WALK_FOOT_Y = 189;
 
-const SKIN_CACHE_VERSION = "v2-alpha-authored-readability";
+const SKIN_CACHE_VERSION = "v3-premium-material-body-finish";
 const ALPHA_THRESHOLD = 24;
 const HEAD_SCAN_R = 13;
 
@@ -434,6 +434,7 @@ function paintFrame(ctx: CanvasRenderingContext2D, skin: Skin, a: FrameAnatomy) 
   paintOutline(ctx, ox);
   drawBodyMass(ctx, skin, ox, a, look);
   drawCostumePanels(ctx, skin, ox, a, look);
+  drawMaterialFinish(ctx, skin, ox, a, look);
   drawCape(ctx, skin, ox, a, look);
   drawHead(ctx, skin, ox, a, look);
   drawGlovesAndBoots(ctx, skin, ox, a, look);
@@ -604,6 +605,149 @@ function drawCostumePanels(ctx: CanvasRenderingContext2D, skin: Skin, ox: number
   ctx.restore();
 }
 
+function drawMaterialFinish(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  const cx = ox + a.chest.x;
+  const cy = a.chest.y;
+  const r = a.head.r;
+  const top = Math.max(0, a.bbox.top - 2);
+  const bottom = Math.min(WALK_FRAME_H, a.footY + 1);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "source-atop";
+
+  const key = ctx.createLinearGradient(ox + a.bbox.left, top, ox + a.bbox.right, bottom);
+  key.addColorStop(0, withAlpha(look.highlight, 0.22));
+  key.addColorStop(0.34, "transparent");
+  key.addColorStop(1, "oklch(0 0 0 / 0.18)");
+  ctx.fillStyle = key;
+  ctx.fillRect(ox, 0, WALK_FRAME_W, WALK_FRAME_H);
+
+  const edgeGlow = ctx.createLinearGradient(ox + a.bbox.left, 0, ox + a.bbox.right, 0);
+  edgeGlow.addColorStop(0, withAlpha(look.trim, 0.18));
+  edgeGlow.addColorStop(0.28, "transparent");
+  edgeGlow.addColorStop(0.72, "transparent");
+  edgeGlow.addColorStop(1, "oklch(0 0 0 / 0.16)");
+  ctx.fillStyle = edgeGlow;
+  ctx.fillRect(ox, 0, WALK_FRAME_W, WALK_FRAME_H);
+
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.strokeStyle = withAlpha(look.shadow, 0.34);
+  ctx.lineWidth = 1.05;
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.58, a.shoulderY + r * 0.25);
+  ctx.quadraticCurveTo(cx - r * 0.34, cy + r * 0.95, cx - r * 0.18, a.hip.y + r * 0.35);
+  ctx.moveTo(cx + r * 0.58, a.shoulderY + r * 0.25);
+  ctx.quadraticCurveTo(cx + r * 0.34, cy + r * 0.95, cx + r * 0.18, a.hip.y + r * 0.35);
+  ctx.stroke();
+
+  switch (skin.id) {
+    case "spiderman": {
+      ctx.strokeStyle = "oklch(0.10 0.04 258 / 0.45)";
+      ctx.lineWidth = 0.85;
+      for (const x of [-0.52, 0, 0.52]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + x * r, a.shoulderY + r * 0.1);
+        ctx.quadraticCurveTo(cx + x * r * 0.5, cy + r * 0.9, cx + x * r * 0.85, a.hip.y + r * 0.45);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = withAlpha(look.trim, 0.32);
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + r * (0.35 + i * 0.38), r * (0.5 + i * 0.2), r * 0.18, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      break;
+    }
+    case "ironman": {
+      ctx.strokeStyle = withAlpha(look.metal ?? look.trim, 0.62);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.92, a.shoulderY + r * 0.18);
+      ctx.lineTo(cx - r * 0.35, cy + r * 0.58);
+      ctx.lineTo(cx, cy + r * 1.05);
+      ctx.lineTo(cx + r * 0.35, cy + r * 0.58);
+      ctx.lineTo(cx + r * 0.92, a.shoulderY + r * 0.18);
+      ctx.stroke();
+      const reactor = ctx.createRadialGradient(cx, cy + r * 0.72, 1, cx, cy + r * 0.72, r * 0.58);
+      reactor.addColorStop(0, "oklch(0.98 0.06 205 / 0.78)");
+      reactor.addColorStop(0.5, "oklch(0.72 0.18 205 / 0.34)");
+      reactor.addColorStop(1, "transparent");
+      ctx.fillStyle = reactor;
+      ctx.beginPath();
+      ctx.arc(cx, cy + r * 0.72, r * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "wolverine": {
+      ctx.strokeStyle = withAlpha(look.trim, 0.56);
+      ctx.lineWidth = 1.25;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + side * r * 0.74, a.shoulderY + r * 0.1);
+        ctx.lineTo(cx + side * r * 0.42, a.hip.y + r * 0.42);
+        ctx.stroke();
+      }
+      break;
+    }
+    case "batman": {
+      ctx.fillStyle = "oklch(0.02 0.01 280 / 0.26)";
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + r * 0.95, r * 1.02, r * 1.25, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = withAlpha(look.trim, 0.42);
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.72, cy + r * 0.58);
+      ctx.lineTo(cx + r * 0.72, cy + r * 0.58);
+      ctx.stroke();
+      break;
+    }
+    case "superman":
+    case "homelander": {
+      ctx.strokeStyle = withAlpha(look.trim, skin.id === "homelander" ? 0.46 : 0.38);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.82, a.shoulderY + r * 0.22);
+      ctx.lineTo(cx, cy + r * 0.62);
+      ctx.lineTo(cx + r * 0.82, a.shoulderY + r * 0.22);
+      ctx.stroke();
+      ctx.fillStyle = withAlpha(look.highlight, 0.18);
+      ctx.beginPath();
+      ctx.ellipse(cx - r * 0.3, cy + r * 0.45, r * 0.38, r * 0.72, -0.25, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case "flash":
+    case "atrain": {
+      const slant = skin.id === "atrain" ? -1 : 1;
+      ctx.strokeStyle = withAlpha(look.trim, 0.68);
+      ctx.lineWidth = 1.35;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx - slant * r * (1.05 - i * 0.25), cy + r * (0.1 + i * 0.42));
+        ctx.lineTo(cx + slant * r * (0.45 + i * 0.16), cy + r * (0.52 + i * 0.42));
+        ctx.stroke();
+      }
+      break;
+    }
+    case "butcher": {
+      ctx.strokeStyle = "oklch(0.48 0.015 245 / 0.42)";
+      ctx.lineWidth = 1.25;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + side * r * 0.54, a.shoulderY + r * 0.1);
+        ctx.quadraticCurveTo(cx + side * r * 0.3, cy + r * 0.95, cx + side * r * 0.24, a.hip.y + r * 1.55);
+        ctx.stroke();
+      }
+      break;
+    }
+  }
+
+  ctx.restore();
+}
+
 function drawCape(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
   if (!skin.cape) return;
   const cx = ox + a.chest.x;
@@ -614,14 +758,34 @@ function drawCape(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: Fram
 
   ctx.save();
   ctx.globalCompositeOperation = "destination-over";
+  const cape = new Path2D();
+  cape.moveTo(cx - r * 1.0, a.shoulderY + r * 0.2);
+  cape.bezierCurveTo(cx - r * 2.0 + sway, cy + r * 1.4, cx - r * 1.65 + sway, bottom - r * 0.8, cx - r * 0.55 + sway * 0.5, bottom);
+  cape.quadraticCurveTo(cx + sway * 0.3, bottom + r * 0.45, cx + r * 0.55 + sway * 0.5, bottom);
+  cape.bezierCurveTo(cx + r * 1.65 + sway, bottom - r * 0.8, cx + r * 2.0 + sway, cy + r * 1.4, cx + r * 1.0, a.shoulderY + r * 0.2);
+  cape.closePath();
   ctx.fillStyle = skin.cape;
-  ctx.beginPath();
-  ctx.moveTo(cx - r * 1.0, a.shoulderY + r * 0.2);
-  ctx.bezierCurveTo(cx - r * 2.0 + sway, cy + r * 1.4, cx - r * 1.65 + sway, bottom - r * 0.8, cx - r * 0.55 + sway * 0.5, bottom);
-  ctx.quadraticCurveTo(cx + sway * 0.3, bottom + r * 0.45, cx + r * 0.55 + sway * 0.5, bottom);
-  ctx.bezierCurveTo(cx + r * 1.65 + sway, bottom - r * 0.8, cx + r * 2.0 + sway, cy + r * 1.4, cx + r * 1.0, a.shoulderY + r * 0.2);
-  ctx.closePath();
-  ctx.fill();
+  ctx.fill(cape);
+
+  ctx.save();
+  ctx.clip(cape);
+  const cloth = ctx.createLinearGradient(cx - r * 1.7 + sway, a.shoulderY, cx + r * 1.6 + sway, bottom);
+  cloth.addColorStop(0, withAlpha("oklch(1 0 0)", skin.id === "homelander" ? 0.24 : 0.16));
+  cloth.addColorStop(0.42, withAlpha(skin.cape, 0.86));
+  cloth.addColorStop(1, mixColor(skin.cape, skin.id === "batman" ? 42 : 54, "black"));
+  ctx.fillStyle = cloth;
+  ctx.fillRect(ox, 0, WALK_FRAME_W, WALK_FRAME_H);
+
+  ctx.strokeStyle = withAlpha(skin.capeAccent ?? mixColor(skin.cape, 72, "black"), skin.id === "batman" ? 0.28 : 0.38);
+  ctx.lineWidth = skin.id === "batman" ? 0.85 : 1.05;
+  ctx.lineCap = "round";
+  for (const side of [-0.45, 0.05, 0.5]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + side * r + sway * 0.08, a.shoulderY + r * 0.56);
+    ctx.quadraticCurveTo(cx + (side * 0.85) * r + sway * 0.45, cy + r * 2.0, cx + (side * 0.4) * r + sway * 0.35, bottom - r * 0.35);
+    ctx.stroke();
+  }
+  ctx.restore();
 
   if (skin.capeAccent) {
     ctx.fillStyle = skin.capeAccent;
@@ -816,11 +980,20 @@ function drawGlovesAndBoots(ctx: CanvasRenderingContext2D, skin: Skin, ox: numbe
   if (glove) {
     ctx.save();
     ctx.globalCompositeOperation = "source-atop";
-    ctx.fillStyle = glove;
     for (const hand of [a.hands.left, a.hands.right]) {
+      const gx = ox + hand.x;
+      const gy = hand.y;
+      const grad = ctx.createRadialGradient(gx - r * 0.12, gy - r * 0.12, 1, gx, gy, r * 0.56);
+      grad.addColorStop(0, withAlpha("oklch(1 0 0)", 0.22));
+      grad.addColorStop(0.36, glove);
+      grad.addColorStop(1, mixColor(glove, 68, "black"));
+      ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.ellipse(ox + hand.x, hand.y, r * 0.48, r * 0.34, 0, 0, Math.PI * 2);
+      ctx.ellipse(gx, gy, r * 0.50, r * 0.36, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = "oklch(0 0 0 / 0.36)";
+      ctx.lineWidth = 0.65;
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -828,11 +1001,23 @@ function drawGlovesAndBoots(ctx: CanvasRenderingContext2D, skin: Skin, ox: numbe
   if (boot) {
     ctx.save();
     ctx.globalCompositeOperation = "source-atop";
-    ctx.fillStyle = boot;
     for (const foot of [a.feet.left, a.feet.right]) {
+      const bx = ox + foot.x;
+      const by = foot.y;
+      const grad = ctx.createLinearGradient(bx, by - r * 0.36, bx, by + r * 0.3);
+      grad.addColorStop(0, withAlpha("oklch(1 0 0)", 0.18));
+      grad.addColorStop(0.38, boot);
+      grad.addColorStop(1, mixColor(boot, 58, "black"));
+      ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.ellipse(ox + foot.x, foot.y, r * 0.58, r * 0.30, 0, 0, Math.PI * 2);
+      ctx.ellipse(bx, by, r * 0.62, r * 0.32, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = "oklch(0 0 0 / 0.40)";
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(bx - r * 0.44, by + r * 0.18);
+      ctx.lineTo(bx + r * 0.46, by + r * 0.18);
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -1128,6 +1313,32 @@ function capeSway(frame: number) {
   if (frame === HURT_FRAME) return 4;
   if (frame === DOWN_FRAME) return 1;
   return 0;
+}
+
+function withAlpha(color: string, alpha: number) {
+  if (!color.includes("(") || !color.trim().endsWith(")")) return color;
+  const a = clamp(alpha, 0, 1);
+  if (/\/\s*[\d.]+\s*\)\s*$/.test(color)) {
+    return color.replace(/\/\s*[\d.]+\s*\)\s*$/, `/ ${a})`);
+  }
+  return color.replace(/\)\s*$/, ` / ${a})`);
+}
+
+function mixColor(color: string, pct: number, other: string) {
+  const m = color.match(/^oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\s*\)$/);
+  if (!m) return color;
+  const keep = clamp(pct, 0, 100) / 100;
+  const towardWhite = other === "white";
+  const l0 = Number(m[1]);
+  const c0 = Number(m[2]);
+  const l = towardWhite ? l0 + (1 - l0) * (1 - keep) : l0 * keep;
+  const c = c0 * keep;
+  const alpha = m[4] ? ` / ${m[4]}` : "";
+  return `oklch(${roundColor(l)} ${roundColor(c)} ${m[3]}${alpha})`;
+}
+
+function roundColor(n: number) {
+  return Math.round(n * 1000) / 1000;
 }
 
 function clamp(n: number, min: number, max: number) {
