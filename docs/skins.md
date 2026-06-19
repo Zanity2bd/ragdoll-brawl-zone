@@ -14,8 +14,9 @@ get-up timing stays unchanged.
    - filled head ball by compact alpha-density search
    - chest and hip from row-density bands relative to the head
    - hand and foot endpoints from side-most alpha clusters
-3. Bake one full sprite atlas per skin into an offscreen canvas.
-4. Draw fighters in the match with a single cached `drawImage` per frame.
+3. Apply the silhouette-first profile from `src/game/characterPresentation.ts`.
+4. Bake one full sprite atlas per skin into an offscreen canvas.
+5. Draw fighters in the match with a single cached `drawImage` per frame.
 
 This keeps the 60fps path mobile-friendly while removing the old hand-authored
 combat-frame anchor drift.
@@ -39,9 +40,26 @@ Skin details should be painted during atlas bake, not during live combat draw.
 Masks, eyes, emblems, capes, gloves, boots, claws, speed streaks, and coat
 details are all anchored to the derived anatomy for that exact frame.
 
+Silhouette language now lives in `src/game/characterPresentation.ts`. Each
+profile defines body shape, shoulder width, torso taper, hip scale, head scale,
+neck mass, stance lean, cape type, hair shape, glove/boot weight, emblem scale,
+and special shape flags like claws or tails.
+
+Hair is treated as head silhouette, not a floating decoration. Homelander's
+slick hair, A-Train's fade, Butcher's rugged shape, Batman's cowl, Superman's
+widow peak, Wolverine's ears, and Nightcrawler's sharp hair are baked into the
+cached atlas frame with the head.
+
+The current art pass also bakes hero-accuracy details into the same atlas:
+Spider-Man web panels, Iron Man armor plates and repulsors, Wolverine cowl and
+claws, Batman cowl/cape/belt language, Superman shield/trunks/boots, Flash
+lightning fins, Homelander eagle shoulders, Butcher trench details, and
+A-Train's blue speed suit, goggles, and A-stripe.
+
 When adding a skin:
 
 - Add the skin to `src/game/skins.ts`.
+- Add a silhouette profile to `src/game/characterPresentation.ts`.
 - Add combat/AI/stance entries if the `SkinId` is new.
 - Add skin-specific material details in `getLook()` and, only when needed,
   `drawSkinSpecificDetails()` in `src/game/walkSprite.ts`.

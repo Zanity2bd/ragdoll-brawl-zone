@@ -2157,7 +2157,7 @@ export class GameEngine {
             target.wobble.staggerT = 0.25;
             target.wobble.staggerDir = dir as 1 | -1;
             target.wobble.staggerMag = 0.7;
-            applyImpulse(target.wobble, dir as 1 | -1, -0.4, 0.8);
+            applyImpulse(target.wobble, dir as 1 | -1, -0.4, 0.8, getBodyPhysicsProfile(target.skin.id));
           }
           // White splat at impact point
           this.shockwaves.push({
@@ -2235,7 +2235,7 @@ export class GameEngine {
           target.wobble.staggerT = 0.22;
           target.wobble.staggerDir = dir;
           target.wobble.staggerMag = 0.6;
-          applyImpulse(target.wobble, dir, -0.35, 0.7);
+          applyImpulse(target.wobble, dir, -0.35, 0.7, getBodyPhysicsProfile(target.skin.id));
           applyHitReaction(target.rs, dir, -0.3, 0.35, 0, 0);
         }
         this.burst(pr.x, pr.y, pr.glow, 18);
@@ -3528,6 +3528,12 @@ export class GameEngine {
          // Snap planted-foot anchor: lock body world-x while kick is active so
          // the standing leg stays world-locked under the new pivot rendering.
          f.kickAnchorX = f.x;
+        {
+          const bodyProfile = getBodyPhysicsProfile(f.skin.id);
+          f.wobble.tiltV -= f.facing * 1.9 * bodyProfile.leanFollow;
+          f.wobble.squashV -= 1.35 * bodyProfile.squash;
+          f.wobble.bvx -= f.facing * 18 * bodyProfile.impactRecoil;
+        }
         f.attackAnim = Math.max(f.attackAnim, 0.32);
         // Combo ends after the high kick — knee finisher removed per design.
         f.comboStep = 0; f.comboWindowT = 0;
@@ -3540,6 +3546,12 @@ export class GameEngine {
         f.punchHit = false;
         f.punchCd = PUNCH_CD;
         f.attackAnim = Math.max(f.attackAnim, PUNCH_DUR);
+        {
+          const bodyProfile = getBodyPhysicsProfile(f.skin.id);
+          f.wobble.tiltV -= f.facing * 1.15 * bodyProfile.leanFollow;
+          f.wobble.squashV -= 0.85 * bodyProfile.squash;
+          f.wobble.bvx -= f.facing * 10 * bodyProfile.impactRecoil;
+        }
         f.cancelOK = false;
         Sfx.play("whoosh", 0.35);
         armTrail(f.weaponTrail, PUNCH_DUR + 0.04, { limb: "handR", rgb: "255,235,180", width: 11 });
@@ -4128,6 +4140,13 @@ export class GameEngine {
     f.meleeDur = m.windup + m.active + m.recover;
     f.meleeHitMask.clear();
     f.attackAnim = m.windup + m.active;
+    {
+      const bodyProfile = getBodyPhysicsProfile(f.skin.id);
+      const weight = Math.max(0.55, Math.min(1.35, (m.windup + m.active) / 0.22));
+      f.wobble.tiltV -= f.facing * 2.35 * weight * bodyProfile.leanFollow;
+      f.wobble.squashV -= 1.65 * weight * bodyProfile.squash;
+      f.wobble.bvx -= f.facing * 24 * weight * bodyProfile.impactRecoil;
+    }
     if (m.windupSfx) Sfx.play(m.windupSfx, 0.6);
     // Per-strike weapon trail — tinted + sized per move kind.
     {
@@ -4752,7 +4771,7 @@ export class GameEngine {
       t.vx = dir * (beat.kind === "kick" ? 30 : 22);
       t.wobble.staggerT = Math.max(t.wobble.staggerT, 0.18);
     }
-    applyImpulse(t.wobble, dir, -0.5, isFinisher ? 1.0 : 0.45);
+    applyImpulse(t.wobble, dir, -0.5, isFinisher ? 1.0 : 0.45, getBodyPhysicsProfile(t.skin.id));
     applyHitReaction(t.rs, dir as 1 | -1, isFinisher ? -0.5 : -0.2, isFinisher ? 1.0 : 0.4, 0, isFinisher ? (HR_FINISHER | HR_TELEGRAPHED) : 0);
     this.shake = Math.max(this.shake, isFinisher ? 22 : 9);
     this.hitstopT = Math.max(this.hitstopT, isFinisher ? 0.18 : 0.05);
@@ -4800,7 +4819,7 @@ export class GameEngine {
       f.wobble.staggerT = Math.max(f.wobble.staggerT, 0.32);
       f.wobble.staggerDir = (-f.facing) as 1 | -1;
       f.wobble.staggerMag = 0.7;
-      applyImpulse(f.wobble, -f.facing as 1 | -1, -0.3, 0.7);
+      applyImpulse(f.wobble, -f.facing as 1 | -1, -0.3, 0.7, getBodyPhysicsProfile(f.skin.id));
       // FX: bright clang ring + sparks
       this.hitstopT = Math.max(this.hitstopT, 0.12);
       this.shake = Math.max(this.shake, 14);
@@ -4863,14 +4882,14 @@ export class GameEngine {
       target.ragdollAV = (Math.random() - 0.5) * 2 + f.facing * 2.4;
       target.ragdollEnergy = 1;
       // Snap initial impulse so transition into tumble looks continuous
-      applyImpulse(target.wobble, f.facing, -0.4, 1.0);
+      applyImpulse(target.wobble, f.facing, -0.4, 1.0, getBodyPhysicsProfile(target.skin.id));
     } else if (target.wobble.staggerImmuneT <= 0) {
       // Partial-ragdoll stagger for small/chain-immune hits
       const mag = Math.max(0.4, Math.min(1, m.damage / 20));
       target.wobble.staggerT = 0.28;
       target.wobble.staggerDir = f.facing;
       target.wobble.staggerMag = mag;
-      applyImpulse(target.wobble, f.facing, -0.45, mag);
+      applyImpulse(target.wobble, f.facing, -0.45, mag, getBodyPhysicsProfile(target.skin.id));
     }
     // AAA hit-reaction layer (additive, gameplay-safe)
     {

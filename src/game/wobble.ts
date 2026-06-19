@@ -22,6 +22,11 @@ export interface BodyPhysicsProfile {
   armFollow: number;
   legFollow: number;
   groundedFootFollow: number;
+  headFollow: number;
+  shoulderFollow: number;
+  hipFollow: number;
+  leanFollow: number;
+  impactRecoil: number;
 }
 
 const DEFAULT_BODY_PROFILE: BodyPhysicsProfile = {
@@ -41,6 +46,11 @@ const DEFAULT_BODY_PROFILE: BodyPhysicsProfile = {
   armFollow: 1,
   legFollow: 1,
   groundedFootFollow: 1,
+  headFollow: 1,
+  shoulderFollow: 1,
+  hipFollow: 1,
+  leanFollow: 1,
+  impactRecoil: 1,
 };
 
 const BODY_PHYSICS_PROFILES: Partial<Record<SkinId, Partial<BodyPhysicsProfile>>> = {
@@ -49,54 +59,84 @@ const BODY_PHYSICS_PROFILES: Partial<Record<SkinId, Partial<BodyPhysicsProfile>>
     accel: 1.12, noise: 1.45, squash: 1.12, footAnchor: 1.08,
     bodyCap: 7.6, limbCap: 7.8, tiltCap: 0.24,
     upperFollow: 1.08, lowerFollow: 0.95, armFollow: 1.15, legFollow: 0.98, groundedFootFollow: 0.9,
+    headFollow: 1.12, shoulderFollow: 1.04, hipFollow: 0.92, leanFollow: 1.12, impactRecoil: 1.08,
   },
   ironman: {
     bodySpring: 1.24, bodyDamping: 1.25, limbSpring: 1.16, limbDamping: 1.2,
     accel: 0.72, noise: 0.45, squash: 0.76, footAnchor: 1.42,
     bodyCap: 4.8, limbCap: 5.0, tiltCap: 0.14,
     upperFollow: 0.82, lowerFollow: 0.88, armFollow: 0.75, legFollow: 0.8, groundedFootFollow: 0.7,
+    headFollow: 0.76, shoulderFollow: 0.82, hipFollow: 0.84, leanFollow: 0.76, impactRecoil: 0.86,
   },
   wolverine: {
     bodySpring: 0.92, bodyDamping: 0.9, limbSpring: 0.86, limbDamping: 0.88,
     accel: 1.05, noise: 0.9, squash: 1.05, footAnchor: 1.18,
     bodyCap: 6.6, limbCap: 6.2, tiltCap: 0.2,
     upperFollow: 1.02, lowerFollow: 1, armFollow: 0.95, legFollow: 0.95, groundedFootFollow: 0.85,
+    headFollow: 0.96, shoulderFollow: 0.98, hipFollow: 0.94, leanFollow: 0.94, impactRecoil: 1.02,
   },
   batman: {
     bodySpring: 1.18, bodyDamping: 1.26, limbSpring: 1.05, limbDamping: 1.22,
     accel: 0.78, noise: 0.42, squash: 0.82, footAnchor: 1.48,
     bodyCap: 4.8, limbCap: 4.8, tiltCap: 0.13,
     upperFollow: 0.82, lowerFollow: 0.86, armFollow: 0.78, legFollow: 0.8, groundedFootFollow: 0.65,
+    headFollow: 0.72, shoulderFollow: 0.78, hipFollow: 0.82, leanFollow: 0.68, impactRecoil: 0.84,
   },
   superman: {
     bodySpring: 1.22, bodyDamping: 1.22, limbSpring: 1.1, limbDamping: 1.15,
     accel: 0.68, noise: 0.35, squash: 0.75, footAnchor: 1.55,
     bodyCap: 4.2, limbCap: 4.4, tiltCap: 0.12,
     upperFollow: 0.78, lowerFollow: 0.82, armFollow: 0.72, legFollow: 0.76, groundedFootFollow: 0.6,
+    headFollow: 0.7, shoulderFollow: 0.76, hipFollow: 0.8, leanFollow: 0.66, impactRecoil: 0.82,
   },
   flash: {
     bodySpring: 1.32, bodyDamping: 1.1, limbSpring: 1.22, limbDamping: 1.04,
     accel: 0.8, noise: 0.65, squash: 0.78, footAnchor: 1.7,
     bodyCap: 4.5, limbCap: 4.8, tiltCap: 0.15,
     upperFollow: 0.86, lowerFollow: 0.88, armFollow: 0.86, legFollow: 0.82, groundedFootFollow: 0.55,
+    headFollow: 0.84, shoulderFollow: 0.86, hipFollow: 0.86, leanFollow: 0.9, impactRecoil: 0.88,
   },
   homelander: {
     bodySpring: 1.2, bodyDamping: 1.28, limbSpring: 1.08, limbDamping: 1.22,
     accel: 0.62, noise: 0.32, squash: 0.72, footAnchor: 1.5,
     bodyCap: 4.4, limbCap: 4.6, tiltCap: 0.12,
     upperFollow: 0.76, lowerFollow: 0.82, armFollow: 0.7, legFollow: 0.74, groundedFootFollow: 0.6,
+    headFollow: 0.68, shoulderFollow: 0.72, hipFollow: 0.78, leanFollow: 0.62, impactRecoil: 0.8,
   },
   butcher: {
     bodySpring: 0.98, bodyDamping: 1.12, limbSpring: 0.9, limbDamping: 1.03,
     accel: 0.85, noise: 0.55, squash: 0.9, footAnchor: 1.28,
     bodyCap: 5.6, limbCap: 5.4, tiltCap: 0.16,
     upperFollow: 0.9, lowerFollow: 0.92, armFollow: 0.82, legFollow: 0.86, groundedFootFollow: 0.75,
+    headFollow: 0.82, shoulderFollow: 0.88, hipFollow: 0.9, leanFollow: 0.8, impactRecoil: 0.92,
   },
   atrain: {
     bodySpring: 1.28, bodyDamping: 1.08, limbSpring: 1.2, limbDamping: 1.02,
     accel: 0.82, noise: 0.7, squash: 0.78, footAnchor: 1.68,
     bodyCap: 4.8, limbCap: 5.0, tiltCap: 0.16,
     upperFollow: 0.9, lowerFollow: 0.9, armFollow: 0.9, legFollow: 0.84, groundedFootFollow: 0.58,
+    headFollow: 0.86, shoulderFollow: 0.88, hipFollow: 0.84, leanFollow: 0.96, impactRecoil: 0.94,
+  },
+  hulk: {
+    bodySpring: 0.86, bodyDamping: 1.08, limbSpring: 0.82, limbDamping: 1.0,
+    accel: 0.72, noise: 0.48, squash: 1.18, footAnchor: 1.35,
+    bodyCap: 6.0, limbCap: 5.6, tiltCap: 0.14,
+    upperFollow: 0.78, lowerFollow: 0.82, armFollow: 0.7, legFollow: 0.76, groundedFootFollow: 0.68,
+    headFollow: 0.68, shoulderFollow: 0.78, hipFollow: 0.76, leanFollow: 0.68, impactRecoil: 0.96,
+  },
+  nightcrawler: {
+    bodySpring: 0.74, bodyDamping: 0.72, limbSpring: 0.68, limbDamping: 0.7,
+    accel: 1.2, noise: 1.55, squash: 1.16, footAnchor: 1.02,
+    bodyCap: 8.0, limbCap: 8.0, tiltCap: 0.25,
+    upperFollow: 1.12, lowerFollow: 0.94, armFollow: 1.18, legFollow: 1.0, groundedFootFollow: 0.88,
+    headFollow: 1.2, shoulderFollow: 1.1, hipFollow: 0.9, leanFollow: 1.22, impactRecoil: 1.16,
+  },
+  heatwave: {
+    bodySpring: 1.08, bodyDamping: 1.14, limbSpring: 1.02, limbDamping: 1.08,
+    accel: 0.82, noise: 0.52, squash: 0.88, footAnchor: 1.34,
+    bodyCap: 5.0, limbCap: 5.0, tiltCap: 0.15,
+    upperFollow: 0.84, lowerFollow: 0.88, armFollow: 0.8, legFollow: 0.82, groundedFootFollow: 0.72,
+    headFollow: 0.78, shoulderFollow: 0.84, hipFollow: 0.8, leanFollow: 0.82, impactRecoil: 0.88,
   },
 };
 
@@ -153,24 +193,33 @@ export function resetWobble(s: WobbleState) {
 
 // Add a directional impulse — used by hits.
 // dirX/dirY are unit-ish; mag scales body kick + per-limb spread.
-export function applyImpulse(s: WobbleState, dirX: number, dirY: number, mag: number) {
+export function applyImpulse(
+  s: WobbleState,
+  dirX: number,
+  dirY: number,
+  mag: number,
+  profile: BodyPhysicsProfile = DEFAULT_BODY_PROFILE,
+) {
   const m = Math.max(0, Math.min(1.4, mag));
+  const recoil = profile.impactRecoil;
   // Slightly stronger initial force
-  s.bvx += dirX * 280 * m;
+  s.bvx += dirX * 310 * m * recoil;
   s.bvy += dirY * 220 * m - 60 * m; // small upward kick → settle gives weight
+  s.bvy += ((dirY * 235 - 68) * recoil - (dirY * 220 - 60)) * m;
   // Rotational torso impulse: torque proportional to lateral force,
   // plus a randomised twist for organic feel
-  s.tiltV += dirX * 9 * m + (Math.random() - 0.5) * 4 * m;
+  s.tiltV += (dirX * 10.5 * m + (Math.random() - 0.5) * 3.2 * m) * profile.leanFollow * recoil;
   // Squash on hit (compresses then springs back, becomes stretch on rebound)
-  s.squashV -= 6 * m;
+  s.squashV -= 7.2 * m * profile.squash * recoil;
   // Spread limbs in random directions, biased by hit dir
   const L = s.limb;
   for (let i = 0; i < 4; i++) {
     const o = i * 4;
     const rx = (Math.random() - 0.5) * 2.4;
     const ry = (Math.random() - 0.5) * 2.4;
-    L[o + 2] += (dirX * 1.6 + rx) * 170 * m;
-    L[o + 3] += (dirY * 1.0 + ry) * 140 * m;
+    const follow = i < 2 ? profile.armFollow : profile.legFollow;
+    L[o + 2] += (dirX * 1.6 + rx) * 184 * m * follow * recoil;
+    L[o + 3] += (dirY * 1.0 + ry) * 152 * m * follow * recoil;
   }
 }
 
@@ -218,6 +267,14 @@ export function stepWobble(
   } else {
     // Idle — near-rigid; almost no motion
     kBody = 220; dBody = 22; kLimb = 200; dLimb = 20;
+  }
+
+  if (!onGround && !flying) {
+    if (vy < -70) {
+      s.squashV += Math.min(1.4, -vy / 520) * profile.squash * h * 7;
+    } else if (vy > 120) {
+      s.squashV -= Math.min(1.2, vy / 620) * profile.squash * h * 4;
+    }
   }
 
   if (flying) { kBody *= 1.15; dBody *= 1.05; }
@@ -347,9 +404,9 @@ export function applyWobble(
   const sqDy = (1 - yScale); // positive = compressed (head moves down)
 
   return {
-    headOffsetY: p.headOffsetY * yScale + by * upper * 0.8 + sqDy * 4,
-    shoulderY: p.shoulderY * yScale + by * upper + sqDy * 2,
-    hipY: p.hipY + by * lower,
+    headOffsetY: p.headOffsetY * yScale + by * upper * 0.86 * profile.headFollow + sqDy * 4,
+    shoulderY: p.shoulderY * yScale + by * upper * profile.shoulderFollow + sqDy * 2,
+    hipY: p.hipY + by * lower * profile.hipFollow,
     legL: [
       p.legL[0] + bx * lower, p.legL[1] + by * lower,
       p.legL[2] + bx * lower + lLx * 0.6, p.legL[3] + by * lower + lLy * 0.6,
@@ -378,8 +435,8 @@ export function applyWobble(
             p.footL[1] + by * lower * footMul + lLy * 0.3 * (grounded ? 0.2 : 1)],
     footR: [p.footR[0] + bx * lower * footMul + lRx * 0.3 * (grounded ? 0.2 : 1),
             p.footR[1] + by * lower * footMul + lRy * 0.3 * (grounded ? 0.2 : 1)],
-    lean: p.lean + s.tilt,
-    shoulderRoll: p.shoulderRoll + s.tilt * 0.3 * profile.upperFollow,
+    lean: p.lean + s.tilt * profile.leanFollow,
+    shoulderRoll: p.shoulderRoll + s.tilt * 0.3 * profile.upperFollow * profile.shoulderFollow,
   };
 }
 

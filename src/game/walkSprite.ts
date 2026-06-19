@@ -6,6 +6,7 @@
 // the exact pose geometry.
 
 import sheetUrl from "@/assets/walk-sheet.png";
+import { getCharacterPresentation } from "./characterPresentation";
 import type { Skin } from "./skins";
 
 export const WALK_FRAME_W = 144;
@@ -32,7 +33,7 @@ export const SLASH_HIT_FRAME = 28;
 export const SLASH_RECOVER_FRAME = 29;
 export const WALK_FOOT_Y = 189;
 
-const SKIN_CACHE_VERSION = "v3-premium-material-body-finish";
+const SKIN_CACHE_VERSION = "v6-hero-accurate-skin-atlas";
 const ALPHA_THRESHOLD = 24;
 const HEAD_SCAN_R = 13;
 
@@ -481,59 +482,118 @@ function paintSilhouette(ctx: CanvasRenderingContext2D, ox: number, look: SkinLo
 }
 
 function drawBodyMass(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  const profile = getCharacterPresentation(skin.id);
   const cx = ox + a.chest.x;
   const cy = a.chest.y;
   const hipY = a.hip.y;
   const r = a.head.r;
-
-  if (skin.silhouette || skin.id === "butcher") {
-    const isButcher = skin.id === "butcher";
-    const shoulderHalf = r * (isButcher ? 1.22 : 1.45);
-    const hemHalf = r * (isButcher ? 1.36 : 1.75);
-    const top = a.shoulderY - 2;
-    const bottom = Math.min(WALK_FRAME_H - 2, hipY + r * (isButcher ? 1.7 : 2.2));
-    ctx.save();
-    ctx.fillStyle = look.body;
-    ctx.beginPath();
-    ctx.moveTo(cx - shoulderHalf, top);
-    ctx.bezierCurveTo(cx - hemHalf * 0.68, cy + r * 0.75, cx - hemHalf, bottom - r, cx - hemHalf * 0.58, bottom);
-    ctx.quadraticCurveTo(cx, bottom + r * 0.22, cx + hemHalf * 0.58, bottom);
-    ctx.bezierCurveTo(cx + hemHalf, bottom - r, cx + hemHalf * 0.68, cy + r * 0.75, cx + shoulderHalf, top);
-    ctx.quadraticCurveTo(cx, top - r * 0.4, cx - shoulderHalf, top);
-    ctx.fill();
-
-    const shade = ctx.createLinearGradient(0, top, 0, bottom);
-    shade.addColorStop(0, "transparent");
-    shade.addColorStop(1, `oklch(0 0 0 / ${isButcher ? 0.22 : 0.30})`);
-    ctx.fillStyle = shade;
-    ctx.fill();
-    ctx.restore();
-    return;
-  }
-
-  if (!skin.thickBody && skin.id !== "wolverine") return;
-
-  const torsoHalf = r * (skin.id === "ironman" ? 1.12 : skin.id === "wolverine" ? 1.02 : 0.95);
-  const top = a.shoulderY - r * 0.15;
-  const bottom = Math.min(WALK_FRAME_H - 3, hipY + r * 0.45);
+  const lean = profile.stanceLean * r * frameActionLean(a.frame);
+  const top = a.shoulderY - r * 0.28;
+  const waist = Math.min(WALK_FRAME_H - 3, hipY + r * 0.36);
+  const bottom = Math.min(WALK_FRAME_H - 2, hipY + r * (profile.bodyShape === "coat" ? 1.2 + profile.coatLength : 0.62));
+  const shoulderHalf = r * profile.shoulderMul;
+  const chestHalf = r * profile.torsoMul;
+  const hipHalf = r * profile.hipMul;
+  const armored = profile.bodyShape === "armored";
+  const coat = profile.bodyShape === "coat";
+  const broad = profile.bodyShape === "broad" || profile.bodyShape === "bruiser" || armored;
+  const sprinter = profile.bodyShape === "sprinter" || profile.bodyShape === "lean";
 
   ctx.save();
+
+  if (profile.tail) {
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-over";
+    ctx.strokeStyle = look.head;
+    ctx.lineWidth = Math.max(3.2, r * 0.26);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.2 + lean, hipY + r * 0.55);
+    ctx.bezierCurveTo(cx - r * 1.0 + lean, hipY + r * 1.0, cx - r * 1.05 + lean, hipY + r * 1.9, cx - r * 0.18 + lean, hipY + r * 2.35);
+    ctx.stroke();
+    ctx.fillStyle = look.head;
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.06 + lean, hipY + r * 2.34);
+    ctx.lineTo(cx + r * 0.25 + lean, hipY + r * 2.1);
+    ctx.lineTo(cx + r * 0.24 + lean, hipY + r * 2.48);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
   ctx.fillStyle = look.body;
   ctx.beginPath();
-  ctx.moveTo(cx - torsoHalf, top + r * 0.25);
-  ctx.quadraticCurveTo(cx - torsoHalf * 0.75, top - r * 0.25, cx, top);
-  ctx.quadraticCurveTo(cx + torsoHalf * 0.75, top - r * 0.25, cx + torsoHalf, top + r * 0.25);
-  ctx.lineTo(cx + torsoHalf * 0.62, bottom);
-  ctx.quadraticCurveTo(cx, bottom + r * 0.25, cx - torsoHalf * 0.62, bottom);
-  ctx.closePath();
+  if (coat) {
+    const hemHalf = r * (1.18 + profile.hipMul * 0.34);
+    ctx.moveTo(cx - shoulderHalf, top + r * 0.18);
+    ctx.quadraticCurveTo(cx - chestHalf * 0.78 + lean * 0.3, top - r * 0.22, cx + lean * 0.25, top - r * 0.08);
+    ctx.quadraticCurveTo(cx + chestHalf * 0.78 + lean * 0.3, top - r * 0.22, cx + shoulderHalf, top + r * 0.18);
+    ctx.bezierCurveTo(cx + hemHalf * 0.72 + lean, cy + r * 1.0, cx + hemHalf + lean, bottom - r * 0.9, cx + hemHalf * 0.6 + lean, bottom);
+    ctx.quadraticCurveTo(cx + lean * 0.35, bottom + r * 0.28, cx - hemHalf * 0.6 + lean, bottom);
+    ctx.bezierCurveTo(cx - hemHalf + lean, bottom - r * 0.9, cx - hemHalf * 0.72 + lean, cy + r * 1.0, cx - shoulderHalf, top + r * 0.18);
+  } else if (broad) {
+    const waistHalf = hipHalf * (armored ? 0.88 : 0.82);
+    ctx.moveTo(cx - shoulderHalf, top + r * 0.22);
+    ctx.quadraticCurveTo(cx - shoulderHalf * 0.52, top - r * 0.36, cx + lean * 0.15, top - r * 0.08);
+    ctx.quadraticCurveTo(cx + shoulderHalf * 0.52, top - r * 0.36, cx + shoulderHalf, top + r * 0.22);
+    ctx.lineTo(cx + waistHalf + lean, waist);
+    ctx.quadraticCurveTo(cx + lean * 0.35, waist + r * 0.34, cx - waistHalf + lean, waist);
+    ctx.closePath();
+  } else if (sprinter) {
+    ctx.moveTo(cx - shoulderHalf * 0.82 + lean * 0.2, top + r * 0.18);
+    ctx.quadraticCurveTo(cx - chestHalf * 0.4 + lean, top - r * 0.2, cx + lean, top);
+    ctx.quadraticCurveTo(cx + shoulderHalf * 0.9 + lean, top + r * 0.2, cx + chestHalf * 0.75 + lean, cy + r * 0.86);
+    ctx.lineTo(cx + hipHalf * 0.55 + lean * 0.6, waist);
+    ctx.quadraticCurveTo(cx + lean * 0.28, waist + r * 0.22, cx - hipHalf * 0.48 + lean * 0.35, waist);
+    ctx.lineTo(cx - chestHalf * 0.68 + lean * 0.15, cy + r * 0.68);
+    ctx.closePath();
+  } else {
+    ctx.moveTo(cx - shoulderHalf * 0.9, top + r * 0.25);
+    ctx.quadraticCurveTo(cx - chestHalf * 0.6 + lean * 0.15, top - r * 0.18, cx + lean * 0.2, top);
+    ctx.quadraticCurveTo(cx + chestHalf * 0.6 + lean * 0.15, top - r * 0.18, cx + shoulderHalf * 0.9, top + r * 0.25);
+    ctx.lineTo(cx + hipHalf * 0.56 + lean * 0.25, waist);
+    ctx.quadraticCurveTo(cx + lean * 0.15, waist + r * 0.2, cx - hipHalf * 0.56 + lean * 0.25, waist);
+    ctx.closePath();
+  }
   ctx.fill();
 
+  if (profile.neckMul > 0) {
+    ctx.fillStyle = look.head;
+    ctx.beginPath();
+    ctx.roundRect(cx - r * 0.25 * profile.neckMul + lean * 0.12, a.head.bottom - 1, r * 0.5 * profile.neckMul, Math.max(4, r * 0.56), r * 0.16);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = broad || coat ? mixColor(look.body, 82, "white") : withAlpha(look.highlight, 0.7);
+  ctx.globalAlpha = broad ? 0.82 : 0.66;
+  ctx.beginPath();
+  ctx.moveTo(cx - shoulderHalf * 0.96, top + r * 0.26);
+  ctx.lineTo(cx - chestHalf * 0.45 + lean * 0.15, top + r * 0.66);
+  ctx.lineTo(cx + chestHalf * 0.45 + lean * 0.15, top + r * 0.66);
+  ctx.lineTo(cx + shoulderHalf * 0.96, top + r * 0.26);
+  ctx.quadraticCurveTo(cx + lean * 0.2, top - r * 0.02, cx - shoulderHalf * 0.96, top + r * 0.26);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  if (armored || broad) {
+    ctx.strokeStyle = withAlpha(look.shadow, 0.5);
+    ctx.lineWidth = armored ? 1.5 : 1.05;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx - shoulderHalf * 0.72, top + r * 0.36);
+    ctx.lineTo(cx - chestHalf * 0.28 + lean * 0.25, cy + r * 1.08);
+    ctx.moveTo(cx + shoulderHalf * 0.72, top + r * 0.36);
+    ctx.lineTo(cx + chestHalf * 0.28 + lean * 0.25, cy + r * 1.08);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = look.body;
   const shade = ctx.createLinearGradient(0, top, 0, bottom);
   shade.addColorStop(0, "oklch(1 0 0 / 0.10)");
-  shade.addColorStop(0.7, "transparent");
-  shade.addColorStop(1, "oklch(0 0 0 / 0.24)");
+  shade.addColorStop(0.56, "transparent");
+  shade.addColorStop(1, `oklch(0 0 0 / ${coat ? 0.36 : broad ? 0.28 : 0.22})`);
   ctx.fillStyle = shade;
-  ctx.fill();
+  ctx.fillRect(ox, Math.max(0, top - r), WALK_FRAME_W, Math.max(1, bottom - top + r * 2));
   ctx.restore();
 }
 
@@ -541,6 +601,14 @@ function drawCostumePanels(ctx: CanvasRenderingContext2D, skin: Skin, ox: number
   const cx = ox + a.chest.x;
   const cy = a.chest.y;
   const r = a.head.r;
+  const shoulderL = { x: cx - r * 0.78, y: a.shoulderY + r * 0.28 };
+  const shoulderR = { x: cx + r * 0.78, y: a.shoulderY + r * 0.28 };
+  const hipL = { x: cx - r * 0.42, y: a.hip.y + r * 0.1 };
+  const hipR = { x: cx + r * 0.42, y: a.hip.y + r * 0.1 };
+  const handL = { x: ox + a.hands.left.x, y: a.hands.left.y };
+  const handR = { x: ox + a.hands.right.x, y: a.hands.right.y };
+  const footL = { x: ox + a.feet.left.x, y: a.feet.left.y };
+  const footR = { x: ox + a.feet.right.x, y: a.feet.right.y };
 
   ctx.save();
   ctx.globalCompositeOperation = "source-atop";
@@ -556,14 +624,29 @@ function drawCostumePanels(ctx: CanvasRenderingContext2D, skin: Skin, ox: number
     case "spiderman": {
       ctx.fillStyle = look.body;
       ctx.beginPath();
-      ctx.moveTo(cx, a.shoulderY - r * 0.15);
-      ctx.lineTo(cx + r * 0.8, cy + r * 1.9);
-      ctx.lineTo(cx - r * 0.8, cy + r * 1.9);
+      ctx.moveTo(cx - r * 0.62, a.shoulderY - r * 0.08);
+      ctx.quadraticCurveTo(cx, a.shoulderY - r * 0.42, cx + r * 0.62, a.shoulderY - r * 0.08);
+      ctx.lineTo(cx + r * 0.36, cy + r * 1.86);
+      ctx.quadraticCurveTo(cx, cy + r * 2.08, cx - r * 0.36, cy + r * 1.86);
       ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = "oklch(0.09 0.04 258 / 0.68)";
+      ctx.lineWidth = 1.05;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.34, a.shoulderY + r * 0.22);
+      ctx.quadraticCurveTo(cx - r * 0.12, cy + r * 0.9, cx - r * 0.18, a.hip.y + r * 0.4);
+      ctx.moveTo(cx + r * 0.34, a.shoulderY + r * 0.22);
+      ctx.quadraticCurveTo(cx + r * 0.12, cy + r * 0.9, cx + r * 0.18, a.hip.y + r * 0.4);
+      ctx.stroke();
       break;
     }
     case "ironman": {
+      ctx.fillStyle = "oklch(0.76 0.13 84)";
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(cx + side * r * 0.78, a.shoulderY + r * 0.22, r * 0.42, r * 0.28, side * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.strokeStyle = look.trim;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -571,6 +654,14 @@ function drawCostumePanels(ctx: CanvasRenderingContext2D, skin: Skin, ox: number
       ctx.lineTo(cx, cy + r * 1.05);
       ctx.lineTo(cx + r * 0.95, cy + r * 0.2);
       ctx.stroke();
+      ctx.strokeStyle = withAlpha(look.metal ?? look.trim, 0.74);
+      ctx.lineWidth = 1.15;
+      for (const [from, to] of [[shoulderL, handL], [shoulderR, handR], [hipL, footL], [hipR, footR]] as const) {
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo((from.x + to.x) / 2, (from.y + to.y) / 2);
+        ctx.stroke();
+      }
       break;
     }
     case "wolverine": {
@@ -585,19 +676,100 @@ function drawCostumePanels(ctx: CanvasRenderingContext2D, skin: Skin, ox: number
       ctx.lineTo(cx + r * 1.35, a.hip.y + r * 0.15);
       ctx.closePath();
       ctx.fill();
+      ctx.fillStyle = "oklch(0.13 0.05 255)";
+      ctx.fillRect(cx - r * 0.72, a.hip.y + r * 0.32, r * 1.44, r * 0.22);
+      ctx.fillStyle = "oklch(0.94 0.1 92)";
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + side * r * 0.2, a.shoulderY + r * 0.1);
+        ctx.lineTo(cx + side * r * 0.06, a.hip.y + r * 0.26);
+        ctx.lineTo(cx + side * r * 0.42, a.hip.y + r * 0.18);
+        ctx.closePath();
+        ctx.fill();
+      }
+      break;
+    }
+    case "batman": {
+      ctx.fillStyle = "oklch(0.34 0.018 275)";
+      ctx.beginPath();
+      ctx.ellipse(cx, cy + r * 0.8, r * 0.9, r * 1.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "oklch(0.76 0.16 90)";
+      const beltY = a.hip.y + r * 0.28;
+      ctx.fillRect(cx - r * 0.82, beltY, r * 1.64, r * 0.18);
+      ctx.fillStyle = "oklch(0.08 0.012 280)";
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + side * r * 0.65, a.shoulderY + r * 0.24);
+        ctx.lineTo(cx + side * r * 0.28, a.hip.y + r * 0.42);
+        ctx.lineTo(cx + side * r * 0.58, a.hip.y + r * 0.4);
+        ctx.closePath();
+        ctx.fill();
+      }
+      break;
+    }
+    case "superman": {
+      ctx.fillStyle = "oklch(0.48 0.2 25)";
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.62, a.hip.y + r * 0.18);
+      ctx.lineTo(cx + r * 0.62, a.hip.y + r * 0.18);
+      ctx.lineTo(cx + r * 0.34, a.hip.y + r * 0.62);
+      ctx.lineTo(cx - r * 0.34, a.hip.y + r * 0.62);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "oklch(0.86 0.16 86)";
+      ctx.fillRect(cx - r * 0.72, a.hip.y + r * 0.1, r * 1.44, r * 0.12);
+      break;
+    }
+    case "homelander": {
+      ctx.fillStyle = "oklch(0.75 0.16 86)";
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(cx + side * r * 0.72, a.shoulderY + r * 0.2, r * 0.48, r * 0.3, side * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = "oklch(0.72 0.16 85 / 0.8)";
+      ctx.lineWidth = 1.35;
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(cx + side * r * 0.78, a.shoulderY + r * 0.28);
+        ctx.quadraticCurveTo(cx + side * r * 0.28, cy + r * 0.36, cx, cy + r * 0.78);
+        ctx.stroke();
+      }
       break;
     }
     case "flash":
     case "atrain": {
-      ctx.strokeStyle = look.trim;
-      ctx.lineWidth = 2.2;
+      const isATrain = skin.id === "atrain";
+      ctx.strokeStyle = isATrain ? "oklch(0.94 0.02 250)" : look.trim;
+      ctx.lineWidth = isATrain ? 2.8 : 2.2;
       ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.moveTo(cx - r * 0.8, cy - r * 0.2);
-      ctx.lineTo(cx + r * 0.5, cy + r * 0.9);
-      ctx.moveTo(cx - r * 0.55, cy + r * 1.15);
-      ctx.lineTo(cx + r * 0.9, cy + r * 1.6);
+      if (isATrain) {
+        ctx.moveTo(cx - r * 0.74, a.shoulderY + r * 0.1);
+        ctx.lineTo(cx, cy + r * 1.1);
+        ctx.lineTo(cx + r * 0.74, a.shoulderY + r * 0.1);
+        ctx.moveTo(cx - r * 0.56, cy + r * 1.35);
+        ctx.lineTo(cx + r * 0.78, cy + r * 1.66);
+      } else {
+        ctx.moveTo(cx - r * 0.8, cy - r * 0.2);
+        ctx.lineTo(cx + r * 0.5, cy + r * 0.9);
+        ctx.moveTo(cx - r * 0.55, cy + r * 1.15);
+        ctx.lineTo(cx + r * 0.9, cy + r * 1.6);
+      }
       ctx.stroke();
+      if (isATrain) {
+        ctx.strokeStyle = "oklch(0.55 0.22 28 / 0.78)";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(cx - r * 0.48, a.shoulderY + r * 0.28);
+        ctx.lineTo(cx + r * 0.12, cy + r * 1.16);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = look.trim;
+        const beltY = a.hip.y + r * 0.2;
+        ctx.fillRect(cx - r * 0.72, beltY, r * 1.44, r * 0.14);
+      }
       break;
     }
   }
@@ -749,20 +921,37 @@ function drawMaterialFinish(ctx: CanvasRenderingContext2D, skin: Skin, ox: numbe
 }
 
 function drawCape(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
-  if (!skin.cape) return;
+  const profile = getCharacterPresentation(skin.id);
+  const capeShape = profile.cape !== "none" ? profile.cape : (skin.cape ? "hero" : "none");
+  if (!skin.cape || capeShape === "none") return;
   const cx = ox + a.chest.x;
   const cy = a.chest.y;
   const r = a.head.r;
-  const sway = capeSway(a.frame);
-  const bottom = Math.min(WALK_FRAME_H - 4, Math.max(a.footY - 8, a.hip.y + r * 4.6));
+  const sway = capeSway(a.frame) * (capeShape === "short" ? 0.55 : capeShape === "banner" ? 0.35 : 1);
+  const capeTop = a.shoulderY + r * 0.16;
+  const capeDrop = r * (capeShape === "short" ? 3.05 : capeShape === "banner" ? 4.95 : 4.45) * profile.capeLength;
+  const bottom = Math.min(WALK_FRAME_H - 4, Math.max(a.hip.y + r * 1.8, capeTop + capeDrop));
+  const width = profile.capeWidth * (capeShape === "short" ? 0.92 : capeShape === "banner" ? 0.82 : 1);
 
   ctx.save();
   ctx.globalCompositeOperation = "destination-over";
   const cape = new Path2D();
-  cape.moveTo(cx - r * 1.0, a.shoulderY + r * 0.2);
-  cape.bezierCurveTo(cx - r * 2.0 + sway, cy + r * 1.4, cx - r * 1.65 + sway, bottom - r * 0.8, cx - r * 0.55 + sway * 0.5, bottom);
-  cape.quadraticCurveTo(cx + sway * 0.3, bottom + r * 0.45, cx + r * 0.55 + sway * 0.5, bottom);
-  cape.bezierCurveTo(cx + r * 1.65 + sway, bottom - r * 0.8, cx + r * 2.0 + sway, cy + r * 1.4, cx + r * 1.0, a.shoulderY + r * 0.2);
+  cape.moveTo(cx - r * 1.0 * width, capeTop);
+  if (capeShape === "short") {
+    cape.bezierCurveTo(cx - r * 1.8 * width + sway, cy + r * 1.0, cx - r * 1.25 * width + sway, bottom - r * 0.55, cx - r * 0.38 + sway * 0.45, bottom);
+    cape.lineTo(cx - r * 0.12 + sway * 0.25, bottom - r * 0.32);
+    cape.lineTo(cx + r * 0.14 + sway * 0.22, bottom);
+    cape.lineTo(cx + r * 0.42 + sway * 0.45, bottom - r * 0.24);
+    cape.bezierCurveTo(cx + r * 1.18 * width + sway, bottom - r * 0.7, cx + r * 1.72 * width + sway, cy + r * 1.0, cx + r * 1.0 * width, capeTop);
+  } else if (capeShape === "banner") {
+    cape.bezierCurveTo(cx - r * 1.3 * width + sway, cy + r * 1.2, cx - r * 0.88 * width + sway * 0.7, bottom - r * 0.9, cx - r * 0.36 + sway * 0.35, bottom);
+    cape.quadraticCurveTo(cx + sway * 0.18, bottom + r * 0.18, cx + r * 0.36 + sway * 0.35, bottom);
+    cape.bezierCurveTo(cx + r * 0.88 * width + sway * 0.7, bottom - r * 0.9, cx + r * 1.3 * width + sway, cy + r * 1.2, cx + r * 1.0 * width, capeTop);
+  } else {
+    cape.bezierCurveTo(cx - r * 2.0 * width + sway, cy + r * 1.4, cx - r * 1.65 * width + sway, bottom - r * 0.8, cx - r * 0.55 + sway * 0.5, bottom);
+    cape.quadraticCurveTo(cx + sway * 0.3, bottom + r * 0.45, cx + r * 0.55 + sway * 0.5, bottom);
+    cape.bezierCurveTo(cx + r * 1.65 * width + sway, bottom - r * 0.8, cx + r * 2.0 * width + sway, cy + r * 1.4, cx + r * 1.0 * width, capeTop);
+  }
   cape.closePath();
   ctx.fillStyle = skin.cape;
   ctx.fill(cape);
@@ -816,15 +1005,18 @@ function drawCape(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: Fram
 }
 
 function drawHead(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  const profile = getCharacterPresentation(skin.id);
   const hx = ox + a.head.x;
   const hy = a.head.y;
-  const r = a.head.r * 1.05;
+  const r = a.head.r * 1.05 * profile.headMul;
 
   ctx.save();
   ctx.fillStyle = look.head;
   ctx.beginPath();
   ctx.arc(hx, hy, r, 0, Math.PI * 2);
   ctx.fill();
+
+  drawHairSilhouette(ctx, skin, hx, hy, r, look);
 
   if (skin.skinTone) {
     ctx.fillStyle = skin.skinTone;
@@ -889,6 +1081,142 @@ function drawHead(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: Fram
   ctx.restore();
 }
 
+function drawHairSilhouette(ctx: CanvasRenderingContext2D, skin: Skin, hx: number, hy: number, r: number, look: SkinLook) {
+  const profile = getCharacterPresentation(skin.id);
+  if (profile.hair === "none") return;
+  const hairColor = skin.skinTone ? look.head : mixColor(look.head, 78, "black");
+
+  ctx.save();
+  ctx.fillStyle = hairColor;
+  ctx.strokeStyle = hairColor;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+
+  switch (profile.hair) {
+    case "slick": {
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 0.76, hy - r * 0.35);
+      ctx.bezierCurveTo(hx - r * 0.44, hy - r * 1.08, hx + r * 0.34, hy - r * 1.18, hx + r * 0.92, hy - r * 0.58);
+      ctx.lineTo(hx + r * 0.38, hy - r * 0.28);
+      ctx.quadraticCurveTo(hx - r * 0.12, hy - r * 0.58, hx - r * 0.76, hy - r * 0.35);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hx + r * 0.2, hy - r * 0.9);
+      ctx.lineTo(hx + r * 0.82, hy - r * 1.1);
+      ctx.lineTo(hx + r * 0.58, hy - r * 0.52);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case "fade": {
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 0.72, hy - r * 0.36);
+      ctx.quadraticCurveTo(hx - r * 0.48, hy - r * 1.04, hx + r * 0.02, hy - r * 1.08);
+      ctx.lineTo(hx + r * 0.92, hy - r * 0.9);
+      ctx.lineTo(hx + r * 0.58, hy - r * 0.28);
+      ctx.quadraticCurveTo(hx - r * 0.06, hy - r * 0.54, hx - r * 0.72, hy - r * 0.36);
+      ctx.fill();
+      ctx.lineWidth = r * 0.12;
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 0.64, hy - r * 0.18);
+      ctx.lineTo(hx - r * 0.52, hy + r * 0.26);
+      ctx.moveTo(hx + r * 0.64, hy - r * 0.18);
+      ctx.lineTo(hx + r * 0.52, hy + r * 0.22);
+      ctx.stroke();
+      break;
+    }
+    case "messy": {
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 0.86, hy - r * 0.32);
+      ctx.lineTo(hx - r * 0.68, hy - r * 1.05);
+      ctx.lineTo(hx - r * 0.26, hy - r * 0.62);
+      ctx.lineTo(hx + r * 0.04, hy - r * 1.16);
+      ctx.lineTo(hx + r * 0.32, hy - r * 0.58);
+      ctx.lineTo(hx + r * 0.76, hy - r * 0.94);
+      ctx.lineTo(hx + r * 0.72, hy - r * 0.28);
+      ctx.quadraticCurveTo(hx, hy - r * 0.55, hx - r * 0.86, hy - r * 0.32);
+      ctx.fill();
+      break;
+    }
+    case "sharp": {
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 0.7, hy - r * 0.32);
+      ctx.lineTo(hx - r * 0.42, hy - r * 1.05);
+      ctx.lineTo(hx - r * 0.1, hy - r * 0.58);
+      ctx.lineTo(hx + r * 0.36, hy - r * 1.26);
+      ctx.lineTo(hx + r * 0.46, hy - r * 0.48);
+      ctx.lineTo(hx + r * 0.86, hy - r * 0.28);
+      ctx.quadraticCurveTo(hx + r * 0.12, hy - r * 0.46, hx - r * 0.7, hy - r * 0.32);
+      ctx.fill();
+      break;
+    }
+    case "speedFins": {
+      ctx.beginPath();
+      ctx.ellipse(hx, hy - r * 0.28, r * 0.9, r * 0.72, 0, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 0.72, hy - r * 0.12);
+      ctx.lineTo(hx - r * 1.34, hy - r * 0.7);
+      ctx.lineTo(hx - r * 0.86, hy + r * 0.1);
+      ctx.closePath();
+      ctx.moveTo(hx + r * 0.72, hy - r * 0.12);
+      ctx.lineTo(hx + r * 1.34, hy - r * 0.7);
+      ctx.lineTo(hx + r * 0.86, hy + r * 0.1);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case "spiderMask": {
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 0.72, hy - r * 0.3);
+      ctx.lineTo(hx - r * 1.04, hy + r * 0.02);
+      ctx.lineTo(hx - r * 0.68, hy + r * 0.24);
+      ctx.quadraticCurveTo(hx - r * 0.28, hy - r * 0.1, hx, hy - r * 0.08);
+      ctx.quadraticCurveTo(hx + r * 0.28, hy - r * 0.1, hx + r * 0.68, hy + r * 0.24);
+      ctx.lineTo(hx + r * 1.04, hy + r * 0.02);
+      ctx.lineTo(hx + r * 0.72, hy - r * 0.3);
+      ctx.quadraticCurveTo(hx, hy - r * 0.64, hx - r * 0.72, hy - r * 0.3);
+      ctx.fill();
+      break;
+    }
+    case "widowPeak": {
+      ctx.beginPath();
+      ctx.arc(hx, hy - r * 0.08, r * 0.9, Math.PI * 1.02, Math.PI * 1.98);
+      ctx.lineTo(hx + r * 0.18, hy - r * 0.24);
+      ctx.lineTo(hx, hy + r * 0.02);
+      ctx.lineTo(hx - r * 0.18, hy - r * 0.24);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case "helmet": {
+      ctx.beginPath();
+      ctx.ellipse(hx, hy - r * 0.28, r * 0.9, r * 0.72, 0, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.roundRect(hx - r * 0.58, hy - r * 0.2, r * 1.16, r * 0.58, r * 0.16);
+      ctx.fill();
+      break;
+    }
+    case "cowl":
+    case "ears": {
+      ctx.beginPath();
+      ctx.moveTo(hx - r * 0.72, hy - r * 0.52);
+      ctx.lineTo(hx - r * 0.48, hy - r * 1.52);
+      ctx.lineTo(hx - r * 0.16, hy - r * 0.66);
+      ctx.closePath();
+      ctx.moveTo(hx + r * 0.72, hy - r * 0.52);
+      ctx.lineTo(hx + r * 0.48, hy - r * 1.52);
+      ctx.lineTo(hx + r * 0.16, hy - r * 0.66);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+  }
+
+  ctx.restore();
+}
+
 function drawEyes(
   ctx: CanvasRenderingContext2D,
   skin: Skin,
@@ -897,14 +1225,41 @@ function drawEyes(
   r: number,
   look: SkinLook,
 ) {
+  const profile = getCharacterPresentation(skin.id);
   const ey = hy - r * 0.08;
   const ex = r * 0.38;
+  const eyeScale = profile.eyeScale;
+
+  if (skin.id === "atrain") {
+    ctx.fillStyle = "oklch(0.96 0.02 250)";
+    ctx.strokeStyle = "oklch(0.06 0.02 255 / 0.65)";
+    ctx.lineWidth = 0.8;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(hx + side * ex * 0.95, ey, r * 0.18, r * 0.11, side * -0.18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = "oklch(0.55 0.22 28)";
+    ctx.fillRect(hx - r * 0.08, ey - r * 0.05, r * 0.16, r * 0.08);
+    return;
+  }
+
+  if (skin.id === "flash") {
+    ctx.fillStyle = "oklch(0.98 0.04 90)";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(hx + side * ex, ey, r * 0.16 * eyeScale, r * 0.08 * eyeScale, side * -0.18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
 
   if (skin.id === "spiderman") {
     ctx.fillStyle = "oklch(0.98 0.02 240)";
     for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.ellipse(hx + side * ex, ey, r * 0.26, r * 0.14, side * -0.22, 0, Math.PI * 2);
+      ctx.ellipse(hx + side * ex, ey, r * 0.26 * eyeScale, r * 0.14 * eyeScale, side * -0.22, 0, Math.PI * 2);
       ctx.fill();
     }
     return;
@@ -913,7 +1268,7 @@ function drawEyes(
   if (skin.id === "ironman" || skin.id === "batman" || skin.id === "wolverine") {
     ctx.fillStyle = skin.id === "ironman" ? "oklch(0.92 0.16 205)" : "oklch(0.96 0.04 100)";
     for (const side of [-1, 1]) {
-      ctx.fillRect(hx + side * ex - 4, ey - 1.2, 7, 2.6);
+      ctx.fillRect(hx + side * ex - 4 * eyeScale, ey - 1.2 * eyeScale, 7 * eyeScale, 2.6 * eyeScale);
     }
     return;
   }
@@ -924,7 +1279,7 @@ function drawEyes(
     ctx.shadowBlur = 8;
     for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.arc(hx + side * ex, ey, 2.4, 0, Math.PI * 2);
+      ctx.arc(hx + side * ex, ey, 2.4 * eyeScale, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.shadowBlur = 0;
@@ -950,6 +1305,52 @@ function drawEyes(
 }
 
 function drawHeadPattern(ctx: CanvasRenderingContext2D, skin: Skin, hx: number, hy: number, r: number, look: SkinLook) {
+  if (skin.id === "ironman") {
+    ctx.save();
+    ctx.strokeStyle = "oklch(0.22 0.08 25 / 0.58)";
+    ctx.lineWidth = 1.05;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(hx - r * 0.42, hy - r * 0.36);
+    ctx.lineTo(hx - r * 0.28, hy + r * 0.42);
+    ctx.moveTo(hx + r * 0.42, hy - r * 0.36);
+    ctx.lineTo(hx + r * 0.28, hy + r * 0.42);
+    ctx.moveTo(hx - r * 0.28, hy + r * 0.42);
+    ctx.quadraticCurveTo(hx, hy + r * 0.62, hx + r * 0.28, hy + r * 0.42);
+    ctx.stroke();
+    ctx.restore();
+    void look;
+    return;
+  }
+
+  if (skin.id === "flash") {
+    ctx.save();
+    ctx.fillStyle = look.trim;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(hx + side * r * 0.58, hy - r * 0.22);
+      ctx.lineTo(hx + side * r * 1.05, hy - r * 0.56);
+      ctx.lineTo(hx + side * r * 0.76, hy - r * 0.02);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (skin.id === "superman") {
+    ctx.save();
+    ctx.strokeStyle = "oklch(0.18 0.04 30 / 0.85)";
+    ctx.lineWidth = 1.3;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(hx + r * 0.16, hy - r * 0.52);
+    ctx.quadraticCurveTo(hx + r * 0.42, hy - r * 0.18, hx + r * 0.08, hy - r * 0.04);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
   if (skin.id !== "spiderman") return;
   ctx.save();
   ctx.beginPath();
@@ -973,6 +1374,7 @@ function drawHeadPattern(ctx: CanvasRenderingContext2D, skin: Skin, hx: number, 
 }
 
 function drawGlovesAndBoots(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  const profile = getCharacterPresentation(skin.id);
   const glove = skin.gloves;
   const boot = skin.boots;
   const r = a.head.r;
@@ -989,7 +1391,7 @@ function drawGlovesAndBoots(ctx: CanvasRenderingContext2D, skin: Skin, ox: numbe
       grad.addColorStop(1, mixColor(glove, 68, "black"));
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.ellipse(gx, gy, r * 0.50, r * 0.36, 0, 0, Math.PI * 2);
+      ctx.ellipse(gx, gy, r * 0.50 * profile.gloveMul, r * 0.36 * profile.gloveMul, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = "oklch(0 0 0 / 0.36)";
       ctx.lineWidth = 0.65;
@@ -1010,13 +1412,13 @@ function drawGlovesAndBoots(ctx: CanvasRenderingContext2D, skin: Skin, ox: numbe
       grad.addColorStop(1, mixColor(boot, 58, "black"));
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.ellipse(bx, by, r * 0.62, r * 0.32, 0, 0, Math.PI * 2);
+      ctx.ellipse(bx, by, r * 0.62 * profile.bootMul, r * 0.32 * profile.bootMul, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = "oklch(0 0 0 / 0.40)";
       ctx.lineWidth = 0.75;
       ctx.beginPath();
-      ctx.moveTo(bx - r * 0.44, by + r * 0.18);
-      ctx.lineTo(bx + r * 0.46, by + r * 0.18);
+      ctx.moveTo(bx - r * 0.44 * profile.bootMul, by + r * 0.18);
+      ctx.lineTo(bx + r * 0.46 * profile.bootMul, by + r * 0.18);
       ctx.stroke();
     }
     ctx.restore();
@@ -1027,9 +1429,10 @@ function drawGlovesAndBoots(ctx: CanvasRenderingContext2D, skin: Skin, ox: numbe
 
 function drawEmblem(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
   if (!skin.emblem) return;
+  const profile = getCharacterPresentation(skin.id);
   const cx = ox + a.chest.x;
   const cy = a.chest.y + a.head.r * 0.35;
-  const r = a.head.r * 0.92;
+  const r = a.head.r * 0.92 * profile.emblemScale;
 
   ctx.save();
   ctx.fillStyle = skin.emblem.color;
@@ -1067,6 +1470,13 @@ function drawEmblem(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: Fr
       ctx.lineTo(cx - r * 0.52, cy - r * 0.2);
       ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = "oklch(0.5 0.2 25)";
+      ctx.lineWidth = 1.05;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.18, cy - r * 0.16);
+      ctx.quadraticCurveTo(cx + r * 0.28, cy - r * 0.3, cx + r * 0.16, cy + r * 0.04);
+      ctx.quadraticCurveTo(cx + r * 0.04, cy + r * 0.3, cx - r * 0.22, cy + r * 0.2);
+      ctx.stroke();
       break;
     case "oval":
       ctx.beginPath();
@@ -1092,6 +1502,11 @@ function drawEmblem(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: Fr
       ctx.stroke();
       break;
     case "lightning":
+      ctx.fillStyle = look.trim;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.47, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "oklch(0.50 0.20 25)";
       ctx.beginPath();
       ctx.moveTo(cx - r * 0.15, cy - r * 0.52);
       ctx.lineTo(cx + r * 0.22, cy - r * 0.06);
@@ -1103,7 +1518,19 @@ function drawEmblem(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: Fr
       ctx.fill();
       break;
     case "stripe":
-      ctx.fillRect(cx - r * 0.56, cy - r * 0.1, r * 1.12, r * 0.22);
+      if (skin.id === "atrain") {
+        ctx.strokeStyle = "oklch(0.96 0.02 250)";
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(cx - r * 0.42, cy + r * 0.42);
+        ctx.lineTo(cx, cy - r * 0.48);
+        ctx.lineTo(cx + r * 0.42, cy + r * 0.42);
+        ctx.moveTo(cx - r * 0.2, cy + r * 0.02);
+        ctx.lineTo(cx + r * 0.22, cy + r * 0.02);
+        ctx.stroke();
+      } else {
+        ctx.fillRect(cx - r * 0.56, cy - r * 0.1, r * 1.12, r * 0.22);
+      }
       break;
   }
 
@@ -1111,11 +1538,12 @@ function drawEmblem(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: Fr
 }
 
 function drawSkinSpecificDetails(ctx: CanvasRenderingContext2D, skin: Skin, ox: number, a: FrameAnatomy, look: SkinLook) {
+  const profile = getCharacterPresentation(skin.id);
   const cx = ox + a.chest.x;
   const cy = a.chest.y;
   const r = a.head.r;
 
-  if (skin.id === "wolverine") {
+  if (skin.id === "wolverine" || profile.claws) {
     ctx.save();
     ctx.strokeStyle = look.metal ?? "oklch(0.88 0.02 250)";
     ctx.lineWidth = 1.7;
@@ -1133,11 +1561,121 @@ function drawSkinSpecificDetails(ctx: CanvasRenderingContext2D, skin: Skin, ox: 
     ctx.restore();
   }
 
+  if (skin.id === "nightcrawler") {
+    const hx = ox + a.head.x;
+    const hy = a.head.y;
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.strokeStyle = "oklch(0.62 0.22 300 / 0.62)";
+    ctx.lineWidth = 1.05;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.48, a.shoulderY + r * 0.1);
+    ctx.quadraticCurveTo(cx + r * 0.1, cy + r * 0.72, cx - r * 0.26, a.hip.y + r * 0.4);
+    ctx.moveTo(cx + r * 0.5, a.shoulderY + r * 0.16);
+    ctx.quadraticCurveTo(cx - r * 0.08, cy + r * 0.82, cx + r * 0.18, a.hip.y + r * 0.5);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = "oklch(0.86 0.18 72)";
+    ctx.shadowColor = "oklch(0.62 0.22 300)";
+    ctx.shadowBlur = 5;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(hx + side * r * 0.34, hy - r * 0.05, r * 0.1, r * 0.16, side * -0.15, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if (skin.id === "spiderman") {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.strokeStyle = "oklch(0.09 0.04 258 / 0.54)";
+    ctx.lineWidth = 0.75;
+    ctx.lineCap = "round";
+    for (const hand of [a.hands.left, a.hands.right]) {
+      const hx = ox + hand.x;
+      for (const dy of [-r * 0.16, r * 0.08]) {
+        ctx.beginPath();
+        ctx.moveTo(hx - r * 0.34, hand.y + dy);
+        ctx.lineTo(hx + r * 0.34, hand.y + dy);
+        ctx.stroke();
+      }
+    }
+    for (const foot of [a.feet.left, a.feet.right]) {
+      const fx = ox + foot.x;
+      ctx.beginPath();
+      ctx.moveTo(fx - r * 0.34, foot.y - r * 0.2);
+      ctx.lineTo(fx + r * 0.34, foot.y - r * 0.2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  if (skin.id === "ironman") {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (const hand of [a.hands.left, a.hands.right]) {
+      const hx = ox + hand.x;
+      const glow = ctx.createRadialGradient(hx, hand.y, 0.5, hx, hand.y, r * 0.42);
+      glow.addColorStop(0, "oklch(0.98 0.08 205 / 0.8)");
+      glow.addColorStop(0.45, "oklch(0.78 0.16 205 / 0.38)");
+      glow.addColorStop(1, "transparent");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(hx, hand.y, r * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if (skin.id === "batman") {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    const beltY = a.hip.y + r * 0.36;
+    ctx.fillStyle = "oklch(0.92 0.13 92)";
+    for (const x of [-0.48, -0.18, 0.18, 0.48]) {
+      ctx.fillRect(cx + x * r - r * 0.08, beltY - r * 0.08, r * 0.16, r * 0.16);
+    }
+    ctx.restore();
+  }
+
+  if (skin.id === "superman") {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.fillStyle = "oklch(0.50 0.2 25)";
+    for (const foot of [a.feet.left, a.feet.right]) {
+      const fx = ox + foot.x;
+      ctx.beginPath();
+      ctx.ellipse(fx, foot.y - r * 0.1, r * 0.44, r * 0.26, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if (skin.id === "homelander") {
+    ctx.save();
+    ctx.globalCompositeOperation = "source-atop";
+    ctx.strokeStyle = "oklch(0.74 0.16 86 / 0.76)";
+    ctx.lineWidth = 1.05;
+    for (let i = 0; i < 3; i++) {
+      const spread = r * (0.36 + i * 0.22);
+      ctx.beginPath();
+      ctx.moveTo(cx - spread, a.shoulderY + r * (0.3 + i * 0.12));
+      ctx.quadraticCurveTo(cx - r * 0.18, cy + r * 0.42, cx, cy + r * (0.76 + i * 0.08));
+      ctx.quadraticCurveTo(cx + r * 0.18, cy + r * 0.42, cx + spread, a.shoulderY + r * (0.3 + i * 0.12));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   if (skin.id === "flash" || skin.id === "atrain") {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.strokeStyle = skin.streaks ?? look.trim;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = skin.id === "atrain" ? 1.55 : 1.2;
     ctx.globalAlpha = 0.55;
     const slant = skin.id === "atrain" ? -1 : 1;
     ctx.beginPath();
@@ -1147,6 +1685,20 @@ function drawSkinSpecificDetails(ctx: CanvasRenderingContext2D, skin: Skin, ox: 
     ctx.lineTo(cx - r * 1.7 * slant, cy + r * 1.15);
     ctx.stroke();
     ctx.restore();
+
+    if (skin.id === "atrain") {
+      ctx.save();
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.strokeStyle = "oklch(0.94 0.02 250 / 0.82)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.62, a.shoulderY + r * 0.18);
+      ctx.lineTo(cx + r * 0.28, a.hip.y + r * 0.44);
+      ctx.moveTo(cx + r * 0.52, a.shoulderY + r * 0.28);
+      ctx.lineTo(cx - r * 0.2, a.hip.y + r * 0.5);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   if (skin.id === "butcher") {
@@ -1285,13 +1837,46 @@ function getLook(skin: Skin): SkinLook {
     case "atrain":
       return {
         base,
-        limb: "oklch(0.40 0.18 25)",
-        body: "oklch(0.43 0.19 25)",
-        head: "oklch(0.42 0.18 25)",
+        limb: "oklch(0.27 0.12 252)",
+        body: "oklch(0.30 0.13 252)",
+        head: "oklch(0.28 0.12 252)",
         trim: "oklch(0.92 0.02 250)",
-        shadow: "oklch(0.18 0.08 25)",
-        highlight: "oklch(0.64 0.16 30)",
+        shadow: "oklch(0.12 0.07 255)",
+        highlight: "oklch(0.50 0.13 248)",
         eye: "oklch(0.92 0.02 250)",
+      };
+    case "nightcrawler":
+      return {
+        base,
+        limb: "oklch(0.20 0.12 292)",
+        body: "oklch(0.18 0.10 292)",
+        head: "oklch(0.13 0.08 288)",
+        trim: "oklch(0.66 0.22 302)",
+        shadow: "oklch(0.07 0.04 288)",
+        highlight: "oklch(0.35 0.16 300)",
+        eye: "oklch(0.88 0.18 75)",
+      };
+    case "hulk":
+      return {
+        base,
+        limb: "oklch(0.48 0.15 145)",
+        body: "oklch(0.42 0.13 145)",
+        head: "oklch(0.44 0.13 145)",
+        trim: "oklch(0.28 0.10 292)",
+        shadow: "oklch(0.20 0.08 145)",
+        highlight: "oklch(0.64 0.15 145)",
+        eye: "oklch(0.94 0.12 95)",
+      };
+    case "heatwave":
+      return {
+        base,
+        limb: "oklch(0.40 0.16 45)",
+        body: "oklch(0.48 0.20 38)",
+        head: "oklch(0.36 0.16 38)",
+        trim: "oklch(0.86 0.18 70)",
+        shadow: "oklch(0.18 0.08 38)",
+        highlight: "oklch(0.70 0.20 52)",
+        eye: "oklch(0.96 0.18 80)",
       };
     default:
       return {
@@ -1313,6 +1898,14 @@ function capeSway(frame: number) {
   if (frame === HURT_FRAME) return 4;
   if (frame === DOWN_FRAME) return 1;
   return 0;
+}
+
+function frameActionLean(frame: number) {
+  if (frame < 10) return 0.6 + Math.sin((frame / 10) * Math.PI * 2) * 0.4;
+  if (frame === PUNCH_FRAME_START + 1 || frame === KICK_HIT_FRAME || frame === KNEE_HIT_FRAME || frame === SLASH_HIT_FRAME) return 1.15;
+  if (frame === HURT_FRAME || frame === DOWN_FRAME) return -0.3;
+  if (frame === JUMP_TAKEOFF_FRAME || frame === JUMP_RISE_FRAME) return 0.85;
+  return 0.45;
 }
 
 function withAlpha(color: string, alpha: number) {
