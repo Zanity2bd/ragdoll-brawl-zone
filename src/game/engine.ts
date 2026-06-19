@@ -21,7 +21,7 @@ import {
 import { getStance } from "./stances";
 import { loadV2Sheet } from "./walkCycleV2";
 import { loadAttackFx, spawnFx, tickFx, drawFxPool, type ActiveFx } from "./attackFx";
-import { createTrail, armTrail, sampleTrail, tickTrail, drawTrail, resetTrail, type TrailState } from "./weaponTrail";
+import { createTrail, armTrail, sampleTrail, tickTrail, drawTrail, resetTrail, type TrailState, type TrailStyle } from "./weaponTrail";
 
 export type PlayerId = "p1" | "p2";
 
@@ -861,6 +861,14 @@ export class GameEngine {
   private slowmoMode: "tele" | "impact" | null = null;
   private hitstopT = 0;
   private impactFlash = 0;
+  private cinematicPulseT = 0;
+  private cinematicPulseDur = 0;
+  private cinematicPulseX = W / 2;
+  private cinematicPulseY = GROUND_Y - 90;
+  private cinematicPulseDirX = 1;
+  private cinematicPulseDirY = -0.25;
+  private cinematicPulseIntensity = 0;
+  private cinematicPulseHue = 70;
 
   private shake = 0;
   // Finisher cinematic — vignette + frame-step + extra FX during a KO blow.
@@ -1111,6 +1119,10 @@ export class GameEngine {
     this.teleTargeting = null;
     this.slowmoT = 0; this.slowmoMode = null;
     this.hitstopT = 0; this.impactFlash = 0;
+    this.cinematicPulseT = 0; this.cinematicPulseDur = 0;
+    this.cinematicPulseX = W / 2; this.cinematicPulseY = GROUND_Y - 90;
+    this.cinematicPulseDirX = 1; this.cinematicPulseDirY = -0.25;
+    this.cinematicPulseIntensity = 0; this.cinematicPulseHue = 70;
     this.finisherT = 0; this.finisherDur = 0; this.finisherActive = false;
     this.shake = 0;
     this.shakeDirX = 0; this.shakeDirY = 0; this.shakeDirT = 0; this.shakeDirDur = 0;
@@ -1141,6 +1153,9 @@ export class GameEngine {
     flash?: number;
     hitstop?: number;
     zoom?: number;
+    x?: number;
+    y?: number;
+    hue?: number;
     /** 0..1 — adds extra hitstop without inflating shake/zoom/flash. */
     weight?: number;
   }) {
@@ -1181,6 +1196,19 @@ export class GameEngine {
     this.impactFlash = Math.max(this.impactFlash, fl);
     // Background omni-shake floor scales with intensity (quadratic).
     this.shake = Math.max(this.shake, 6 + i2 * 32);
+    // Brief cinematic focus around the actual contact point. This is purely
+    // presentation: it only drives screen-space overlays and decays on real dt.
+    if (i >= 0.38) {
+      const pulseDur = 0.16 + i2 * 0.24 + w * 0.04;
+      this.cinematicPulseT = Math.max(this.cinematicPulseT, pulseDur);
+      this.cinematicPulseDur = Math.max(this.cinematicPulseDur, pulseDur);
+      this.cinematicPulseX = opts.x ?? ((this.p1.x + this.p2.x) * 0.5);
+      this.cinematicPulseY = opts.y ?? ((this.p1.y + this.p2.y) * 0.5 + FIGHTER_H * 0.45);
+      this.cinematicPulseDirX = dx / len;
+      this.cinematicPulseDirY = dy / len;
+      this.cinematicPulseIntensity = Math.max(this.cinematicPulseIntensity, i);
+      this.cinematicPulseHue = opts.hue ?? (i > 0.82 ? 45 : 75);
+    }
   }
 
   /**
@@ -1202,7 +1230,17 @@ export class GameEngine {
     this.impactFlash = 1;
     // KO: heaviest possible zoom punch + lateral kick toward the loser.
     const koDir = winnerId === "p1" ? 1 : -1;
-    this.impact({ intensity: 1.0, dirX: koDir, dirY: -0.5, zoom: 0.09, flash: 0, hitstop: 0 });
+    this.impact({
+      intensity: 1.0,
+      dirX: koDir,
+      dirY: -0.5,
+      zoom: 0.09,
+      flash: 0,
+      hitstop: 0,
+      x: loser.x,
+      y: loser.y + FIGHTER_H * 0.4,
+      hue: 45,
+    });
     // Finisher cinematic overlay — vignette + frame-step during the slow-mo window.
     this.triggerFinisher();
     // Oversized FX burst on the KO contact point.
@@ -1940,6 +1978,8 @@ export class GameEngine {
     if (this.shakeDirT > 0) this.shakeDirT = Math.max(0, this.shakeDirT - dt);
     if (this.shakeReboundT > 0) this.shakeReboundT = Math.max(0, this.shakeReboundT - dt);
     if (this.zoomPunchT > 0) this.zoomPunchT = Math.max(0, this.zoomPunchT - dt);
+    if (this.cinematicPulseT > 0) this.cinematicPulseT = Math.max(0, this.cinematicPulseT - dt);
+    if (this.cinematicPulseT <= 0) { this.cinematicPulseIntensity = 0; this.cinematicPulseDur = 0; }
 
     // Hitstop freezes simulation for a few frames (render still runs)
     if (this.hitstopT > 0) {
@@ -3432,7 +3472,16 @@ export class GameEngine {
             this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 56, life: 0.22, maxLife: 0.22, color: "oklch(0.95 0.05 80)" });
             this.burst(fxX, fxY, "oklch(0.95 0.06 80)", 12);
             // Directional camera kick toward strike vector (uses impact() funnel)
-            this.impact({ intensity: f.comboKind === "kick" ? 0.7 : 0.6, dirX: fx, dirY: -0.25, hitstop: 0.07, flash: 0.3 });
+            this.impact({
+              intensity: f.comboKind === "kick" ? 0.7 : 0.6,
+              dirX: fx,
+              dirY: -0.25,
+              hitstop: 0.07,
+              flash: 0.3,
+              x: fxX,
+              y: fxY,
+              hue: 74,
+            });
             // Hitstop tier rebalance — heavy, not laggy.
             this.hitstopT = Math.max(this.hitstopT, 0.07);
             this.impactFlash = Math.max(this.impactFlash, 0.42);
@@ -3484,7 +3533,16 @@ export class GameEngine {
             this.shockwaves.push({ x: ix, y: iy, r: 4, rMax: 38, life: 0.18, maxLife: 0.18, color: "oklch(0.95 0.04 80)" });
             this.burst(fxX, fxY, "oklch(0.95 0.06 80)", 8);
             // Light-tier impact via funnel (directional shake, smaller hitstop).
-            this.impact({ intensity: 0.4, dirX: fx, dirY: -0.2, hitstop: 0.045, flash: 0.28 });
+            this.impact({
+              intensity: 0.4,
+              dirX: fx,
+              dirY: -0.2,
+              hitstop: 0.045,
+              flash: 0.28,
+              x: fxX,
+              y: fxY,
+              hue: 78,
+            });
             this.impactFlash = Math.max(this.impactFlash, 0.32);
             Sfx.play("punch", 0.9);
             if (target.hp <= 0 && this.phase === "fight") { this.triggerKo(f.id); }
@@ -3540,7 +3598,14 @@ export class GameEngine {
         f.punchCd = PUNCH_CD;
         f.cancelOK = false;
         Sfx.play("whoosh", 0.5);
-        armTrail(f.weaponTrail, 0.34, { limb: "footR", rgb: "210,235,255", width: 13 });
+        armTrail(f.weaponTrail, 0.34, {
+          limb: "footR",
+          rgb: "210,235,255",
+          width: 13,
+          style: "strike",
+          accentRgb: "255,255,255",
+          decay: 0.2,
+        });
       } else if (f.recoverT === 0) {
         f.punchT = 0.0001;
         f.punchHit = false;
@@ -3554,7 +3619,14 @@ export class GameEngine {
         }
         f.cancelOK = false;
         Sfx.play("whoosh", 0.35);
-        armTrail(f.weaponTrail, PUNCH_DUR + 0.04, { limb: "handR", rgb: "255,235,180", width: 11 });
+        armTrail(f.weaponTrail, PUNCH_DUR + 0.04, {
+          limb: "handR",
+          rgb: "255,235,180",
+          width: 11,
+          style: "strike",
+          accentRgb: "255,255,245",
+          decay: 0.18,
+        });
       }
     }
     intent.punch = false;
@@ -4153,15 +4225,25 @@ export class GameEngine {
       const k = m.kind as string;
       const isKick = k === "kick" || k === "groundSmash" || k === "spinKick" || k === "flyingKnee" || k === "bamfKick";
       const limb: import("./weaponTrail").TrailLimb = isKick ? "footR" : "handR";
-      let rgb = "255,235,180", width = 9;
-      if (k === "heatPunch") { rgb = "255,120,80"; width = 12; }
-      else if (k === "crowbar") { rgb = "210,200,180"; width = 11; }
-      else if (k === "repulsor") { rgb = "200,230,255"; width = 12; }
-      else if (k === "groundSmash") { rgb = "255,200,120"; width = 14; }
-      else if (k === "bamfPunch" || k === "bamfKick") { rgb = "180,120,255"; width = 11; }
-      else if (k === "phaseStrike") { rgb = "255,240,120"; width = 9; }
-      else if (k === "speedFlurry") { rgb = "255,250,200"; width = 7; }
-      armTrail(f.weaponTrail, m.windup + m.active + 0.05, { limb, rgb, width });
+      let rgb = "255,235,180", width = 9, accentRgb = "255,255,245", decay = 0.19;
+      let style: TrailStyle = "strike";
+      let spark = false;
+      if (k === "heatPunch") {
+        rgb = "255,120,80"; width = 12; accentRgb = "255,245,180"; style = "energy"; decay = 0.24;
+      } else if (k === "crowbar") {
+        rgb = "210,200,180"; width = 11; accentRgb = "255,238,170"; style = "blade"; spark = true; decay = 0.2;
+      } else if (k === "repulsor") {
+        rgb = "200,230,255"; width = 12; accentRgb = "255,255,255"; style = "energy"; decay = 0.24;
+      } else if (k === "groundSmash") {
+        rgb = "255,200,120"; width = 15; accentRgb = "255,248,205"; style = "strike"; spark = true; decay = 0.22;
+      } else if (k === "bamfPunch" || k === "bamfKick") {
+        rgb = "180,120,255"; width = 11; accentRgb = "235,210,255"; style = "energy"; decay = 0.22;
+      } else if (k === "phaseStrike") {
+        rgb = "255,240,120"; width = 9; accentRgb = "255,255,245"; style = "speed"; decay = 0.18;
+      } else if (k === "speedFlurry") {
+        rgb = "255,250,200"; width = 7; accentRgb = "255,255,255"; style = "speed"; decay = 0.15;
+      }
+      armTrail(f.weaponTrail, m.windup + m.active + 0.05, { limb, rgb, width, style, accentRgb, spark, decay });
     }
     // Per-kind layered telegraph: every special gets a signature charge stack
     // (outer ring + inner counter-spin ring) tinted to the move's element so
@@ -4823,7 +4905,17 @@ export class GameEngine {
       // FX: bright clang ring + sparks
       this.hitstopT = Math.max(this.hitstopT, 0.12);
       this.shake = Math.max(this.shake, 14);
-      this.impact({ intensity: 0.55, dirX: -f.facing, dirY: -0.3, zoom: 0.025, flash: 0, hitstop: 0 });
+      this.impact({
+        intensity: 0.55,
+        dirX: -f.facing,
+        dirY: -0.3,
+        zoom: 0.025,
+        flash: 0,
+        hitstop: 0,
+        x: fx,
+        y: fy,
+        hue: 92,
+      });
       this.shockwaves.push({
         x: fx, y: fy, r: 8, rMax: 90,
         life: 0.4, maxLife: 0.4, color: "oklch(0.95 0.18 90)",
@@ -4853,7 +4945,17 @@ export class GameEngine {
     if (hpBefore > 25 && target.hp <= 25 && target.hp > 0) {
       this.slowmoT = Math.max(this.slowmoT, 0.32);
       this.slowmoMode = "impact";
-      this.impact({ intensity: 0.85, dirX: f.facing, dirY: -0.2, zoom: 0.07, hitstop: 0.10, flash: 0.7 });
+      this.impact({
+        intensity: 0.85,
+        dirX: f.facing,
+        dirY: -0.2,
+        zoom: 0.07,
+        hitstop: 0.10,
+        flash: 0.7,
+        x: fx,
+        y: fy,
+        hue: 48,
+      });
     }
     // Air-juggle: if target is airborne (or already in a juggle), tally
     // hits with diminishing returns. 1.0 → 0.85 → 0.7 → 0.55 → 0.45 → 0.4
@@ -4924,6 +5026,9 @@ export class GameEngine {
       dirY: -0.25, // small upward bias — punches read as lifting the camera
       flash: 0,    // already set above
       hitstop: 0,  // already set above
+      x: fx,
+      y: fy,
+      hue: intensity > 0.75 ? 45 : 74,
     });
     this.burst(fx, fy, f.skin.glow, 28);
     this.spawnBlood(fx, fy, f.facing as 1 | -1, intensity);
@@ -4959,10 +5064,20 @@ export class GameEngine {
     this.slowmoT = Math.max(this.slowmoT, SUPER_SLOWMO);
     this.slowmoMode = "impact";
     this.impactFlash = 1;
-    // Super: max-intensity directional impact + heavy zoom punch.
-    this.impact({ intensity: 1.0, dirX: dir, dirY: -0.4, zoom: 0.07, flash: 0, hitstop: 0 });
-    // Cinematic glow burst — multi-ring shockwaves + dense particle explosion
     const cx = t.x, cy = t.y + FIGHTER_H * 0.5;
+    // Super: max-intensity directional impact + heavy zoom punch.
+    this.impact({
+      intensity: 1.0,
+      dirX: dir,
+      dirY: -0.4,
+      zoom: 0.07,
+      flash: 0,
+      hitstop: 0,
+      x: cx,
+      y: cy,
+      hue: 42,
+    });
+    // Cinematic glow burst — multi-ring shockwaves + dense particle explosion
     this.burst(cx, cy, attacker.skin.glow, 42);
     this.burst(cx, cy, "oklch(0.98 0.10 80)", 30);
     this.burst(cx, cy, "oklch(0.92 0.18 30)", 24);
@@ -6043,6 +6158,7 @@ export class GameEngine {
     ctx.setTransform(worldScale, 0, 0, worldScale, offX, offY);
 
     getMap(this.mapId).drawBackground(ctx, this.elapsed, W, H, GROUND_Y);
+    this.drawArenaLighting(ctx);
 
     // Smoke clouds — multi-blob volumetric brimstone with soft alpha falloff.
     // Drawn under particles so glowing embers/sparks pop on top.
@@ -6814,6 +6930,8 @@ export class GameEngine {
       }
     }
 
+    this.drawCinematicHitFrame(ctx, cw, ch);
+
     // Impact flash vignette
     if (this.impactFlash > 0) {
       const flashAlpha = Math.min(this.lowPower ? 0.055 : 0.085, this.impactFlash * (this.lowPower ? 0.07 : 0.09));
@@ -6862,6 +6980,161 @@ export class GameEngine {
       grad.addColorStop(1, "rgba(0,0,0,0.55)");
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, cw, ch);
+    }
+
+    ctx.restore();
+  }
+
+  private drawArenaLighting(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+
+    // Stage grade: darken far edges and give the ground a subtle premium sheen.
+    ctx.globalCompositeOperation = "source-over";
+    const topGrade = ctx.createLinearGradient(0, 0, 0, H);
+    topGrade.addColorStop(0, "rgba(2,5,12,0.24)");
+    topGrade.addColorStop(0.45, "rgba(0,0,0,0)");
+    topGrade.addColorStop(1, "rgba(0,0,0,0.16)");
+    ctx.fillStyle = topGrade;
+    ctx.fillRect(0, 0, W, H);
+
+    const floorGrade = ctx.createLinearGradient(0, GROUND_Y - 70, 0, H);
+    floorGrade.addColorStop(0, "rgba(255,255,255,0)");
+    floorGrade.addColorStop(0.38, "rgba(255,255,255,0.055)");
+    floorGrade.addColorStop(1, "rgba(0,0,0,0.22)");
+    ctx.fillStyle = floorGrade;
+    ctx.fillRect(0, GROUND_Y - 70, W, H - GROUND_Y + 70);
+
+    // Contact shadows keep airborne/grounded reads clear during busy effects.
+    ctx.globalCompositeOperation = "source-over";
+    for (const f of [this.p1, this.p2]) {
+      const altitude = Math.max(0, GROUND_Y - (f.y + FIGHTER_H));
+      const a = Math.max(0.06, 0.28 - altitude / 850);
+      const w = Math.max(13, 31 - altitude * 0.035);
+      const h = Math.max(2.2, 5.8 - altitude * 0.01);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = "rgba(0,0,0,0.72)";
+      ctx.beginPath();
+      ctx.ellipse(f.x + f.vx * 0.025, GROUND_Y - 2, w, h, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    if (!this.lowPower) {
+      ctx.globalCompositeOperation = "lighter";
+      for (const f of [this.p1, this.p2]) {
+        const cx = f.x;
+        const cy = f.y + FIGHTER_H * 0.55;
+        const glow = ctx.createRadialGradient(cx, cy, 8, cx, cy, 155);
+        glow.addColorStop(0, "rgba(255,255,255,0.08)");
+        glow.addColorStop(0.35, "rgba(255,245,205,0.035)");
+        glow.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 155, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = f.skin.glow;
+        ctx.beginPath();
+        ctx.ellipse(cx, GROUND_Y - 4, 52, 11, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      if (this.cinematicPulseT > 0 && this.cinematicPulseDur > 0) {
+        const rem = Math.max(0, Math.min(1, this.cinematicPulseT / this.cinematicPulseDur));
+        const a = rem * this.cinematicPulseIntensity;
+        const r = 95 + (1 - rem) * 125;
+        const g = ctx.createRadialGradient(
+          this.cinematicPulseX, this.cinematicPulseY, 4,
+          this.cinematicPulseX, this.cinematicPulseY, r,
+        );
+        g.addColorStop(0, `oklch(0.94 0.12 ${this.cinematicPulseHue} / ${(0.13 * a).toFixed(3)})`);
+        g.addColorStop(0.42, `oklch(0.72 0.18 ${this.cinematicPulseHue} / ${(0.055 * a).toFixed(3)})`);
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(this.cinematicPulseX, this.cinematicPulseY, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.restore();
+  }
+
+  private drawCinematicHitFrame(ctx: CanvasRenderingContext2D, cw: number, ch: number) {
+    const pulseRem = this.cinematicPulseDur > 0
+      ? Math.max(0, Math.min(1, this.cinematicPulseT / this.cinematicPulseDur))
+      : 0;
+    const hitStrength = pulseRem * this.cinematicPulseIntensity;
+    const slowStrength = this.slowmoMode === "impact" && this.slowmoT > 0
+      ? Math.min(0.55, this.slowmoT / 0.7)
+      : 0;
+    const koStrength = this.phase === "ko" ? Math.max(0, 1 - this.koCinematicT / 1.6) * 0.85 : 0;
+    const finisherStrength = this.finisherActive ? 0.45 : 0;
+    const strength = Math.max(hitStrength, slowStrength, koStrength, finisherStrength);
+    if (strength <= 0.01) return;
+
+    const sx = Math.max(-cw * 0.2, Math.min(cw * 1.2, this.cinematicPulseX * this.viewScale + this.viewOffX));
+    const sy = Math.max(-ch * 0.2, Math.min(ch * 1.2, this.cinematicPulseY * this.viewScale + this.viewOffY));
+    ctx.save();
+
+    if (!this.lowPower && hitStrength > 0.02) {
+      const radius = Math.max(cw, ch) * (0.54 + (1 - pulseRem) * 0.16);
+      const focus = ctx.createRadialGradient(sx, sy, Math.min(cw, ch) * 0.12, sx, sy, radius);
+      focus.addColorStop(0, "rgba(0,0,0,0)");
+      focus.addColorStop(0.62, `rgba(0,0,0,${(0.10 * hitStrength).toFixed(3)})`);
+      focus.addColorStop(1, `rgba(0,0,0,${(0.30 * hitStrength).toFixed(3)})`);
+      ctx.fillStyle = focus;
+      ctx.fillRect(0, 0, cw, ch);
+
+      ctx.globalCompositeOperation = "lighter";
+      const dx = this.cinematicPulseDirX || 1;
+      const dy = this.cinematicPulseDirY || -0.25;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+      const nx = -uy;
+      const ny = ux;
+      const streaks = 5;
+      for (let i = 0; i < streaks; i++) {
+        const off = (i - (streaks - 1) * 0.5) * Math.min(26, ch * 0.035);
+        const start = 44 + i * 11;
+        const end = 155 + hitStrength * 95 - i * 8;
+        const x0 = sx - ux * start + nx * off;
+        const y0 = sy - uy * start + ny * off;
+        const x1 = sx + ux * end + nx * off;
+        const y1 = sy + uy * end + ny * off;
+        ctx.globalAlpha = (0.18 + i * 0.025) * hitStrength;
+        ctx.strokeStyle = i === 2 ? "rgba(255,255,245,0.95)" : "rgba(255,225,150,0.72)";
+        ctx.lineWidth = i === 2 ? 2.4 : 1.2;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+    }
+
+    const barEase = Math.min(1, strength * 1.25);
+    const barH = Math.min(46, Math.max(16, ch * 0.045)) * barEase;
+    const barA = Math.min(0.42, 0.16 + strength * 0.28);
+    if (barH > 1) {
+      ctx.fillStyle = `rgba(0,0,0,${barA.toFixed(3)})`;
+      ctx.fillRect(0, 0, cw, barH);
+      ctx.fillRect(0, ch - barH, cw, barH);
+      if (!this.lowPower) {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = 0.22 * strength;
+        ctx.fillStyle = `oklch(0.84 0.14 ${this.cinematicPulseHue} / 0.65)`;
+        ctx.fillRect(0, barH - 1, cw, 1);
+        ctx.fillRect(0, ch - barH, cw, 1);
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 1;
+      }
     }
 
     ctx.restore();
